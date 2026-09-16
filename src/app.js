@@ -789,7 +789,8 @@ function renderImpactPreviews() {
 }
 
 function entityRow(name, detail, type, id) {
-  return `<div class="entity-row"><div><strong>${escapeHtml(name)}</strong><br><small>${escapeHtml(detail)}</small></div><button class="delete" data-delete="${type}" data-id="${id}" title="Delete">×</button></div>`;
+  const colorClass = HIERARCHY_KINDS[type]?.className || (type === "enterpriseTeam" ? "enterprise" : type);
+  return `<div class="entity-row entity-row-${escapeHtml(colorClass)}"><div><strong>${escapeHtml(name)}</strong><br><small>${escapeHtml(detail)}</small></div><button class="delete" data-delete="${type}" data-id="${id}" title="Delete">×</button></div>`;
 }
 
 function renderBudgetScopeOptions() {
@@ -912,7 +913,8 @@ function renderGlobalScenarioHeader(definition, definitions) {
 }
 
 function bucketRowHtml(item) {
-  return `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`;
+  const detail = item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits${item.routeNote ? ` · ${item.routeNote}` : ""}` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`;
+  return `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`;
 }
 
 function bucketGroupHtml(group) {
@@ -947,7 +949,7 @@ function updateBucketPanel(groups) {
       if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
       if (track) track.className = `progress ${statusClass(item.percent)}`;
       if (percentEl) percentEl.textContent = `${Math.round(item.percent)}%`;
-      if (smallEl) smallEl.textContent = item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`;
+      if (smallEl) smallEl.textContent = item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits${item.routeNote ? ` · ${item.routeNote}` : ""}` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`;
     });
   });
 }
@@ -956,6 +958,14 @@ function renderOptimizedBuckets(replay) {
   const scopeItems = scopeOptionsFor(optimizedScope.type);
   const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
   const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
+  const visibleCostCenterPools = replay.costCenterPoolStates.filter((item) => optimizedScope.type === "enterprise" || (optimizedScope.type === "costCenter" && item.costCenterId === optimizedScope.id));
+  const costCenterPools = visibleCostCenterPools.map((item) => ({
+    ...item,
+    budgetKind: "pool",
+    spent: item.consumed,
+    amount: item.total,
+    routeNote: item.capMode === "block" ? "Blocks at cap." : item.remaining === 0 ? "At cap · next accepted usage uses paid overage." : "Included credits available before paid overage.",
+  }));
   const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
   const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
   const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
@@ -967,7 +977,7 @@ function renderOptimizedBuckets(replay) {
     poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
   }
   updateBucketPanel([
-    { title: "Included credits", items: [pool], note: poolNote },
+    { title: "Included credits", items: [pool, ...costCenterPools], note: poolNote },
     { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.` },
     { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.` },
   ]);

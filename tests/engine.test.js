@@ -392,6 +392,8 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /User-level budgets/);
   assert.match(app, /Budget controls/);
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
+  assert.match(app, /visibleCostCenterPools/);
+  assert.match(app, /next accepted usage uses paid overage/);
 });
 
 test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {
