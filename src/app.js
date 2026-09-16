@@ -5,7 +5,7 @@ const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const CUSTOM_SCENARIOS_KEY = "copilot-budget-lab-custom-scenarios-v1";
 let scenario = loadScenario();
 let customScenarioDefinitions = loadCustomScenarioDefinitions();
-let scenarioRun = { definitionId: BUILT_IN_SCENARIOS[0].id, stepIndex: -1, started: false };
+let scenarioRun = { definitionId: BUILT_IN_SCENARIOS[0].id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
 let latestEventId = null;
 let budgetHistoryTrigger = null;
 let seenAlertIds = null;
@@ -121,6 +121,15 @@ function scenarioResultHtml(result) {
   return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span><small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>`;
 }
 
+function stepInputHtml(step) {
+  if (step.type === "usage") {
+    return `<div class="scenario-input-grid"><div><span>User</span><strong>${escapeHtml(step.event.userId)}</strong></div><div><span>Product</span><strong>${escapeHtml(step.event.productId)}</strong></div><div><span>Quantity</span><strong>${Number(step.event.quantity).toLocaleString()}</strong></div><div><span>Date</span><strong>${escapeHtml(step.event.date)}</strong></div></div>`;
+  }
+  if (step.type === "advance-date") return `<div class="scenario-input-grid"><div><span>New simulation date</span><strong>${escapeHtml(step.date)}</strong></div></div>`;
+  if (step.type === "configuration") return `<div class="scenario-input-grid"><div><span>Target</span><strong>${escapeHtml(step.mutation.target)}${step.mutation.id ? ` · ${escapeHtml(step.mutation.id)}` : ""}</strong></div><div><span>Changes</span><strong>${escapeHtml(JSON.stringify(step.mutation.changes))}</strong></div></div>`;
+  return `<p class="muted">This checkpoint changes no state. It provides a deliberate inspection point.</p>`;
+}
+
 function renderScenarioStudio() {
   const definition = selectedScenarioDefinition();
   const definitions = scenarioDefinitions();
@@ -133,14 +142,20 @@ function renderScenarioStudio() {
   $("#scenario-sources").innerHTML = sources.length ? sources.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Source ${index + 1}</a>`).join("") : `<span class="muted">No external sources supplied</span>`;
 
   const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
-  $("#scenario-progress-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length}`;
+  const selectedIndex = Math.max(0, Math.min(scenarioRun.selectedStepIndex ?? activeIndex + 1, definition.steps.length - 1));
+  scenarioRun.selectedStepIndex = selectedIndex;
+  $("#scenario-progress-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Completed ${activeIndex + 1} of ${definition.steps.length}`;
   $("#scenario-step-list").innerHTML = definition.steps.map((step, index) => {
-    const state = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
-    return `<li><button type="button" class="scenario-step ${state}" data-scenario-step="${index}" aria-current="${state === "active" ? "step" : "false"}"><span class="scenario-step-number">${index + 1}</span><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.description)}</small></span><span class="scenario-step-type">${escapeHtml(step.type)}</span></button></li>`;
+    const classes = [index <= activeIndex ? "complete" : "pending", index === activeIndex ? "active" : "", index === selectedIndex ? "selected" : ""].filter(Boolean).join(" ");
+    return `<li><button type="button" class="scenario-step ${classes}" data-scenario-step="${index}" aria-current="${index === activeIndex ? "step" : "false"}" aria-pressed="${index === selectedIndex}"><span class="scenario-step-number">${index + 1}</span><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.description)}</small></span><span class="scenario-step-type">${escapeHtml(step.type)}</span></button></li>`;
   }).join("");
+
+  const hasRemaining = activeIndex < definition.steps.length - 1;
   $("#scenario-previous").disabled = !scenarioRun.started || activeIndex < 0;
-  $("#scenario-next").disabled = scenarioRun.started && activeIndex >= definition.steps.length - 1;
-  $("#scenario-run-all").disabled = scenarioRun.started && activeIndex >= definition.steps.length - 1;
+  $("#scenario-next").disabled = !hasRemaining;
+  $("#scenario-run-selected").disabled = selectedIndex === activeIndex;
+  $("#scenario-run-all").disabled = !hasRemaining;
+  $("#scenario-run-all").textContent = scenarioRun.runAllArmed ? `Confirm run all (${definition.steps.length - activeIndex - 1})` : "Run all";
 
   const currentScenario = scenarioRun.started ? materializeScenario(definition, activeIndex) : materializeScenario(definition, -1);
   const beforeScenario = materializeScenario(definition, Math.max(-1, activeIndex - 1));
@@ -153,14 +168,18 @@ function renderScenarioStudio() {
   const poolDelta = currentReplay.pool.consumed - beforeReplay.pool.consumed;
   const newAlerts = currentReplay.alerts.filter((alert) => !beforeReplay.alerts.some((previous) => previous.id === alert.id));
 
-  let preview = "";
-  if (currentStep?.type === "checkpoint" && activeIndex < definition.steps.length - 1) {
-    const nextScenario = materializeScenario(definition, activeIndex + 1);
-    const nextReplay = replayScenario(nextScenario);
-    const nextChanges = budgetChanges(currentReplay, nextReplay);
-    const nextStep = definition.steps[activeIndex + 1];
-    preview = `<div class="scenario-preview"><p class="eyebrow">NEXT STEP PREVIEW</p><strong>${escapeHtml(nextStep.title)}</strong><p>${escapeHtml(nextStep.expected)}</p>${nextChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.spent - item.delta, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}</div>`;
-  }
+  const selectedStep = definition.steps[selectedIndex];
+  const previewBeforeIndex = selectedIndex > activeIndex ? activeIndex : Math.max(-1, selectedIndex - 1);
+  const previewBefore = replayScenario(materializeScenario(definition, previewBeforeIndex));
+  const previewAfter = replayScenario(materializeScenario(definition, selectedIndex));
+  const previewChanges = budgetChanges(previewBefore, previewAfter);
+  const previewPoolDelta = previewAfter.pool.consumed - previewBefore.pool.consumed;
+  const previewResultId = selectedStep.type === "usage" ? `scenario-${definition.id}-${selectedStep.id}` : null;
+  const previewResult = previewResultId ? previewAfter.results.find((item) => item.eventId === previewResultId) : null;
+  const previewAlerts = previewAfter.alerts.filter((alert) => !previewBefore.alerts.some((previous) => previous.id === alert.id));
+  const intervening = Math.max(0, selectedIndex - activeIndex - 1);
+  const remaining = definition.steps.slice(activeIndex + 1);
+  const runAllPreview = scenarioRun.runAllArmed ? `<div class="run-all-preview"><strong>Run all remaining steps?</strong><span>${remaining.length} steps: ${remaining.filter((step) => step.type === "usage").length} usage events, ${remaining.filter((step) => step.type === "configuration").length} configuration changes, ${remaining.filter((step) => step.type === "advance-date").length} date changes, and ${remaining.filter((step) => step.type === "checkpoint").length} checkpoints.</span><small>Review this summary, then select “Confirm run all” to execute.</small></div>` : "";
 
   const changedIds = new Set(changes.map((item) => item.stateId));
   const health = [
@@ -168,19 +187,32 @@ function renderScenarioStudio() {
     ...currentReplay.budgetStates,
   ];
   $("#scenario-outcome").innerHTML = `
-    <div class="scenario-outcome-heading"><div><p class="eyebrow">LIVE OUTCOME</p><h3>${escapeHtml(currentStep?.title || "Ready to start")}</h3></div><span class="scenario-status ${currentStep ? "active" : ""}">${currentStep ? `Step ${activeIndex + 1}` : "Baseline"}</span></div>
-    <p class="scenario-step-description">${escapeHtml(currentStep?.description || "Start the scenario to apply its first step. The baseline budget state is already visible below.")}</p>
-    <div class="expected-outcome"><strong>Expected outcome</strong><span>${escapeHtml(currentStep?.expected || definition.summary)}</span></div>
-    ${scenarioResultHtml(result)}
-    <div class="scenario-deltas">
-      <h4>Changes in this step</h4>
-      ${poolDelta ? `<div class="scenario-delta"><span>Shared pool consumed</span><strong>${beforeReplay.pool.consumed.toLocaleString()} → ${currentReplay.pool.consumed.toLocaleString()} (${poolDelta > 0 ? "+" : ""}${poolDelta.toLocaleString()})</strong></div>` : ""}
-      ${changes.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${item.delta > 0 ? "+" : ""}${money(item.delta, "USD")})</strong></div>`).join("")}
-      ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in this step.</p>` : ""}
-      ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
-    </div>
-    ${preview}
-    <div class="scenario-health"><div class="panel-title"><h4>Budget health after this step</h4><span>Live snapshot</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>`;
+    <section class="selected-step-preview">
+      <div class="scenario-outcome-heading"><div><p class="eyebrow">SELECTED STEP PREVIEW</p><h3>${escapeHtml(selectedStep.title)}</h3></div><span class="scenario-status preview">Preview · Step ${selectedIndex + 1}</span></div>
+      <p class="scenario-step-description">${escapeHtml(selectedStep.description)}</p>
+      ${stepInputHtml(selectedStep)}
+      <div class="expected-outcome"><strong>Expected outcome</strong><span>${escapeHtml(selectedStep.expected)}</span></div>
+      ${intervening ? `<p class="scenario-jump-note">Running this selected step also applies ${intervening} preceding pending step${intervening === 1 ? "" : "s"} in order.</p>` : ""}
+      <div class="scenario-deltas preview-deltas"><h4>Predicted changes</h4>
+        ${previewPoolDelta ? `<div class="scenario-delta"><span>Shared pool consumed</span><strong>${previewBefore.pool.consumed.toLocaleString()} → ${previewAfter.pool.consumed.toLocaleString()}</strong></div>` : ""}
+        ${previewChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}
+        ${!previewPoolDelta && !previewChanges.length ? `<p class="muted">This step is not expected to change counters.</p>` : ""}
+        ${previewResult ? `<div class="scenario-predicted-result ${previewResult.status}"><strong>Predicted: ${previewResult.status}</strong><span>${escapeHtml(previewResult.reason)}</span></div>` : ""}
+        ${previewAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Expected alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
+      </div>
+      ${runAllPreview}
+    </section>
+    <section class="actual-outcome">
+      <div class="scenario-outcome-heading"><div><p class="eyebrow">ACTUAL OUTCOME</p><h3>${escapeHtml(currentStep?.title || "Scenario baseline")}</h3></div><span class="scenario-status ${currentStep ? "active" : ""}">${currentStep ? `Applied · Step ${activeIndex + 1}` : "No steps applied"}</span></div>
+      ${scenarioResultHtml(result)}
+      <div class="scenario-deltas"><h4>Changes in the last applied step</h4>
+        ${poolDelta ? `<div class="scenario-delta"><span>Shared pool consumed</span><strong>${beforeReplay.pool.consumed.toLocaleString()} → ${currentReplay.pool.consumed.toLocaleString()} (${poolDelta > 0 ? "+" : ""}${poolDelta.toLocaleString()})</strong></div>` : ""}
+        ${changes.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${item.delta > 0 ? "+" : ""}${money(item.delta, "USD")})</strong></div>`).join("")}
+        ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
+        ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
+      </div>
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+    </section>`;
 }
 
 function runScenarioToStep(stepIndex, message) {
@@ -189,7 +221,7 @@ function runScenarioToStep(stepIndex, message) {
   const before = replayScenario(materializeScenario(definition, Math.max(-1, boundedIndex - 1)));
   seenAlertIds = new Set(before.alerts.map((alert) => alert.id));
   scenario = materializeScenario(definition, boundedIndex);
-  scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, started: true };
+  scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, selectedStepIndex: Math.min(boundedIndex + 1, definition.steps.length - 1), started: true, runAllArmed: false };
   const step = boundedIndex >= 0 ? definition.steps[boundedIndex] : null;
   latestEventId = step?.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
   saveAndRender(message);
@@ -505,7 +537,7 @@ function addMonth(value) {
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
 document.addEventListener("click", (event) => {
-  const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { runScenarioToStep(Number(scenarioStep.dataset.scenarioStep), "Scenario advanced to selected step"); return; }
+  const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { scenarioRun.selectedStepIndex = Number(scenarioStep.dataset.scenarioStep); scenarioRun.runAllArmed = false; renderScenarioStudio(); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
   const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
   const closeModal = event.target.closest("[data-close-modal]"); if (closeModal) { closeBudgetHistory(); return; }
@@ -530,14 +562,22 @@ document.addEventListener("keydown", (event) => {
 });
 
 $("#scenario-definition").addEventListener("change", (event) => {
-  scenarioRun = { definitionId: event.target.value, stepIndex: -1, started: false };
+  scenarioRun = { definitionId: event.target.value, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
   latestEventId = null;
   renderScenarioStudio();
 });
 $("#scenario-reset").addEventListener("click", () => runScenarioToStep(-1, "Scenario reset to its baseline"));
 $("#scenario-previous").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#scenario-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
-$("#scenario-run-all").addEventListener("click", () => runScenarioToStep(selectedScenarioDefinition().steps.length - 1, "Scenario completed"));
+$("#scenario-run-selected").addEventListener("click", () => runScenarioToStep(scenarioRun.selectedStepIndex, "Scenario advanced to the selected step"));
+$("#scenario-run-all").addEventListener("click", () => {
+  if (!scenarioRun.runAllArmed) {
+    scenarioRun.runAllArmed = true;
+    renderScenarioStudio();
+    return;
+  }
+  runScenarioToStep(selectedScenarioDefinition().steps.length - 1, "Scenario completed");
+});
 $("#export-scenario-definition").addEventListener("click", () => {
   const definition = selectedScenarioDefinition();
   const blob = new Blob([JSON.stringify(definition, null, 2)], { type: "application/json" });
@@ -561,7 +601,7 @@ $("#import-scenario-definition").addEventListener("change", async (event) => {
       customScenarioDefinitions.push(definition);
     }
     localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(customScenarioDefinitions));
-    scenarioRun = { definitionId: definitions.at(-1).id, stepIndex: -1, started: false };
+    scenarioRun = { definitionId: definitions.at(-1).id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
     renderScenarioStudio();
     showToast(`${definitions.length} scenario definition${definitions.length === 1 ? "" : "s"} imported`);
   } catch (error) {

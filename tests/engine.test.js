@@ -277,15 +277,18 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.match(blocked.results.at(-1).reason, /user-level hard stop/);
 });
 
-test("simulation page exposes same-page guided controls and live outcomes", async () => {
+test("simulation page previews selected steps before explicit execution", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  for (const id of ["scenario-definition", "scenario-step-list", "scenario-previous", "scenario-next", "scenario-run-all", "scenario-outcome"]) {
+  for (const id of ["scenario-definition", "scenario-step-list", "scenario-previous", "scenario-next", "scenario-run-selected", "scenario-run-all", "scenario-outcome"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(app, /function renderScenarioStudio/);
-  assert.match(app, /function runScenarioToStep/);
-  assert.match(app, /NEXT STEP PREVIEW/);
+  assert.match(html, /Run next step/);
+  assert.match(app, /SELECTED STEP PREVIEW/);
+  assert.match(app, /Predicted changes/);
+  assert.match(app, /ACTUAL OUTCOME/);
+  assert.match(app, /scenarioRun\.selectedStepIndex = Number/);
+  assert.match(app, /Confirm run all/);
 });
 
 test("alert notifications render as a dismissible toast stack", async () => {

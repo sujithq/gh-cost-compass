@@ -5,10 +5,12 @@ The Simulation page contains a guided Scenario Studio. It runs a scenario one st
 ## Controls
 
 - **Start / reset** restores the selected scenario's deterministic baseline.
-- **Previous** rebuilds the scenario through the preceding step.
-- **Next** applies one step.
-- **Run all** applies every remaining step.
-- Selecting a step rebuilds the scenario through that point.
+- Selecting a step previews its inputs, expected outcome, predicted budget/pool changes, alerts, and blocking without changing simulation state.
+- **Previous** rebuilds the scenario through the preceding applied step.
+- **Run next step** applies only the next pending step.
+- **Run selected step** rebuilds through the selected step; any preceding pending steps are applied in order and are called out in the preview.
+- **Run all** first shows a summary of every remaining step and requires a second confirmation click.
+- The outcome area keeps predictions clearly separated from the actual result of the latest applied step.
 - **Import definition** adds or replaces a custom scenario in browser storage.
 - **Export** downloads the selected definition as JSON.
 

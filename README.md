@@ -16,7 +16,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Toast notifications when a budget threshold alert fires or an event is blocked, with severity colouring, GitHub's alert-delivery caveat, and a shortcut into the budget history
 - Documentation-backed configuration help, source links, and live cost/access impact previews
 - Scenario import/export, reset, replay, and browser-local persistence
-- A same-page Scenario Studio with Previous, Next, Run all, step jumping, live budget deltas, alerts, and health snapshots
+- A preview-first Scenario Studio with non-destructive step selection, explicit execution controls, predicted and actual budget deltas, alerts, and health snapshots
 - Extensible declarative scenario definitions with browser-local JSON import/export
 - A documented scenario catalog for budget health progression and the next-step 100% saturation case
 
