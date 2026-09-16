@@ -27,7 +27,7 @@
       "required": ["target", "changes"],
       "additionalProperties": false,
       "properties": {
-        "target": { "enum": ["enterprise", "budget", "user", "organization", "repository", "costCenter", "product"] },
+        "target": { "enum": ["enterprise", "budget", "user", "organization", "repository", "costCenter", "enterpriseTeam", "product"] },
         "id": { "type": "string" },
         "changes": { "type": "object", "minProperties": 1 }
       }

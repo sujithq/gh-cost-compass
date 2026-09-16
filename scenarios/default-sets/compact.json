@@ -13,6 +13,10 @@
       { "id": "repo-portal", "name": "customer-portal", "organizationId": "org-product" },
       { "id": "repo-tools", "name": "developer-tools", "organizationId": "org-platform" }
     ],
+    "enterpriseTeams": [
+      { "id": "team-ai", "name": "AI Platform Team", "userIds": ["user-alice"] },
+      { "id": "team-core", "name": "Core Engineering Team", "userIds": ["user-bob"] }
+    ],
     "costCenters": [
       { "id": "cc-ai", "name": "AI Innovation", "organizationIds": [], "excludeFromEnterpriseBudget": false },
       { "id": "cc-core", "name": "Core Engineering", "organizationIds": [], "excludeFromEnterpriseBudget": false }
