@@ -12,6 +12,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - AI paid-usage policy, effective dates, monthly resets, alerts, and hard stops
 - Clear split between included AI credits and paid overage
 - Dated usage simulation, live progress, attribution details, alerts, and audit timeline
+- Clickable budget and shared-pool cards with an accessible history dialog showing the current-period events that drove their state
 - Documentation-backed configuration help, source links, and live cost/access impact previews
 - Scenario import/export, reset, replay, and browser-local persistence
 

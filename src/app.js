@@ -3,6 +3,7 @@ import { costCenterForUser, createDefaultScenario, createId, describeScope, isSe
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 let scenario = loadScenario();
 let latestEventId = null;
+let budgetHistoryTrigger = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -75,14 +76,78 @@ function renderSummary(replay, currency) {
 }
 
 function renderBudgets(replay, currency) {
-  const poolCard = `<article class="budget-card"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
+  const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
   const cards = replay.budgetStates.map((budget) => {
     const isUlb = budget.budgetKind === "user";
     const scope = isUlb ? `Per user · ${budget.userBudgetType} ULB` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
-    return `<article class="budget-card"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
+    return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
   $("#budget-grid").innerHTML = poolCard + cards;
+}
+
+function historyEntries(results, detailForResult, emptyMessage) {
+  return results.length ? results.map((result) => {
+    const detail = detailForResult(result);
+    return `<div class="history-entry"><div class="history-head"><strong>${escapeHtml(result.userName)}</strong><span>${result.date}</span></div><p>${escapeHtml(result.productName)} · ${Number(result.quantity).toLocaleString()} units · ${money(result.cost, "USD")}</p><small>${escapeHtml(detail)} · ${escapeHtml(result.reason)}</small></div>`;
+  }).join("") : `<div class="empty">${escapeHtml(emptyMessage)}</div>`;
+}
+
+function openBudgetHistory(historyId, trigger) {
+  const replay = replayScenario(scenario);
+  const currentPeriodResults = replay.results.filter((item) => item.date.startsWith(replay.period));
+  let title;
+  let summary;
+  let entries;
+  let alertHtml = "<li>The shared pool does not emit budget alerts.</li>";
+
+  if (historyId === "pool") {
+    const contributors = currentPeriodResults.filter((item) => item.status === "accepted" && item.includedQuantity > 0);
+    title = "Shared included AI-credit pool history";
+    summary = [
+      ["Consumed", `${replay.pool.consumed.toLocaleString()} credits`],
+      ["Capacity", `${replay.pool.total.toLocaleString()} credits`],
+      ["Remaining", `${replay.pool.remaining.toLocaleString()} credits`],
+      ["Percent", `${Math.round(replay.pool.percent)}%`],
+    ];
+    entries = historyEntries(contributors, (result) => `Drew ${result.includedQuantity.toLocaleString()} credits from the shared pool`, "No usage events have consumed this period's shared pool.");
+  } else {
+    const budgetState = replay.budgetStates.find((item) => item.stateId === historyId);
+    if (!budgetState) return;
+    const contributors = currentPeriodResults.filter((item) => item.affectedBudgets.some((impact) => impact.stateKey === historyId));
+    const alerts = replay.alerts.filter((item) => item.budgetId === budgetState.id && item.date.startsWith(replay.period) && contributors.some((result) => result.eventId === item.eventId));
+    title = `${budgetState.displayName} history`;
+    summary = [
+      ["Current usage", money(budgetState.spent, "USD")],
+      ["Limit", money(budgetState.amount, "USD")],
+      ["Remaining", money(budgetState.remaining, "USD")],
+      ["Percent", `${Math.round(budgetState.percent)}%`],
+    ];
+    entries = historyEntries(contributors, (result) => {
+      const impact = result.affectedBudgets.find((item) => item.stateKey === historyId);
+      return `Added ${money((impact?.after || 0) - (impact?.before || 0), "USD")} to this budget`;
+    }, "No usage events are currently contributing to this budget.");
+    alertHtml = alerts.length ? alerts.map((alert) => `<li>${alert.date} · ${alert.threshold}% threshold reached</li>`).join("") : "<li>No budget alerts triggered for this control.</li>";
+  }
+
+  $("#budget-history-title").textContent = title;
+  $("#budget-history-content").innerHTML = `
+    <div class="budget-history-summary">${summary.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+    <div class="history-panel"><h4>What drove the current state</h4>${entries}</div>
+    <div class="history-panel"><h4>Triggered alerts</h4><ul class="history-alert-list">${alertHtml}</ul></div>`;
+  budgetHistoryTrigger = trigger || document.activeElement;
+  $("#budget-history-modal").classList.remove("hidden");
+  $("#budget-history-modal").setAttribute("aria-hidden", "false");
+  $("#budget-history-close").focus();
+}
+
+function closeBudgetHistory() {
+  const modal = $("#budget-history-modal");
+  if (modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  budgetHistoryTrigger?.focus();
+  budgetHistoryTrigger = null;
 }
 
 function renderHierarchy() {
@@ -285,6 +350,8 @@ function addMonth(value) {
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
 document.addEventListener("click", (event) => {
+  const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
+  const closeModal = event.target.closest("[data-close-modal]"); if (closeModal) { closeBudgetHistory(); return; }
   const go = event.target.closest("[data-go]"); if (go) navigate(go.dataset.go);
   const quick = event.target.closest("[data-quantity]"); if (quick) $("#usage-quantity").value = quick.dataset.quantity;
   const toggle = event.target.closest("[data-toggle-costcenter]"); if (toggle) {
@@ -295,6 +362,14 @@ document.addEventListener("click", (event) => {
     }
   }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeBudgetHistory();
+  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-history-id]")) {
+    event.preventDefault();
+    openBudgetHistory(event.target.dataset.historyId, event.target);
+  }
 });
 
 $("#simulation-date").addEventListener("change", (event) => { scenario.simulationDate = event.target.value; $("#usage-date").value = event.target.value; saveAndRender("Simulation date changed"); });

@@ -201,6 +201,15 @@ test("configuration help exposes impact regions and official GitHub citations", 
   assert.match(html, /docs\.github\.com\/en\/billing\/how-tos\/set-up-budgets/);
 });
 
+test("dashboard includes an accessible budget history dialog", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="budget-history-modal"/);
+  assert.match(html, /role="dialog" aria-modal="true"/);
+  assert.match(app, /data-history-id="pool"/);
+  assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
+});
+
 test("rejects legacy scenario imports", () => {
   assert.match(validateScenario({ version: 1, enterprise: {}, simulationDate: "2026-09-01" }), /version 2/);
   assert.equal(validateScenario(createDefaultScenario()), null);
