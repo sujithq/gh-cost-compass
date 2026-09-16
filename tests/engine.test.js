@@ -56,6 +56,15 @@ test("default scenario sets can load the compact demo tenant", () => {
   assert.equal(replayScenario(scenario).pool.total, 5800);
 });
 
+test("default scenario sets are backed by JSON files", async () => {
+  for (const name of ["enterprise", "compact"]) {
+    const content = await readFile(new URL(`../scenarios/default-sets/${name}.json`, import.meta.url), "utf8");
+    const definition = JSON.parse(content);
+    assert.equal(definition.id, name);
+    assert.equal(definition.scenario.version, 2);
+  }
+});
+
 test("guided scenario materialization can use a selected default set", () => {
   const definition = {
     version: 1,
