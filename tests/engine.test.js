@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
+import { BUILT_IN_SCENARIOS, materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 
 function usage(id, date, quantity, overrides = {}) {
   return { id, date, quantity, userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", ...overrides };
@@ -248,6 +249,43 @@ test("budget health scenario catalog stays aligned with the underlying progress 
     catalog.map((scenario) => scenario.id).sort(),
     ["cost-center-budget", "org-budget-next-step", "shared-pool", "user-ulb", "user-ulb-next-step"].sort(),
   );
+});
+
+test("guided scenarios are declarative, reversible, and produce their documented outcomes", () => {
+  for (const definition of BUILT_IN_SCENARIOS) {
+    assert.equal(validateScenarioDefinition(definition), null);
+    const baseline = materializeScenario(definition, -1);
+    const complete = materializeScenario(definition, definition.steps.length - 1);
+    assert.equal(baseline.events.length, 0);
+    assert.equal(complete.events.length, definition.steps.filter((step) => step.type === "usage").length);
+    assert.deepEqual(materializeScenario(definition, -1), baseline);
+  }
+
+  const progression = BUILT_IN_SCENARIOS.find((item) => item.id === "budget-health-progression");
+  const atNinety = replayScenario(materializeScenario(progression, 3));
+  const atHundred = replayScenario(materializeScenario(progression, 4));
+  const aliceAtNinety = atNinety.budgetStates.find((item) => item.id === "ulb-alice");
+  const aliceAtHundred = atHundred.budgetStates.find((item) => item.id === "ulb-alice");
+  assert.equal(aliceAtNinety.percent, 90);
+  assert.equal(aliceAtHundred.percent, 100);
+  assert.equal(atHundred.results.at(-1).status, "accepted");
+  assert.ok(atHundred.alerts.some((alert) => alert.budgetId === "ulb-alice" && alert.threshold === 100));
+
+  const hardStop = BUILT_IN_SCENARIOS.find((item) => item.id === "hard-stop-boundary");
+  const blocked = replayScenario(materializeScenario(hardStop, 1));
+  assert.equal(blocked.results.at(-1).status, "blocked");
+  assert.match(blocked.results.at(-1).reason, /user-level hard stop/);
+});
+
+test("simulation page exposes same-page guided controls and live outcomes", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  for (const id of ["scenario-definition", "scenario-step-list", "scenario-previous", "scenario-next", "scenario-run-all", "scenario-outcome"]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(app, /function renderScenarioStudio/);
+  assert.match(app, /function runScenarioToStep/);
+  assert.match(app, /NEXT STEP PREVIEW/);
 });
 
 test("alert notifications render as a dismissible toast stack", async () => {

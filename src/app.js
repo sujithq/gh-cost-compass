@@ -1,7 +1,11 @@
 import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
+import { BUILT_IN_SCENARIOS, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
+const CUSTOM_SCENARIOS_KEY = "copilot-budget-lab-custom-scenarios-v1";
 let scenario = loadScenario();
+let customScenarioDefinitions = loadCustomScenarioDefinitions();
+let scenarioRun = { definitionId: BUILT_IN_SCENARIOS[0].id, stepIndex: -1, started: false };
 let latestEventId = null;
 let budgetHistoryTrigger = null;
 let seenAlertIds = null;
@@ -15,6 +19,21 @@ function loadScenario() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     return validateScenario(saved) ? createDefaultScenario() : saved;
   } catch { return createDefaultScenario(); }
+}
+
+function loadCustomScenarioDefinitions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_SCENARIOS_KEY));
+    return Array.isArray(saved) ? saved.filter((item) => !validateScenarioDefinition(item)) : [];
+  } catch { return []; }
+}
+
+function scenarioDefinitions() {
+  return [...BUILT_IN_SCENARIOS, ...customScenarioDefinitions];
+}
+
+function selectedScenarioDefinition() {
+  return scenarioDefinitions().find((item) => item.id === scenarioRun.definitionId) || BUILT_IN_SCENARIOS[0];
 }
 
 function saveAndRender(message) {
@@ -85,6 +104,97 @@ function statusClass(percent) {
   return "";
 }
 
+function safeSourceUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : null;
+  } catch { return null; }
+}
+
+function budgetChanges(before, after) {
+  const previous = new Map(before.budgetStates.map((item) => [item.stateId, item]));
+  return after.budgetStates.map((item) => ({ ...item, before: previous.get(item.stateId)?.spent || 0, delta: item.spent - (previous.get(item.stateId)?.spent || 0) })).filter((item) => Math.abs(item.delta) > 0.000001);
+}
+
+function scenarioResultHtml(result) {
+  if (!result) return `<div class="scenario-result neutral"><strong>No usage event in this step</strong><span>The scenario state is unchanged; use the explanation and preview below.</span></div>`;
+  return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span><small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>`;
+}
+
+function renderScenarioStudio() {
+  const definition = selectedScenarioDefinition();
+  const definitions = scenarioDefinitions();
+  const selector = $("#scenario-definition");
+  selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${BUILT_IN_SCENARIOS.includes(item) ? "" : " · custom"}</option>`).join("");
+  $("#scenario-title").textContent = definition.title;
+  $("#scenario-summary").textContent = definition.summary;
+  $("#scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+  const sources = (definition.sourceUrls || []).map(safeSourceUrl).filter(Boolean);
+  $("#scenario-sources").innerHTML = sources.length ? sources.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Source ${index + 1}</a>`).join("") : `<span class="muted">No external sources supplied</span>`;
+
+  const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
+  $("#scenario-progress-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length}`;
+  $("#scenario-step-list").innerHTML = definition.steps.map((step, index) => {
+    const state = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
+    return `<li><button type="button" class="scenario-step ${state}" data-scenario-step="${index}" aria-current="${state === "active" ? "step" : "false"}"><span class="scenario-step-number">${index + 1}</span><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.description)}</small></span><span class="scenario-step-type">${escapeHtml(step.type)}</span></button></li>`;
+  }).join("");
+  $("#scenario-previous").disabled = !scenarioRun.started || activeIndex < 0;
+  $("#scenario-next").disabled = scenarioRun.started && activeIndex >= definition.steps.length - 1;
+  $("#scenario-run-all").disabled = scenarioRun.started && activeIndex >= definition.steps.length - 1;
+
+  const currentScenario = scenarioRun.started ? materializeScenario(definition, activeIndex) : materializeScenario(definition, -1);
+  const beforeScenario = materializeScenario(definition, Math.max(-1, activeIndex - 1));
+  const currentReplay = replayScenario(currentScenario);
+  const beforeReplay = replayScenario(beforeScenario);
+  const currentStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
+  const resultId = currentStep?.type === "usage" ? `scenario-${definition.id}-${currentStep.id}` : null;
+  const result = resultId ? currentReplay.results.find((item) => item.eventId === resultId) : null;
+  const changes = currentStep ? budgetChanges(beforeReplay, currentReplay) : [];
+  const poolDelta = currentReplay.pool.consumed - beforeReplay.pool.consumed;
+  const newAlerts = currentReplay.alerts.filter((alert) => !beforeReplay.alerts.some((previous) => previous.id === alert.id));
+
+  let preview = "";
+  if (currentStep?.type === "checkpoint" && activeIndex < definition.steps.length - 1) {
+    const nextScenario = materializeScenario(definition, activeIndex + 1);
+    const nextReplay = replayScenario(nextScenario);
+    const nextChanges = budgetChanges(currentReplay, nextReplay);
+    const nextStep = definition.steps[activeIndex + 1];
+    preview = `<div class="scenario-preview"><p class="eyebrow">NEXT STEP PREVIEW</p><strong>${escapeHtml(nextStep.title)}</strong><p>${escapeHtml(nextStep.expected)}</p>${nextChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.spent - item.delta, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}</div>`;
+  }
+
+  const changedIds = new Set(changes.map((item) => item.stateId));
+  const health = [
+    { stateId: "pool", displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
+    ...currentReplay.budgetStates,
+  ];
+  $("#scenario-outcome").innerHTML = `
+    <div class="scenario-outcome-heading"><div><p class="eyebrow">LIVE OUTCOME</p><h3>${escapeHtml(currentStep?.title || "Ready to start")}</h3></div><span class="scenario-status ${currentStep ? "active" : ""}">${currentStep ? `Step ${activeIndex + 1}` : "Baseline"}</span></div>
+    <p class="scenario-step-description">${escapeHtml(currentStep?.description || "Start the scenario to apply its first step. The baseline budget state is already visible below.")}</p>
+    <div class="expected-outcome"><strong>Expected outcome</strong><span>${escapeHtml(currentStep?.expected || definition.summary)}</span></div>
+    ${scenarioResultHtml(result)}
+    <div class="scenario-deltas">
+      <h4>Changes in this step</h4>
+      ${poolDelta ? `<div class="scenario-delta"><span>Shared pool consumed</span><strong>${beforeReplay.pool.consumed.toLocaleString()} → ${currentReplay.pool.consumed.toLocaleString()} (${poolDelta > 0 ? "+" : ""}${poolDelta.toLocaleString()})</strong></div>` : ""}
+      ${changes.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${item.delta > 0 ? "+" : ""}${money(item.delta, "USD")})</strong></div>`).join("")}
+      ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in this step.</p>` : ""}
+      ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
+    </div>
+    ${preview}
+    <div class="scenario-health"><div class="panel-title"><h4>Budget health after this step</h4><span>Live snapshot</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>`;
+}
+
+function runScenarioToStep(stepIndex, message) {
+  const definition = selectedScenarioDefinition();
+  const boundedIndex = Math.max(-1, Math.min(stepIndex, definition.steps.length - 1));
+  const before = replayScenario(materializeScenario(definition, Math.max(-1, boundedIndex - 1)));
+  seenAlertIds = new Set(before.alerts.map((alert) => alert.id));
+  scenario = materializeScenario(definition, boundedIndex);
+  scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, started: true };
+  const step = boundedIndex >= 0 ? definition.steps[boundedIndex] : null;
+  latestEventId = step?.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
+  saveAndRender(message);
+}
+
 function render() {
   const replay = replayScenario(scenario);
   const currency = scenario.enterprise.currency;
@@ -93,6 +203,7 @@ function render() {
   $("#period-label").textContent = replay.period;
   renderSummary(replay, currency);
   renderBudgets(replay, currency);
+  renderScenarioStudio();
   renderHierarchy();
   renderActivity(replay, currency);
   renderSelectors();
@@ -394,6 +505,7 @@ function addMonth(value) {
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
 document.addEventListener("click", (event) => {
+  const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { runScenarioToStep(Number(scenarioStep.dataset.scenarioStep), "Scenario advanced to selected step"); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
   const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
   const closeModal = event.target.closest("[data-close-modal]"); if (closeModal) { closeBudgetHistory(); return; }
@@ -417,13 +529,54 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-$("#simulation-date").addEventListener("change", (event) => { scenario.simulationDate = event.target.value; $("#usage-date").value = event.target.value; saveAndRender("Simulation date changed"); });
-$("#previous-day").addEventListener("click", () => { scenario.simulationDate = addDays(scenario.simulationDate, -1); $("#usage-date").value = scenario.simulationDate; saveAndRender(); });
-$("#next-day").addEventListener("click", () => { scenario.simulationDate = addDays(scenario.simulationDate, 1); $("#usage-date").value = scenario.simulationDate; saveAndRender(); });
-$("#next-month").addEventListener("click", () => { scenario.simulationDate = addMonth(scenario.simulationDate); $("#usage-date").value = scenario.simulationDate; saveAndRender("Advanced to next billing period"); });
+$("#scenario-definition").addEventListener("change", (event) => {
+  scenarioRun = { definitionId: event.target.value, stepIndex: -1, started: false };
+  latestEventId = null;
+  renderScenarioStudio();
+});
+$("#scenario-reset").addEventListener("click", () => runScenarioToStep(-1, "Scenario reset to its baseline"));
+$("#scenario-previous").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
+$("#scenario-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
+$("#scenario-run-all").addEventListener("click", () => runScenarioToStep(selectedScenarioDefinition().steps.length - 1, "Scenario completed"));
+$("#export-scenario-definition").addEventListener("click", () => {
+  const definition = selectedScenarioDefinition();
+  const blob = new Blob([JSON.stringify(definition, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${definition.id}.scenario.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast("Scenario definition exported");
+});
+$("#import-scenario-definition").addEventListener("change", async (event) => {
+  try {
+    const imported = JSON.parse(await event.target.files[0].text());
+    const definitions = Array.isArray(imported) ? imported : [imported];
+    for (const definition of definitions) {
+      const error = validateScenarioDefinition(definition);
+      if (error) throw new Error(error);
+      if (BUILT_IN_SCENARIOS.some((item) => item.id === definition.id)) throw new Error(`The id ${definition.id} is reserved by a built-in scenario.`);
+      materializeScenario(definition, -1);
+      customScenarioDefinitions = customScenarioDefinitions.filter((item) => item.id !== definition.id);
+      customScenarioDefinitions.push(definition);
+    }
+    localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(customScenarioDefinitions));
+    scenarioRun = { definitionId: definitions.at(-1).id, stepIndex: -1, started: false };
+    renderScenarioStudio();
+    showToast(`${definitions.length} scenario definition${definitions.length === 1 ? "" : "s"} imported`);
+  } catch (error) {
+    showToast(`Scenario import failed: ${error.message}`, { tone: "danger" });
+  } finally { event.target.value = ""; }
+});
+
+$("#simulation-date").addEventListener("change", (event) => { scenarioRun.started = false; scenario.simulationDate = event.target.value; $("#usage-date").value = event.target.value; saveAndRender("Simulation date changed"); });
+$("#previous-day").addEventListener("click", () => { scenarioRun.started = false; scenario.simulationDate = addDays(scenario.simulationDate, -1); $("#usage-date").value = scenario.simulationDate; saveAndRender(); });
+$("#next-day").addEventListener("click", () => { scenarioRun.started = false; scenario.simulationDate = addDays(scenario.simulationDate, 1); $("#usage-date").value = scenario.simulationDate; saveAndRender(); });
+$("#next-month").addEventListener("click", () => { scenarioRun.started = false; scenario.simulationDate = addMonth(scenario.simulationDate); $("#usage-date").value = scenario.simulationDate; saveAndRender("Advanced to next billing period"); });
 
 $("#usage-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  scenarioRun.started = false;
   const usage = { id: createId("event"), userId: $("#usage-user").value, repositoryId: $("#usage-repository").value || null, productId: $("#usage-product").value, quantity: Number($("#usage-quantity").value), date: $("#usage-date").value };
   scenario.events.push(usage); latestEventId = usage.id;
   if (usage.date > scenario.simulationDate) scenario.simulationDate = usage.date;

@@ -16,6 +16,8 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Toast notifications when a budget threshold alert fires or an event is blocked, with severity colouring, GitHub's alert-delivery caveat, and a shortcut into the budget history
 - Documentation-backed configuration help, source links, and live cost/access impact previews
 - Scenario import/export, reset, replay, and browser-local persistence
+- A same-page Scenario Studio with Previous, Next, Run all, step jumping, live budget deltas, alerts, and health snapshots
+- Extensible declarative scenario definitions with browser-local JSON import/export
 - A documented scenario catalog for budget health progression and the next-step 100% saturation case
 
 ## Run and test
@@ -49,11 +51,13 @@ Open <http://localhost:4173>.
 
 Events are atomic: an event that would cross a hard stop is rejected in full. GitHub documentation describes stopping usage at limits but does not define event-level partial charging behavior. The simulator uses calendar-day proration for mid-cycle seat charges and credits; because GitHub says included credits “may” be prorated without publishing the exact calculation here, full credits remain available as a hypothetical override. Cost-center assignment through enterprise teams, random monthly selection when multiple organizations grant a Copilot license, automatic cost-center included-usage controls, and GitHub's unspecified additional-usage cap are not modeled. Direct user assignment takes precedence over organization-based cost-center assignment.
 
-## Budget health progression scenarios
+## Scenario Studio and budget-health scenarios
 
-The project includes a scenario catalog in `docs/budget-health-scenarios.md` and a machine-verified data file in `docs/budget-health-scenarios.json`.
+The Simulation page includes a guided Scenario Studio. It keeps the current step, expected result, accepted or blocked outcome, budget deltas, alerts, and full health snapshot together so a scenario can be understood without switching to the Dashboard.
 
-These examples cover both normal budget progress and the edge case where one more simulation step would take a budget to `100%` consumption. They are also checked automatically by the test suite so the dashboard math and the documentation stay aligned.
+Scenario definitions are declarative and support usage, date advancement, configuration changes, and explanatory checkpoints. Definitions can be imported and exported as JSON. See `docs/scenario-studio.md` for the schema and authoring guide.
+
+The budget progression catalog remains documented in `docs/budget-health-scenarios.md`, with machine-verified data in `docs/budget-health-scenarios.json`. The automated tests also execute the built-in guided scenarios, including the case where one further step moves a budget from 90% to exactly `100%`.
 
 ## Official references
 

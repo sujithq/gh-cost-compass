@@ -38,6 +38,33 @@
       </section>
 
       <section id="simulate" class="view">
+        <article class="panel scenario-studio">
+          <div class="scenario-studio-header">
+            <div><p class="eyebrow">SCENARIO STUDIO</p><h2>Run a guided scenario</h2><p class="muted">Advance one narrated step at a time and inspect the outcome without leaving this page.</p></div>
+            <div class="scenario-picker">
+              <label for="scenario-definition">Scenario</label>
+              <select id="scenario-definition"></select>
+              <label class="button-like compact-button">Import definition<input id="import-scenario-definition" type="file" accept="application/json"></label>
+              <button id="export-scenario-definition" type="button">Export</button>
+            </div>
+          </div>
+          <div class="scenario-description"><div><strong id="scenario-title"></strong><p id="scenario-summary"></p><div id="scenario-tags" class="scenario-tags"></div></div><div id="scenario-sources" class="scenario-sources"></div></div>
+          <div class="scenario-workspace">
+            <div class="scenario-steps-panel">
+              <div class="panel-title"><h3>Steps</h3><span id="scenario-progress-label"></span></div>
+              <ol id="scenario-step-list" class="scenario-step-list"></ol>
+              <div class="scenario-controls">
+                <button id="scenario-reset" type="button">Start / reset</button>
+                <button id="scenario-previous" type="button">← Previous</button>
+                <button id="scenario-next" class="primary" type="button">Next →</button>
+                <button id="scenario-run-all" type="button">Run all</button>
+              </div>
+            </div>
+            <div id="scenario-outcome" class="scenario-outcome" aria-live="polite"></div>
+          </div>
+        </article>
+
+        <div class="section-heading"><div><p class="eyebrow">AD HOC TESTING</p><h2>Run a custom event</h2></div><span class="pill">Same-page outcome</span></div>
         <div class="simulation-layout">
           <article class="panel sticky-panel"><p class="eyebrow">NEW EVENT</p><h2>Consume usage</h2><p class="muted">Create a dated usage event and immediately see every affected budget.</p>
             <form id="usage-form" class="form-stack">
