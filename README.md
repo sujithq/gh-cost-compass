@@ -7,12 +7,12 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Enterprise → organization → repository hierarchy
 - Copilot Business and Enterprise users, enterprise teams, license organizations, and direct, team, repository, or organization-based cost-center assignment
 - Shared monthly AI-credit pool: 1,900 credits per Business seat and 3,900 per Enterprise seat
-- Cost-center AI credit pools with block-at-cap or continue-to-overage behavior
+- Cost-center included usage controls with **AI credit pool enabled** and either block-members or continue-as-paid-overage behavior
 - Universal, cost-center, and individual user-level budgets (ULBs)
 - Separate enterprise, organization, and cost-center metered-overage budgets
 - AI paid-usage policy, effective dates, monthly resets, alerts, and hard stops
 - Clear split between included AI credits and paid overage
-- Dated usage simulation, live progress, attribution details, included-pool health, alerts, and audit timeline
+- Dated usage simulation, live progress, attribution details, included-usage health, budget threshold alerts, and audit timeline
 - Clickable budget and shared-pool cards with an accessible history dialog showing the current-period events that drove their state
 - Toast notifications when a budget threshold alert fires or an event is blocked, with severity colouring, GitHub's alert-delivery caveat, and a shortcut into the budget history
 - Documentation-backed configuration help, source links, and live cost/access impact previews
@@ -60,6 +60,12 @@ Open <http://localhost:4173>.
 ## Explicit simulator assumptions
 
 Events are atomic: an event that would cross a hard stop is rejected in full. GitHub documentation describes stopping usage at limits but does not define event-level partial charging behavior. The simulator uses calendar-day proration for mid-cycle seat charges and credits; because GitHub says included credits “may” be prorated without publishing the exact calculation here, full credits remain available as a hypothetical override. Random monthly selection when multiple organizations grant a Copilot license and GitHub's unspecified additional-usage cap are not modeled. Direct user assignment takes precedence over enterprise-team and organization-based cost-center assignment.
+
+## GitHub-aligned wording and state explanations
+
+Cost Compass labels budget configuration with the GitHub admin center terms used under **Billing and licensing** → **Budgets and alerts**: **Budget Type**, **SKU**, **Budget scope**, **Budget amount**, **Stop usage when budget limit is reached**, **Receive budget threshold alerts**, and **Alert Recipients** where modeled. Event cards include a "Why this state?" explanation that walks through the relevant controls in order: user-level budget, included AI credits or cost-center included usage controls, **AI credit paid usage**, then cost-center, organization, or enterprise budgets.
+
+Simulator-only pool-health guidance is labeled separately from GitHub budget alerts because **Receive budget threshold alerts** belongs to budget controls, while included usage controls show consumption against an AI credit pool cap.
 
 ## Scenario Studio and budget-health scenarios
 

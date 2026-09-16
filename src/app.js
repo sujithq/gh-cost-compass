@@ -36,6 +36,9 @@ const ICON_PATHS = {
   user: '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 21v-3a8 6 0 0 1 16 0v3"/>',
   team: '<path d="M9 7a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 20v-2a6 5 0 0 1 12 0v2M4 5a3 3 0 0 0 0 6M20 5a3 3 0 0 1 0 6M2 19v-3M22 19v-3"/>',
   pool: '<path d="M3 6c0-5 18-5 18 0s-18 5-18 0M3 6v12c0 5 18 5 18 0V6M3 12c0 5 18 5 18 0"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  settings: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="4"/>',
+  checkpoint: '<path d="M6 3h12v18l-6-3-6 3z"/><path d="m9 11 2 2 4-4"/>',
   hardStop: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M9.5 12l1.7 1.8L15 10"/>',
   alertOnly: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M12 8v4.2"/><circle cx="12" cy="15" r="0.9" fill="currentColor" stroke="none"/>',
   repo: '<path d="M6.5 3H19v14H6.5A2.5 2.5 0 0 0 4 19.5v-14A2.5 2.5 0 0 1 6.5 3Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19v4H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M9 7h6"/>',
@@ -205,27 +208,68 @@ function budgetChanges(before, after) {
 
 function poolChanges(before, after) {
   const previous = new Map([
-    [before.pool.stateId, { displayName: "Shared AI-credit pool", consumed: before.pool.consumed }],
+    [before.pool.stateId, { displayName: "Shared included AI-credit pool", consumed: before.pool.consumed }],
     ...before.costCenterPoolStates.map((item) => [item.stateId, item]),
   ]);
   return [
-    { ...after.pool, displayName: "Shared AI-credit pool", consumed: after.pool.consumed },
+    { ...after.pool, displayName: "Shared included AI-credit pool", consumed: after.pool.consumed },
     ...after.costCenterPoolStates,
   ].map((item) => ({ ...item, before: previous.get(item.stateId)?.consumed || 0, delta: item.consumed - (previous.get(item.stateId)?.consumed || 0) })).filter((item) => Math.abs(item.delta) > 0.000001);
 }
 
+function controlEvaluationsHtml(result, { compact = false } = {}) {
+  if (!result?.controlEvaluations?.length) return "";
+  const items = result.controlEvaluations.map((evaluation) => `
+    <li class="control-evaluation ${escapeHtml(evaluation.outcome)}">
+      <div class="control-evaluation-head"><strong>${escapeHtml(evaluation.control)}</strong><span>${escapeHtml(evaluation.outcome)}</span></div>
+      ${compact ? "" : `<dl>${evaluation.configuration.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(field.value)}</dd></div>`).join("")}</dl>`}
+      <p>${escapeHtml(evaluation.result)}</p>
+    </li>`).join("");
+  return `<div class="control-evaluations"><h4>Why this event is ${escapeHtml(result.status)}</h4><ol>${items}</ol></div>`;
+}
+
+function budgetTypeLabel(budget) {
+  if (budget.budgetKind === "user") return "Bundled AI credits budget";
+  const product = scenario.products.find((item) => item.id === budget.productId);
+  return product?.billingMode === "aiCredits" ? "SKU-level budget" : "Product-level budget";
+}
+
+function budgetScopeText(budget) {
+  return budget.budgetKind === "user" ? `Users · ${describeScope(scenario, budget)}` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
+}
+
+function budgetStopLabel(budget) {
+  return `Stop usage when budget limit is reached: ${budget.enforcement === "hard" || budget.budgetKind === "user" ? "Enabled" : "Not enabled"}`;
+}
+
 function scenarioResultHtml(result) {
   if (!result) return `<div class="scenario-result neutral"><strong>No usage event in this step</strong><span>The scenario state is unchanged; use the explanation and preview below.</span></div>`;
-  return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span>${fundingRouteHtml(result)}<small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>`;
+  return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span>${fundingRouteHtml(result)}<small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>${controlEvaluationsHtml(result)}`;
+}
+
+function scenarioHealthIcon(item) {
+  if (item.healthType === "pool") return { name: "pool", color: "pool", label: "Included credit pool" };
+  if (item.healthType === "costCenterPool") return { name: "costCenter", color: "cost-center", label: "Cost center included pool" };
+  if (item.budgetKind === "user") return { name: "user", color: "user", label: "User-level budget" };
+  const scope = ({ enterprise: { name: "enterprise", color: "enterprise", label: "Enterprise budget" }, organization: { name: "organization", color: "org", label: "Organization budget" }, costCenter: { name: "costCenter", color: "cost-center", label: "Cost center budget" }, repository: { name: "repo", color: "repo", label: "Repository budget" } })[item.scopeType];
+  return scope || { name: "alertOnly", color: "metered", label: "Metered budget" };
+}
+
+function scopeMarker(item) {
+  const marker = scenarioHealthIcon(item);
+  return `<span class="scope-marker scope-marker-${marker.color}" title="${marker.label}" aria-label="${marker.label}">${icon(marker.name)}</span>`;
 }
 
 function stepInputHtml(step) {
+  const stepIcons = { usage: "pool", configuration: "settings", "advance-date": "calendar", checkpoint: "checkpoint" };
+  const stepLabel = step.type.replaceAll("-", " ");
+  const stepType = `<span class="scenario-type-badge scenario-type-${escapeHtml(step.type)}" title="${escapeHtml(stepLabel)}" aria-label="${escapeHtml(stepLabel)}">${icon(stepIcons[step.type] || "checkpoint")}</span>`;
   if (step.type === "usage") {
-    return `<div class="scenario-input-grid"><div><span>User</span><strong>${escapeHtml(step.event.userId)}</strong></div><div><span>Product</span><strong>${escapeHtml(step.event.productId)}</strong></div><div><span>Quantity</span><strong>${Number(step.event.quantity).toLocaleString()}</strong></div><div><span>Date</span><strong>${escapeHtml(step.event.date)}</strong></div></div>`;
+    return `${stepType}<div class="scenario-input-grid"><div><span>User</span><strong>${escapeHtml(step.event.userId)}</strong></div><div><span>Product</span><strong>${escapeHtml(step.event.productId)}</strong></div><div><span>Quantity</span><strong>${Number(step.event.quantity).toLocaleString()}</strong></div><div><span>Date</span><strong>${escapeHtml(step.event.date)}</strong></div></div>`;
   }
-  if (step.type === "advance-date") return `<div class="scenario-input-grid"><div><span>New simulation date</span><strong>${escapeHtml(step.date)}</strong></div></div>`;
-  if (step.type === "configuration") return `<div class="scenario-input-grid"><div><span>Target</span><strong>${escapeHtml(step.mutation.target)}${step.mutation.id ? ` · ${escapeHtml(step.mutation.id)}` : ""}</strong></div><div><span>Changes</span><strong>${escapeHtml(JSON.stringify(step.mutation.changes))}</strong></div></div>`;
-  return `<p class="muted">This checkpoint changes no state. It provides a deliberate inspection point.</p>`;
+  if (step.type === "advance-date") return `${stepType}<div class="scenario-input-grid"><div><span>New simulation date</span><strong>${escapeHtml(step.date)}</strong></div></div>`;
+  if (step.type === "configuration") return `${stepType}<div class="scenario-input-grid"><div><span>Target</span><strong>${escapeHtml(step.mutation.target)}${step.mutation.id ? ` · ${escapeHtml(step.mutation.id)}` : ""}</strong></div><div><span>Changes</span><strong>${escapeHtml(JSON.stringify(step.mutation.changes))}</strong></div></div>`;
+  return `${stepType}<p class="muted">This checkpoint changes no state. It provides a deliberate inspection point.</p>`;
 }
 
 function renderScenarioStudio() {
@@ -260,7 +304,9 @@ function renderScenarioStudio() {
   $("#scenario-progress-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Completed ${activeIndex + 1} of ${definition.steps.length}`;
   $("#scenario-step-list").innerHTML = definition.steps.map((step, index) => {
     const classes = [index <= activeIndex ? "complete" : "pending", index === activeIndex ? "active" : "", index === selectedIndex ? "selected" : ""].filter(Boolean).join(" ");
-    return `<li><button type="button" class="scenario-step ${classes}" data-scenario-step="${index}" aria-current="${index === activeIndex ? "step" : "false"}" aria-pressed="${index === selectedIndex}"><span class="scenario-step-number">${index + 1}</span><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.description)}</small></span><span class="scenario-step-type">${escapeHtml(step.type)}</span></button></li>`;
+    const stepIcons = { usage: "pool", configuration: "settings", "advance-date": "calendar", checkpoint: "checkpoint" };
+    const stepLabel = step.type.replaceAll("-", " ");
+    return `<li><button type="button" class="scenario-step ${classes}" data-scenario-step="${index}" aria-current="${index === activeIndex ? "step" : "false"}" aria-pressed="${index === selectedIndex}"><span class="scenario-step-number">${index + 1}</span><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.description)}</small></span><span class="scenario-step-type scenario-type-${escapeHtml(step.type)}" title="${escapeHtml(stepLabel)}" aria-label="${escapeHtml(stepLabel)}">${icon(stepIcons[step.type] || "checkpoint")}</span></button></li>`;
   }).join("");
 
   const hasRemaining = activeIndex < definition.steps.length - 1;
@@ -297,8 +343,8 @@ function renderScenarioStudio() {
   const changedIds = new Set(changes.map((item) => item.stateId));
   for (const pool of changedPools) changedIds.add(pool.stateId);
   const health = [
-    { stateId: currentReplay.pool.stateId, displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
-    ...currentReplay.costCenterPoolStates.map((pool) => ({ stateId: pool.stateId, displayName: pool.displayName, spent: pool.consumed, amount: pool.total, percent: pool.percent, unit: "credits" })),
+  { stateId: currentReplay.pool.stateId, displayName: "Shared included AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits", healthType: "pool" },
+  ...currentReplay.costCenterPoolStates.map((pool) => ({ stateId: pool.stateId, displayName: pool.displayName, spent: pool.consumed, amount: pool.total, percent: pool.percent, unit: "credits", healthType: "costCenterPool" })),
     ...currentReplay.budgetStates,
   ];
   const sortedHealth = sortScenarioHealth(health);
@@ -310,10 +356,10 @@ function renderScenarioStudio() {
       <div class="expected-outcome"><strong>Expected outcome</strong><span>${escapeHtml(selectedStep.expected)}</span></div>
       ${intervening ? `<p class="scenario-jump-note">Running this selected step also applies ${intervening} preceding pending step${intervening === 1 ? "" : "s"} in order.</p>` : ""}
       <div class="scenario-deltas preview-deltas"><h4>Predicted changes</h4>
-        ${previewPoolChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
-        ${previewChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}
+        ${previewPoolChanges.map((item) => `<div class="scenario-delta"><span class="scenario-delta-label">${scopeMarker(item.costCenterId ? { healthType: "costCenterPool" } : { healthType: "pool" })}${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
+        ${previewChanges.map((item) => `<div class="scenario-delta"><span class="scenario-delta-label">${scopeMarker(item)}${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}
         ${!previewPoolChanges.length && !previewChanges.length ? `<p class="muted">This step is not expected to change counters.</p>` : ""}
-        ${previewResult ? `<div class="scenario-predicted-result ${previewResult.status}"><strong>Predicted: ${previewResult.status}</strong><span>${escapeHtml(previewResult.reason)}</span>${fundingRouteHtml(previewResult)}</div>` : ""}
+        ${previewResult ? `<div class="scenario-predicted-result ${previewResult.status}"><strong>Predicted: ${previewResult.status}</strong><span>${escapeHtml(previewResult.reason)}</span>${fundingRouteHtml(previewResult)}${controlEvaluationHtml(previewResult)}</div>` : ""}
         ${previewAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Expected alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
       ${runAllPreview}
@@ -322,12 +368,12 @@ function renderScenarioStudio() {
       <div class="scenario-outcome-heading"><div><p class="eyebrow">ACTUAL OUTCOME</p><h3>${escapeHtml(currentStep?.title || "Scenario baseline")}</h3></div><span class="scenario-status ${currentStep ? "active" : ""}">${currentStep ? `Applied · Step ${activeIndex + 1}` : "No steps applied"}</span></div>
       ${scenarioResultHtml(result)}
       <div class="scenario-deltas"><h4>Changes in the last applied step</h4>
-        ${changedPools.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
-        ${changes.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${item.delta > 0 ? "+" : ""}${money(item.delta, "USD")})</strong></div>`).join("")}
+        ${changedPools.map((item) => `<div class="scenario-delta"><span class="scenario-delta-label">${scopeMarker(item.costCenterId ? { healthType: "costCenterPool" } : { healthType: "pool" })}${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
+        ${changes.map((item) => `<div class="scenario-delta"><span class="scenario-delta-label">${scopeMarker(item)}${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${item.delta > 0 ? "+" : ""}${money(item.delta, "USD")})</strong></div>`).join("")}
         ${!changedPools.length && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
         ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
-      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>Enterprise → org → cost center → user · highest percentage first</span></div>${sortedHealth.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}" data-bar-key="${escapeHtml(item.stateId)}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>Enterprise → org → cost center → user · highest percentage first</span></div>${sortedHealth.map((item) => { const marker = scenarioHealthIcon(item); return `<div class="scenario-health-row ${changedIds.has(item.stateId) ? "changed" : ""}" data-bar-key="${escapeHtml(item.stateId)}"><div class="scenario-health-label"><span class="scenario-health-icon scenario-health-icon-${marker.color}" title="${marker.label}" aria-label="${marker.label}">${icon(marker.name)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`; }).join("")}</div>
     </section>`);
 }
 
@@ -380,28 +426,36 @@ function renderSummary(replay, currency) {
   const policyLabel = scenario.enterprise.seatCreditPolicy === "full" ? "Full seat credits (hypothetical)" : "Prorated seat credits";
   const costCenterPoolCount = replay.costCenterPoolStates.length;
   $("#summary-cards").innerHTML = [
-    ["Shared AI-credit pool", `${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}`, `${Math.round(replay.pool.percent)}% of included credits consumed`],
-    ["Cost center AI pools", costCenterPoolCount, costCenterPoolCount ? "Included credits partitioned by cost center" : "No cost center pools enabled"],
+    ["Shared included AI-credit pool", `${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}`, `${Math.round(replay.pool.percent)}% of included credits consumed`],
+    ["Cost center AI pools", costCenterPoolCount, costCenterPoolCount ? "AI credit pool enabled for selected cost centers" : "No cost center included usage controls enabled"],
     ["Seat charge this cycle", money(seatCharge, currency), `${scenario.users.filter((user) => user.licenseStartsAt || user.licenseEndsAt).length} seats with dated lifecycle`],
-    ["Paid AI overage", money(replay.pool.meteredCost, "USD"), scenario.enterprise.paidAiUsage ? "Paid usage policy enabled" : "Paid usage policy disabled"],
-    ["Alerts triggered", replay.alerts.filter((item) => item.date.startsWith(replay.period)).length, "Standard thresholds: 75%, 90%, 100%"],
-    ["Blocked events", blocked, blocked ? "One or more controls stopped usage" : "No usage blocked"],
+    ["Paid AI overage", money(replay.pool.meteredCost, "USD"), scenario.enterprise.paidAiUsage ? "AI credit paid usage enabled" : "AI credit paid usage disabled"],
+    ["Budget threshold alerts", replay.alerts.filter((item) => item.date.startsWith(replay.period)).length, "Receive budget threshold alerts: 75%, 90%, 100%"],
+    ["Blocked events", blocked, blocked ? "Stop usage when budget limit is reached or included usage control blocked usage" : "No usage blocked"],
     ["Seat credit policy", policyLabel, "Add behavior for mid-cycle seats"],
   ].map(([label, value, note]) => `<article class="summary-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join("");
 }
 
+function dashboardBudgetIcon(budget) {
+  if (budget.budgetKind === "pool") return "pool";
+  if (budget.budgetKind === "user") return "user";
+  return ({ enterprise: "enterprise", organization: "organization", costCenter: "costCenter", repository: "repo" })[budget.scopeType] || "alertOnly";
+}
+
 function renderBudgets(replay, currency) {
-  const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
-  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(pool.displayName)}</h3><p>Cost center included pool · ${pool.capMode === "block" ? "Blocks at cap" : "Continues into paid overage"} · simulator health</p></div><span class="percent">${Math.round(pool.percent)}%</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div>${pool.capMode === "allowOverage" && pool.remaining === 0 ? `<div class="pool-route-note">Next accepted usage: paid overage</div>` : ""}</article>`).join("");
+  const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-pool">${icon("pool")}Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
+  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-cost-center">${icon("costCenter")}${escapeHtml(pool.displayName)}</h3><p>Included usage controls for cost centers · AI credit pool enabled · ${pool.capMode === "block" ? "Block members at cap" : "Continue as paid overage"}</p></div><span class="percent">${Math.round(pool.percent)}%</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div>${pool.capMode === "allowOverage" && pool.remaining === 0 ? `<div class="pool-route-note">Next accepted usage: paid overage</div>` : ""}</article>`).join("");
   const prioritized = replay.budgetStates.filter((budget) => budget.spent > 0 || budget.triggered.length);
   const prioritizedIds = new Set(prioritized.map((budget) => budget.stateId));
   const visibleBudgets = [...prioritized, ...replay.budgetStates.filter((budget) => !prioritizedIds.has(budget.stateId))].slice(0, MAX_DASHBOARD_BUDGET_CARDS);
   const hiddenCount = replay.budgetStates.length - visibleBudgets.length;
   const cards = visibleBudgets.map((budget) => {
     const isUlb = budget.budgetKind === "user";
-    const scope = isUlb ? `Per user · ${budget.userBudgetType} ULB` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
+    const scope = budgetScopeText(budget);
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
-    return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
+  const iconName = dashboardBudgetIcon(budget);
+  const colorClass = isUlb ? "user" : ({ enterprise: "enterprise", organization: "org", costCenter: "cost-center", repository: "repo" })[budget.scopeType] || "metered";
+  return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-${colorClass}">${icon(iconName)}${escapeHtml(budget.displayName)}</h3><p>Budget Type: ${escapeHtml(budgetTypeLabel(budget))} · Budget scope: ${escapeHtml(scope)} · ${basis} · ${escapeHtml(budgetStopLabel(budget))}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
   const hiddenNotice = hiddenCount > 0 ? `<div class="empty">${hiddenCount} lower-activity budget controls are hidden on the dashboard. They remain active in simulation and export data.</div>` : "";
   setPanelHtmlWithBarTransitions("#budget-grid", poolCard + costCenterPoolCards + cards + hiddenNotice);
@@ -410,7 +464,7 @@ function renderBudgets(replay, currency) {
 function historyEntries(results, detailForResult, emptyMessage) {
   return results.length ? results.map((result) => {
     const detail = detailForResult(result);
-    return `<div class="history-entry"><div class="history-head"><strong>${escapeHtml(result.userName)}</strong><span>${result.date}</span></div><p>${escapeHtml(result.productName)} · ${Number(result.quantity).toLocaleString()} units · ${money(result.cost, "USD")}</p><small>${escapeHtml(detail)} · ${escapeHtml(result.reason)}</small></div>`;
+    return `<div class="history-entry"><div class="history-head"><strong>${escapeHtml(result.userName)}</strong><span>${result.date}</span></div><p>${escapeHtml(result.productName)} · ${Number(result.quantity).toLocaleString()} units · ${money(result.cost, "USD")}</p><small>${escapeHtml(detail)} · ${escapeHtml(result.reason)}</small>${controlEvaluationsHtml(result)}</div>`;
   }).join("") : `<div class="empty">${escapeHtml(emptyMessage)}</div>`;
 }
 
@@ -440,10 +494,11 @@ function openBudgetHistory(historyId, trigger) {
       ["Consumed", `${poolState.consumed.toLocaleString()} credits`],
       ["Capacity", `${poolState.total.toLocaleString()} credits`],
       ["Remaining", `${poolState.remaining.toLocaleString()} credits`],
-      ["Mode", poolState.capMode === "block" ? "Block at cap" : "Continue to overage"],
+      ["AI credit pool enabled", poolState.enabled ? "Enabled" : "Disabled"],
+      ["At included usage cap", poolState.capMode === "block" ? "Block members" : "Paid overage"],
     ];
     entries = historyEntries(contributors, (result) => `Drew ${result.includedQuantity.toLocaleString()} credits from this cost center pool`, "No usage events have consumed this cost center pool.");
-    alertHtml = "<li>Included-pool health is simulator guidance; budget alerts remain tied to budget controls.</li>";
+    alertHtml = "<li>Included usage control health is simulator guidance; Receive budget threshold alerts remains tied to budgets.</li>";
   } else {
     const budgetState = replay.budgetStates.find((item) => item.stateId === historyId);
     if (!budgetState) return;
@@ -451,10 +506,14 @@ function openBudgetHistory(historyId, trigger) {
     const alerts = replay.alerts.filter((item) => item.budgetId === budgetState.id && item.date.startsWith(replay.period) && contributors.some((result) => result.eventId === item.eventId));
     title = `${budgetState.displayName} history`;
     summary = [
+      ["Budget Type", budgetTypeLabel(budgetState)],
+      ["Budget scope", budgetScopeText(budgetState)],
+      ["Budget amount", money(budgetState.amount, "USD")],
+      ["Stop usage", budgetState.enforcement === "hard" || budgetState.budgetKind === "user" ? "Enabled" : "Not enabled"],
       ["Current usage", money(budgetState.spent, "USD")],
-      ["Limit", money(budgetState.amount, "USD")],
       ["Remaining", money(budgetState.remaining, "USD")],
       ["Percent", `${Math.round(budgetState.percent)}%`],
+      ["Threshold alerts", (budgetState.thresholds || []).length ? `${budgetState.thresholds.join("%, ")}%` : "Not enabled"],
     ];
     entries = historyEntries(contributors, (result) => {
       const impact = result.affectedBudgets.find((item) => item.stateKey === historyId);
@@ -672,8 +731,8 @@ function renderApplicableControls(replay, currency) {
   const user = scenario.users.find((item) => item.id === userId);
   const costCenter = costCenterForUser(scenario, user);
   const pool = costCenter?.aiCreditPoolEnabled ? replay.costCenterPoolStates.find((item) => item.costCenterId === costCenter.id) : null;
-  const poolHtml = pool ? `<div class="impact-row"><div><strong>${escapeHtml(pool.displayName)}</strong><small>Included credits · ${pool.capMode === "block" ? "blocks at cap" : "continues into paid overage"}</small></div><strong>${pool.consumed.toLocaleString()} / ${pool.total.toLocaleString()}</strong></div>` : "";
-  const budgetHtml = budgets.map((item) => `<div class="impact-row"><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "user" ? "Total credits · always hard stop" : "Paid overage only"} · effective ${item.effectiveFrom}</small></div><strong>${money(item.spent, "USD")} / ${money(item.amount, "USD")}</strong></div>`).join("");
+  const poolHtml = pool ? `<div class="impact-row"><div class="impact-row-label">${scopeMarker({ healthType: "costCenterPool" })}<div><strong>Included usage controls for cost centers</strong><small>${escapeHtml(pool.displayName)} · AI credit pool enabled · ${pool.capMode === "block" ? "Block members at cap" : "Continue as paid overage"}</small></div></div><strong>${pool.consumed.toLocaleString()} / ${pool.total.toLocaleString()}</strong></div>` : "";
+  const budgetHtml = budgets.map((item) => `<div class="impact-row"><div class="impact-row-label">${scopeMarker(item)}<div><strong>${escapeHtml(item.displayName)}</strong><small>Budget Type: ${escapeHtml(budgetTypeLabel(item))} · Budget scope: ${escapeHtml(budgetScopeText(item))} · ${escapeHtml(budgetStopLabel(item))} · effective ${item.effectiveFrom}</small></div></div><strong>${money(item.spent, "USD")} / ${money(item.amount, "USD")}</strong></div>`).join("");
   $("#applicable-controls").innerHTML = poolHtml || budgetHtml ? poolHtml + budgetHtml : `<div class="empty">No budget applies on this date.</div>`;
 }
 
@@ -711,7 +770,7 @@ function renderConfiguration() {
     const capText = settings.includedUsageCapEnabled
       ? `AI credit included usage cap on · ${(pool?.consumed || 0).toLocaleString()}/${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses · at cap: ${settings.atCapBehavior === "block" ? "block members" : "continue as paid overage"}`
       : `AI credit included usage cap off · would cap at ${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses`;
-    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · ${escapeHtml(capText)} · ${escapeHtml(assignments || "no resource assignment")} · ${settings.excludeFromEnterpriseBudget ? "AI overage excluded from enterprise budget" : "AI overage counts against enterprise budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}" title="GitHub setting: AI credit included usage cap">${settings.includedUsageCapEnabled ? "Turn off included usage cap" : "Turn on included usage cap"}</button><button class="text-button" data-toggle-pool-mode="${item.id}" title="Behavior when the included usage cap is reached">${settings.atCapBehavior === "block" ? "At cap: continue as paid overage" : "At cap: block members"}</button><button class="text-button" data-toggle-costcenter="${item.id}" title="Whether this cost center's paid AI overage rolls up into the enterprise budget">${settings.excludeFromEnterpriseBudget ? "Include AI overage in enterprise budget" : "Exclude AI overage from enterprise budget"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
+    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · Included usage controls for cost centers: ${escapeHtml(capText)} · ${escapeHtml(assignments || "no resource assignment")} · ${settings.excludeFromEnterpriseBudget ? "AI overage excluded from enterprise budget" : "AI overage counts against enterprise budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}" title="GitHub setting: AI credit included usage cap">${settings.includedUsageCapEnabled ? "Turn off included usage cap" : "Turn on included usage cap"}</button><button class="text-button" data-toggle-pool-mode="${item.id}" title="Behavior when the included usage cap is reached">${settings.atCapBehavior === "block" ? "At cap: continue as paid overage" : "At cap: block members"}</button><button class="text-button" data-toggle-costcenter="${item.id}" title="Whether this cost center's paid AI overage rolls up into the enterprise budget">${settings.excludeFromEnterpriseBudget ? "Include AI overage in enterprise budget" : "Exclude AI overage from enterprise budget"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
   }).join("");
   $("#user-list").innerHTML = scenario.users.map((item) => {
     const seatActive = isSeatActiveForDate(item, scenario.simulationDate);
@@ -723,7 +782,7 @@ function renderConfiguration() {
     const assignment = item.costCenterId ? costCenter?.name : costCenter ? `${costCenter.name} (via organization)` : "No cost center";
     return entityRow(item.name, `${item.licensePlan === "enterprise" ? "3,900" : "1,900"} included credits · ${assignment} · ${seatText} · ${money(charge, scenario.enterprise.currency)} this cycle`, "user", item.id);
   }).join("");
-  $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Control / scope</span><span>Amount</span><span>Effective</span><span>Enforcement</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span>${item.budgetKind === "user" ? `${item.userBudgetType} ULB` : "Metered"} · ${escapeHtml(describeScope(scenario, item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${item.enforcement}">${item.enforcement === "hard" ? "Hard stop" : "Alert only"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
+  $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Budget Type / scope</span><span>Budget amount</span><span>Effective</span><span>Stop usage when limit is reached</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span class="budget-scope-cell">${scopeMarker(item)}${escapeHtml(budgetTypeLabel(item))} · ${escapeHtml(budgetScopeText(item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${item.enforcement}">${item.enforcement === "hard" || item.budgetKind === "user" ? "Enabled" : "Not enabled"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
 }
 
 function setImpact(selector, tone, title, text) {
@@ -791,12 +850,16 @@ function renderImpactPreviews() {
   } else if (enforcement === "hard") {
     setImpact("#budget-impact", "warning", "Paid usage can be blocked", `Applicable metered usage stops after $${amount.toFixed(2)} of paid overage from ${effectiveDate}. Overlapping hard budgets can block sooner.`);
   } else {
-    setImpact("#budget-impact", "", "Alert-only spending", `Alerts track $${amount.toFixed(2)} of paid overage from ${effectiveDate}, but spend can continue beyond the amount.`);
+    setImpact("#budget-impact", "", "Alerts only spending", `Alerts track $${amount.toFixed(2)} of paid overage from ${effectiveDate}, but spend can continue beyond the amount.`);
   }
 }
 
 function entityRow(name, detail, type, id) {
-  return `<div class="entity-row"><div><strong>${escapeHtml(name)}</strong><br><small>${escapeHtml(detail)}</small></div><button class="delete" data-delete="${type}" data-id="${id}" title="Delete">×</button></div>`;
+  const hierarchyType = type === "enterpriseTeam" ? "enterprise" : type;
+  const meta = HIERARCHY_KINDS[hierarchyType] || { label: type === "product" ? "Product" : type, className: type };
+  const colorClass = meta.className;
+  const iconType = type === "enterpriseTeam" ? "team" : type === "product" ? "pool" : hierarchyType;
+  return `<div class="entity-row entity-row-${escapeHtml(colorClass)}"><div class="entity-row-content"><span class="entity-type-badge" title="${escapeHtml(meta.label)}" aria-label="${escapeHtml(meta.label)}">${icon(iconType)}</span><div><strong>${escapeHtml(name)}</strong><br><small>${escapeHtml(detail)}</small></div></div><button class="delete" data-delete="${type}" data-id="${id}" title="Delete">×</button></div>`;
 }
 
 function renderBudgetScopeOptions() {
@@ -847,6 +910,13 @@ function eventMatchesOptimizedScope(result) {
 
 function bucketIconFor(kind) {
   return icon({ included: "pool", overage: "alertOnly", ulb: "hardStop", metered: "alertOnly", blocked: "alertOnly" }[kind] || "pool");
+}
+
+
+function controlEvaluationHtml(result) {
+  const evaluations = result?.controlEvaluations || [];
+  if (!evaluations.length) return "";
+  return `<div class="control-evaluation"><h4>Why this state?</h4>${evaluations.map((evaluation, index) => `<section class="control-check ${escapeHtml(evaluation.outcome)}"><div class="control-check-head"><span>${index + 1}</span><strong>${escapeHtml(evaluation.control)}</strong><em>${escapeHtml(evaluation.outcome)}</em></div><dl>${(evaluation.configuration || []).map((item) => `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`).join("")}</dl><p>${escapeHtml(evaluation.result)}</p></section>`).join("")}</div>`;
 }
 
 function fundingRouteHtml(result) {
@@ -918,25 +988,29 @@ function renderGlobalScenarioHeader(definition, definitions) {
   $("#global-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
 }
 
-function bucketRowHtml(item) {
-  const detail = bucketRowDetail(item);
-  if (item.aggregate) {
-    // Aggregate rows summarize many per-user budget states, so there is no single state to open an
-    // audit trail for; render them as static rows rather than budget-history triggers.
-    return `<div class="bucket-row aggregate" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${detail}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></div>`;
-  }
-  return `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${detail}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`;
-}
-
-// Single source of truth for a bucket row's sub-label, so the initial render and the in-place
-// transition update below can never drift apart.
 function bucketRowDetail(item) {
-  if (item.budgetKind === "pool") return `${Math.round(item.spent).toLocaleString()} of ${Math.round(item.amount).toLocaleString()} credits`;
+  // Aggregate rows stand in for many per-user budget states, so they report the spread across those
+  // users instead of a single budget's stop behavior.
   if (item.aggregate) {
     const breaching = item.breachingCount ? ` · ${item.breachingCount} over threshold` : "";
     return `${item.userCount} users · highest ${Math.round(item.percent)}%${breaching} · ${money(item.spent, "USD")} of ${money(item.amount, "USD")} combined`;
   }
-  return `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`;
+  return item.budgetKind === "pool"
+    ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} included credits`
+    : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${budgetStopLabel(item)}`;
+}
+
+function bucketRowHtml(item) {
+  const detail = bucketRowDetail(item) + (item.routeNote ? ` · ${item.routeNote}` : "");
+  const type = item.budgetKind === "pool" ? (item.costCenterId ? "cost-center" : "enterprise") : item.budgetKind === "user" ? "user" : "metered";
+  const labels = { "cost-center": "Cost center", enterprise: "Enterprise", user: "ULB", metered: "Metered" };
+  const icons = { "cost-center": "costCenter", enterprise: "enterprise", user: "hardStop", metered: "alertOnly" };
+  const label = labels[type];
+  const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b>`;
+  // Aggregate rows stand in for many per-user budget states, so there is no single state whose audit
+  // trail could be opened; render them as static rows rather than budget-history triggers.
+  if (item.aggregate) return `<div class="bucket-row bucket-row-${type} aggregate" data-history-id="${escapeHtml(item.stateId)}">${body}</div>`;
+  return `<button type="button" class="bucket-row bucket-row-${type} budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}">${body}</button>`;
 }
 
 function bucketGroupHtml(group) {
@@ -971,7 +1045,7 @@ function updateBucketPanel(groups) {
       if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
       if (track) track.className = `progress ${statusClass(item.percent)}`;
       if (percentEl) percentEl.textContent = `${Math.round(item.percent)}%`;
-      if (smallEl) smallEl.textContent = bucketRowDetail(item);
+      if (smallEl) smallEl.textContent = bucketRowDetail(item) + (item.routeNote ? ` · ${item.routeNote}` : "");
     });
   });
 }
@@ -1032,6 +1106,17 @@ function renderOptimizedBuckets(replay) {
   const scopeItems = scopeOptionsFor(optimizedScope.type);
   const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
   const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
+  const scopedUserIds = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
+  const visibleCostCenterPools = replay.costCenterPoolStates.filter((item) => optimizedScope.type === "enterprise"
+    || (optimizedScope.type === "costCenter" && item.costCenterId === optimizedScope.id)
+    || [...scopedUserIds].some((userId) => costCenterForUser(scenario, scenario.users.find((user) => user.id === userId))?.id === item.costCenterId));
+  const costCenterPools = visibleCostCenterPools.map((item) => ({
+    ...item,
+    budgetKind: "pool",
+    spent: item.consumed,
+    amount: item.total,
+    routeNote: item.capMode === "block" ? "Blocks at cap." : item.remaining === 0 ? "At cap · next accepted usage uses paid overage." : "Included credits available before paid overage.",
+  }));
   const scopedUserBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
   const userBudgets = optimizedScope.type === "user" ? scopedUserBudgets : aggregateUserBudgets(scopedUserBudgets);
   const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
@@ -1046,9 +1131,9 @@ function renderOptimizedBuckets(replay) {
   const configHost = $("#optimized-scope-config");
   if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
-    { title: "Included credits", items: [pool], note: poolNote },
-    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.` },
-    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.` },
+    { title: "Included credits", items: [pool, ...costCenterPools], note: poolNote },
+    { title: "User-level budgets", items: userBudgets, note: `User-level budgets always stop usage based on total AI-credit value${scopeNote}.` },
+    { title: "Budget controls", items: meteredBudgets, note: `Budgets and alerts track paid metered overage after included credits${scopeNote}.` },
   ]);
 }
 
@@ -1101,7 +1186,7 @@ function renderOptimizedStepDetail(definition, replay) {
   const body = result
     ? (inScope ? `<div class="bucket-impact-list">${bucketImpactHtml(result) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div>` : `<p class="muted">This step's usage event is outside the selected scope — pick a broader scope to see its bucket impact.</p>`)
     : `<p class="muted">This step does not add a usage event; check the credit buckets above for any resulting change.</p>`;
-  $("#optimized-step-detail").innerHTML = `<div class="optimized-event-card ${result?.status || ""}"><div><span class="status-dot ${result?.status || ""}"></span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(stepDisplayDate(definition, step, activeIndex, definition.steps.length))} · ${escapeHtml(step.type)}</small></div><p>${escapeHtml(step.description)}</p>${body}</div>`;
+  $("#optimized-step-detail").innerHTML = `<div class="optimized-event-card ${result?.status || ""}"><div><span class="status-dot ${result?.status || ""}"></span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(stepDisplayDate(definition, step, activeIndex, definition.steps.length))} · ${escapeHtml(step.type)}</small></div><p>${escapeHtml(step.description)}</p>${body}${controlEvaluationsHtml(result)}</div>`;
 }
 
 function renderOptimizedExperience(replay, currency) {
@@ -1133,7 +1218,7 @@ function renderTimeline(replay, currency) {
   const resultsById = new Map(replay.results.map((item) => [item.eventId, item]));
   const usageItems = scenario.events.map((event) => {
     const item = resultsById.get(event.id);
-    return { date: event.date, html: `<div class="timeline-item"><span class="status-dot ${item?.status || ""}"></span><div><p><strong>${escapeHtml(item?.userName || "Unknown")}</strong> consumed ${Number(event.quantity).toLocaleString()} units</p><small>${event.date} · ${escapeHtml(item?.productName || "Unknown product")} · ${money(item?.cost || 0, currency)} · ${item?.status || "scheduled"}</small>${item ? fundingRouteHtml(item) : ""}${item?.status === "blocked" ? `<p><small>${escapeHtml(item.reason)}</small></p>` : ""}</div></div>` };
+    return { date: event.date, html: `<div class="timeline-item"><span class="status-dot ${item?.status || ""}"></span><div><p><strong>${escapeHtml(item?.userName || "Unknown")}</strong> consumed ${Number(event.quantity).toLocaleString()} units</p><small>${event.date} · ${escapeHtml(item?.productName || "Unknown product")} · ${money(item?.cost || 0, currency)} · ${item?.status || "scheduled"}</small>${item ? fundingRouteHtml(item) + controlEvaluationsHtml(item, { compact: true }) : ""}</div></div>` };
   });
   const lifecycleItems = lifecycle.map((event) => ({
     date: event.date,
@@ -1153,7 +1238,7 @@ function renderResult(replay, currency) {
   }).join("");
   const split = result.fundingRoute && result.fundingRoute !== "metered" ? `${fundingRouteHtml(result)}<div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed pool draw" : escapeHtml(result.poolName)}</strong><small>${result.includedQuantity.toLocaleString()} ${result.status === "blocked" ? "credits would have come from the included pool" : "included credits consumed"}</small></div><strong>${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}</strong></div><div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed paid overage" : "Paid overage"}</strong><small>${result.meteredQuantity.toLocaleString()} metered credits</small></div><strong>${money(result.cost, "USD")}</strong></div>` : "";
   $("#last-result").className = "result-placeholder result-box";
-  $("#last-result").innerHTML = `<div class="result-header"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><h3>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</h3><p>${escapeHtml(result.reason)}</p></div></div><div class="result-cost">${result.quantity.toLocaleString()} ${escapeHtml(result.productName)}</div><p class="muted">Billed cost: ${money(result.cost, "USD")} · ${result.date}</p>${split}${impacts || `<div class="impact-row"><small>No budget counters changed.</small></div>`}`;
+  $("#last-result").innerHTML = `<div class="result-header"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><h3>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</h3><p>${escapeHtml(result.reason)}</p></div></div><div class="result-cost">${result.quantity.toLocaleString()} ${escapeHtml(result.productName)}</div><p class="muted">Billed cost: ${money(result.cost, "USD")} · ${result.date}</p>${split}${impacts || `<div class="impact-row"><small>No budget counters changed.</small></div>`}${controlEvaluationsHtml(result)}`;
 }
 
 function navigate(view) {

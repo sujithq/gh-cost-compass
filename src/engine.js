@@ -126,6 +126,45 @@ function stateFor(states, key) {
   return states.get(key) || { spent: 0, triggered: [] };
 }
 
+function budgetTypeLabel(budget, product) {
+  if (budget.budgetKind === "user") return "Bundled AI credits budget";
+  return product?.billingMode === "aiCredits" ? "SKU-level budget" : "Product-level budget";
+}
+
+function budgetScopeLabel(budget) {
+  return budget.budgetKind === "user" ? "Users" : scopeLabels[budget.scopeType] || budget.scopeType;
+}
+
+function budgetConfiguration(scenario, budget, product) {
+  return [
+    { label: "Budget Type", value: budgetTypeLabel(budget, product) },
+    { label: product?.billingMode === "aiCredits" ? "SKU" : "Product", value: product?.name || budget.productId },
+    { label: "Budget scope", value: `${budgetScopeLabel(budget)} · ${describeScope(scenario, budget)}` },
+    { label: "Budget amount", value: money(Number(budget.amount), "USD") },
+    { label: "Stop usage when budget limit is reached", value: budget.enforcement === "hard" || budget.budgetKind === "user" ? "Enabled" : "Not enabled" },
+    { label: "Receive budget threshold alerts", value: (budget.thresholds || []).length ? `Enabled · ${(budget.thresholds || []).join("%, ")}%` : "Not enabled" },
+  ];
+}
+
+function budgetEvaluation(scenario, budget, product, before, increment, eventAlerts, blocked, applied) {
+  const after = before + increment;
+  const amount = Number(budget.amount);
+  const overLimit = after > amount;
+  const stopEnabled = budget.enforcement === "hard" || budget.budgetKind === "user" || (product?.billingMode === "aiCredits" && amount === 0);
+  const alertText = eventAlerts.length ? ` Receive budget threshold alerts fired at ${eventAlerts.map((alert) => `${alert.threshold}%`).join(", ")}.` : "";
+  const result = blocked
+    ? `The event would move usage from ${money(before, "USD")} to ${money(after, "USD")}, above the ${money(amount, "USD")} budget amount. Stop usage when budget limit is reached is enabled, so usage is blocked.`
+    : overLimit && !stopEnabled
+      ? `The event ${applied ? "moves" : "would move"} usage from ${money(before, "USD")} to ${money(after, "USD")}, above the ${money(amount, "USD")} budget amount. Stop usage when budget limit is reached is not enabled, so this control allows usage to continue.${alertText}`
+      : `The event ${applied ? "moves" : "would move"} usage from ${money(before, "USD")} to ${money(after, "USD")} and remains within the ${money(amount, "USD")} budget amount.${alertText}`;
+  return {
+    control: budget.budgetKind === "user" ? "User-level budget" : "Budgets and alerts",
+    configuration: budgetConfiguration(scenario, budget, product),
+    result,
+    outcome: blocked ? "blocked" : eventAlerts.length ? "alerted" : overLimit ? "continued" : "passed",
+  };
+}
+
 function updateBudget(states, alerts, result, budget, key, increment, event, userId) {
   const previous = stateFor(states, key);
   const nextSpent = previous.spent + increment;
@@ -276,12 +315,12 @@ export function replayScenario(scenario) {
     const userBudgetKey = userBudget ? `${userBudget.id}:${user.id}:${period}` : null;
     const meteredBudgets = effectiveScenario.budgets.filter((budget) => budget.budgetKind === "metered" && matchesScope(budget, event, effectiveScenario, product));
 
-    if (!blockingReason && userBudget && stateFor(states, userBudgetKey).spent + grossAiValue > Number(userBudget.amount)) blockingReason = `${userBudget.name} user-level hard stop would be exceeded`;
-    if (!blockingReason && costCenterPoolEnabled && meteredQuantity > 0 && eventCostCenter.aiCreditPoolCapMode === "block") blockingReason = `${eventCostCenter.name} AI credit pool cap would be exceeded`;
-    if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = `AI credits paid usage policy is disabled and the eligible ${costCenterPoolEnabled ? `${eventCostCenter.name} cost-center pool` : "enterprise shared pool"} is exhausted`;
+    if (!blockingReason && userBudget && stateFor(states, userBudgetKey).spent + grossAiValue > Number(userBudget.amount)) blockingReason = `${userBudget.name}: Stop usage when budget limit is reached is enabled and this event would exceed the user-level budget amount`;
+    if (!blockingReason && costCenterPoolEnabled && meteredQuantity > 0 && eventCostCenter.aiCreditPoolCapMode === "block") blockingReason = `Included usage controls for cost centers block members of ${eventCostCenter.name} when the included AI credit pool cap is reached`;
+    if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = `AI credit paid usage is disabled and the eligible ${costCenterPoolEnabled ? `${eventCostCenter.name} cost-center pool` : "enterprise shared pool"} is exhausted`;
     if (!blockingReason) {
       const blocker = meteredBudgets.find((budget) => (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
-      if (blocker) blockingReason = `${blocker.name} metered-spend hard stop would be exceeded`;
+      if (blocker) blockingReason = `${blocker.name}: Stop usage when budget limit is reached is enabled and this event would exceed the budget amount`;
     }
 
     const fundingRoute = !isAi ? "metered" : blockingReason ? "blocked" : meteredQuantity > 0 ? (includedQuantity > 0 ? "split" : "overage") : "included";
@@ -291,9 +330,19 @@ export function replayScenario(scenario) {
       quantity, includedQuantity, meteredQuantity, cost: billedCost, grossAiValue, poolBefore, poolAfter: blockingReason ? poolBefore : poolBefore + includedQuantity, poolTotal,
       poolStateKey, poolName: costCenterPoolEnabled ? `${eventCostCenter.name} included AI-credit pool` : "Enterprise shared included AI-credit pool", poolType: costCenterPoolEnabled ? "costCenter" : "enterprise",
       poolRemainingBefore: Math.max(0, poolTotal - poolBefore), fundingRoute,
-      status: blockingReason ? "blocked" : "accepted", reason: blockingReason || (isAi && billedCost === 0 ? "Usage accepted from included AI credits" : "Usage accepted with metered charges"), affectedBudgets: [],
+      status: blockingReason ? "blocked" : "accepted", reason: blockingReason || (isAi && billedCost === 0 ? "Usage accepted from included AI credits" : "Usage accepted with metered charges"), affectedBudgets: [], controlEvaluations: [],
     };
+    if (userAccessBlocked) {
+      result.controlEvaluations.push({
+        control: "Copilot seat access",
+        configuration: [{ label: "Active Copilot seat", value: "No" }],
+        result: `${user.name} does not have an active Copilot seat on ${event.date}, so no budget or included usage controls are evaluated.`,
+        outcome: "blocked",
+      });
+    }
 
+    const userBudgetBefore = userBudget ? stateFor(states, userBudgetKey).spent : 0;
+    const meteredBudgetBefore = new Map(meteredBudgets.map((budget) => [budget.id, stateFor(states, `${budget.id}:${period}`).spent]));
     if (!blockingReason) {
       if (isAi && costCenterPoolEnabled) costCenterPools.set(poolStateKey, poolBefore + includedQuantity);
       else if (isAi) pools.set(period, poolBefore + includedQuantity);
@@ -311,6 +360,54 @@ export function replayScenario(scenario) {
       }
       if (userBudget) updateBudget(states, alerts, result, userBudget, userBudgetKey, grossAiValue, event, user.id);
       for (const budget of meteredBudgets) updateBudget(states, alerts, result, budget, `${budget.id}:${period}`, billedCost, event);
+    }
+    if (userBudget && !result.controlEvaluations.some((item) => item.outcome === "blocked")) {
+      const blocked = Boolean(blockingReason && userBudgetBefore + grossAiValue > Number(userBudget.amount));
+      result.controlEvaluations.push(budgetEvaluation(effectiveScenario, userBudget, product, userBudgetBefore, grossAiValue, alerts.filter((alert) => alert.eventId === event.id && alert.budgetId === userBudget.id), blocked, !blockingReason));
+    }
+    if (isAi && !result.controlEvaluations.some((item) => item.outcome === "blocked")) {
+      if (costCenterPoolEnabled) {
+        const exceedsPool = meteredQuantity > 0;
+        const blocked = exceedsPool && eventCostCenter.aiCreditPoolCapMode === "block";
+        result.controlEvaluations.push({
+          control: "Included usage controls for cost centers",
+          configuration: [
+            { label: "Cost center", value: eventCostCenter.name },
+            { label: "AI credit pool enabled", value: "Enabled" },
+            { label: "At the included usage cap", value: eventCostCenter.aiCreditPoolCapMode === "block" ? "Block members" : "Continue as paid overage" },
+          ],
+          result: exceedsPool
+            ? `The cost center has consumed ${poolBefore.toLocaleString()} of ${poolTotal.toLocaleString()} included AI credits. This event needs ${meteredQuantity.toLocaleString()} credits beyond the cap, so ${blocked ? "usage is blocked before paid overage or metered budgets are evaluated" : "the additional usage continues as paid overage"}.`
+            : `The event uses ${includedQuantity.toLocaleString()} included AI credits and remains within the ${poolTotal.toLocaleString()}-credit cost center pool.`,
+          outcome: blocked ? "blocked" : exceedsPool ? "continued" : "passed",
+        });
+      } else {
+        result.controlEvaluations.push({
+          control: "Included AI credits",
+          configuration: [{ label: "Eligible pool", value: result.poolName }],
+          result: meteredQuantity > 0
+            ? `The eligible pool has ${result.poolRemainingBefore.toLocaleString()} credits remaining, so ${meteredQuantity.toLocaleString()} credits require paid overage.`
+            : `The event is fully covered by ${includedQuantity.toLocaleString()} included AI credits.`,
+          outcome: "passed",
+        });
+      }
+    }
+    if (isAi && meteredQuantity > 0 && !result.controlEvaluations.some((item) => item.outcome === "blocked")) {
+      const paidUsageBlocked = !effectiveScenario.enterprise.paidAiUsage;
+      result.controlEvaluations.push({
+        control: "AI credit paid usage",
+        configuration: [{ label: "AI credit paid usage", value: effectiveScenario.enterprise.paidAiUsage ? "Enabled" : "Disabled" }],
+        result: paidUsageBlocked ? "Paid overage is not allowed, so usage is blocked before metered budgets are evaluated." : `${meteredQuantity.toLocaleString()} credits can continue as paid overage, subject to applicable budgets.`,
+        outcome: paidUsageBlocked ? "blocked" : "passed",
+      });
+    }
+    if (!result.controlEvaluations.some((item) => item.outcome === "blocked")) {
+      for (const budget of meteredBudgets) {
+        const before = meteredBudgetBefore.get(budget.id) || 0;
+        const blocked = Boolean(blockingReason && before + billedCost > Number(budget.amount) && (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)));
+        result.controlEvaluations.push(budgetEvaluation(effectiveScenario, budget, product, before, billedCost, alerts.filter((alert) => alert.eventId === event.id && alert.budgetId === budget.id), blocked, !blockingReason));
+        if (blocked) break;
+      }
     }
     results.push(result);
   }
