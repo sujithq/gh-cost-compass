@@ -26,7 +26,7 @@ A complete description must identify:
 
 The user may explicitly say to inherit any omitted choices from an existing default set. That makes those choices complete.
 
-If there is no meaningful set description, ask the user to provide one and stop. If only part of the description is missing, ask one concise, consolidated set of questions for only the missing decisions and stop. Offer `compact`, `enterprise`, or "use repository defaults" as shortcuts where useful. Do not inspect unrelated code, create files, or make assumptions about material business rules until the answers arrive.
+If there is no meaningful set description, ask the user to provide one and stop. If only part of the description is missing, ask one concise, consolidated set of questions for only the missing decisions and stop. If the user asks for sequential clarification, ask exactly one missing decision at a time, record each answer, and do not repeat settled decisions. Offer `compact`, `enterprise`, or "use repository defaults" as shortcuts where useful. Do not inspect unrelated code, create files, or make assumptions about material business rules until the answers arrive.
 
 ## Repository contract
 
@@ -66,7 +66,7 @@ Use the optional top-level `generatedUsers` shape only when it materially reduce
 
 ## Generation rules
 
-1. Derive stable kebab-case IDs and never overwrite an existing set unless the user explicitly requests replacement.
+1. Derive stable kebab-case IDs and never overwrite an existing set unless the user explicitly requests replacement. Preserve any stable IDs required by built-in guided scenarios, including their mutation targets; retail-facing display names may differ from those stable IDs.
 2. Preserve referential integrity across enterprise, organization, repository, cost-center, user, product, budget, and event IDs.
 3. Use ISO `YYYY-MM-DD` dates, nonnegative budget amounts, positive event quantities, supported license plans (`business` or `enterprise`), and supported billing modes (`aiCredits` or `metered`).
 4. Keep `licenseOrganizationId` in `organizationIds`. Use `null` intentionally for users without direct cost-center assignment.
@@ -79,7 +79,7 @@ Use the optional top-level `generatedUsers` shape only when it materially reduce
 After creating the JSON definition:
 
 1. Import it in `src/default-scenario-sets.js` and add it to `defaultScenarioSetDefinitions`. Do not change `DEFAULT_SCENARIO_SET_ID` unless requested.
-2. Extend focused coverage in `tests/engine.test.js` so the file is parsed, the set is materialized through `createDefaultScenario`, `validateScenario` returns `null`, generated counts match the description, and IDs are unique. Replay representative events and assert their intended accepted or blocked statuses, costs or pool effects, and affected budget IDs so a valid reference graph cannot hide an inactive budget.
+2. Extend focused coverage in `tests/engine.test.js` so the file is parsed, the set is materialized through `createDefaultScenario`, `validateScenario` returns `null`, generated counts match the description, and IDs are unique. Replay representative events and assert their intended accepted or blocked statuses, costs or pool effects, and affected budget IDs so a valid reference graph cannot hide an inactive budget. Materialize every built-in guided scenario against the new default-set ID to verify that its stable IDs satisfy existing scenario mutations and events; repository IDs remain optional only where the runtime supports absent repository attribution.
 3. Update default-set documentation only when the available set list or documented behavior would otherwise be stale.
 4. Run `npm test`. Fix only failures caused by the new set or its registration.
 5. Review the final diff for accidental changes, inconsistent counts, duplicate IDs, dangling references, and unstated assumptions.
