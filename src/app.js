@@ -216,7 +216,7 @@ function poolChanges(before, after) {
 
 function scenarioResultHtml(result) {
   if (!result) return `<div class="scenario-result neutral"><strong>No usage event in this step</strong><span>The scenario state is unchanged; use the explanation and preview below.</span></div>`;
-  return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span><small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>`;
+  return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span>${fundingRouteHtml(result)}<small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>`;
 }
 
 function stepInputHtml(step) {
@@ -313,7 +313,7 @@ function renderScenarioStudio() {
         ${previewPoolChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
         ${previewChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}
         ${!previewPoolChanges.length && !previewChanges.length ? `<p class="muted">This step is not expected to change counters.</p>` : ""}
-        ${previewResult ? `<div class="scenario-predicted-result ${previewResult.status}"><strong>Predicted: ${previewResult.status}</strong><span>${escapeHtml(previewResult.reason)}</span></div>` : ""}
+        ${previewResult ? `<div class="scenario-predicted-result ${previewResult.status}"><strong>Predicted: ${previewResult.status}</strong><span>${escapeHtml(previewResult.reason)}</span>${fundingRouteHtml(previewResult)}</div>` : ""}
         ${previewAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Expected alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
       ${runAllPreview}
@@ -392,7 +392,7 @@ function renderSummary(replay, currency) {
 
 function renderBudgets(replay, currency) {
   const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
-  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(pool.displayName)}</h3><p>Cost center included pool · ${pool.capMode === "block" ? "Blocks at cap" : "Continues into paid overage"} · simulator health</p></div><span class="percent">${Math.round(pool.percent)}%</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div></article>`).join("");
+  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(pool.displayName)}</h3><p>Cost center included pool · ${pool.capMode === "block" ? "Blocks at cap" : "Continues into paid overage"} · simulator health</p></div><span class="percent">${Math.round(pool.percent)}%</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div>${pool.capMode === "allowOverage" && pool.remaining === 0 ? `<div class="pool-route-note">Next accepted usage: paid overage</div>` : ""}</article>`).join("");
   const prioritized = replay.budgetStates.filter((budget) => budget.spent > 0 || budget.triggered.length);
   const prioritizedIds = new Set(prioritized.map((budget) => budget.stateId));
   const visibleBudgets = [...prioritized, ...replay.budgetStates.filter((budget) => !prioritizedIds.has(budget.stateId))].slice(0, MAX_DASHBOARD_BUDGET_CARDS);
@@ -839,7 +839,20 @@ function eventMatchesOptimizedScope(result) {
 }
 
 function bucketIconFor(kind) {
-  return icon({ included: "pool", ulb: "hardStop", metered: "alertOnly", blocked: "alertOnly" }[kind] || "pool");
+  return icon({ included: "pool", overage: "alertOnly", ulb: "hardStop", metered: "alertOnly", blocked: "alertOnly" }[kind] || "pool");
+}
+
+function fundingRouteHtml(result) {
+  if (!result || !result.fundingRoute) return "";
+  const route = {
+    included: { label: "Included credits", detail: `${Number(result.includedQuantity).toLocaleString()} credits from ${result.poolName}` },
+    split: { label: "Split: included + paid overage", detail: `${Number(result.includedQuantity).toLocaleString()} included · ${Number(result.meteredQuantity).toLocaleString()} overage credits` },
+    overage: { label: "Paid overage", detail: `${Number(result.meteredQuantity).toLocaleString()} credits after ${result.poolName} reached its cap` },
+    blocked: { label: "Blocked", detail: result.meteredQuantity > 0 ? `${Number(result.meteredQuantity).toLocaleString()} overage credits were prevented` : "No credits were consumed" },
+    metered: { label: "Metered usage", detail: `${Number(result.meteredQuantity).toLocaleString()} metered units` },
+  }[result.fundingRoute];
+  if (!route) return "";
+  return `<div class="funding-route funding-route-${result.fundingRoute}"><strong>Funding route: ${route.label}</strong><span>${escapeHtml(route.detail)}</span></div>`;
 }
 
 // Reuses the engine's bucketsForEvent so the event-level attribution shown here always matches
@@ -851,6 +864,7 @@ function bucketImpactHtml(result) {
   return buckets.map((bucket) => {
     const value = bucket.kind === "included"
       ? `${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}`
+      : bucket.kind === "overage" ? `${Number(bucket.amount).toLocaleString()} · ${money(bucket.cost, "USD")}`
       : bucket.kind === "blocked" ? "—" : `${money(bucket.before, "USD")} → ${money(bucket.after, "USD")}`;
     return `<div class="bucket-impact bucket-impact-${bucket.kind}"><span>${bucketIconFor(bucket.kind)}</span><div><strong>${escapeHtml(bucket.label)}</strong><small>${escapeHtml(bucket.scopeLabel)}</small></div><b>${value}</b></div>`;
   }).join("");
@@ -1040,7 +1054,7 @@ function renderTimeline(replay, currency) {
   const resultsById = new Map(replay.results.map((item) => [item.eventId, item]));
   const usageItems = scenario.events.map((event) => {
     const item = resultsById.get(event.id);
-    return { date: event.date, html: `<div class="timeline-item"><span class="status-dot ${item?.status || ""}"></span><div><p><strong>${escapeHtml(item?.userName || "Unknown")}</strong> consumed ${Number(event.quantity).toLocaleString()} units</p><small>${event.date} · ${escapeHtml(item?.productName || "Unknown product")} · ${money(item?.cost || 0, currency)} · ${item?.status || "scheduled"}</small>${item?.status === "blocked" ? `<p><small>${escapeHtml(item.reason)}</small></p>` : ""}</div></div>` };
+    return { date: event.date, html: `<div class="timeline-item"><span class="status-dot ${item?.status || ""}"></span><div><p><strong>${escapeHtml(item?.userName || "Unknown")}</strong> consumed ${Number(event.quantity).toLocaleString()} units</p><small>${event.date} · ${escapeHtml(item?.productName || "Unknown product")} · ${money(item?.cost || 0, currency)} · ${item?.status || "scheduled"}</small>${item ? fundingRouteHtml(item) : ""}${item?.status === "blocked" ? `<p><small>${escapeHtml(item.reason)}</small></p>` : ""}</div></div>` };
   });
   const lifecycleItems = lifecycle.map((event) => ({
     date: event.date,
@@ -1058,7 +1072,7 @@ function renderResult(replay, currency) {
     const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
     return `<div class="impact-row"><div><strong>${escapeHtml(budget?.name)}${impact.userId ? ` · ${escapeHtml(result.userName)}` : ""}</strong><small>${escapeHtml(impact.basis)} · ${money(impact.before, "USD")} → ${money(impact.after, "USD")}</small></div><strong>${Math.round(impact.percent)}%</strong></div>`;
   }).join("");
-  const split = result.productName === "Copilot AI credits" ? `<div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed pool draw" : escapeHtml(result.poolName)}</strong><small>${result.includedQuantity.toLocaleString()} ${result.status === "blocked" ? "credits would have come from the included pool" : "included credits consumed"}</small></div><strong>${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}</strong></div><div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed paid overage" : "Paid overage"}</strong><small>${result.meteredQuantity.toLocaleString()} metered credits</small></div><strong>${money(result.cost, "USD")}</strong></div>` : "";
+  const split = result.fundingRoute && result.fundingRoute !== "metered" ? `${fundingRouteHtml(result)}<div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed pool draw" : escapeHtml(result.poolName)}</strong><small>${result.includedQuantity.toLocaleString()} ${result.status === "blocked" ? "credits would have come from the included pool" : "included credits consumed"}</small></div><strong>${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}</strong></div><div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed paid overage" : "Paid overage"}</strong><small>${result.meteredQuantity.toLocaleString()} metered credits</small></div><strong>${money(result.cost, "USD")}</strong></div>` : "";
   $("#last-result").className = "result-placeholder result-box";
   $("#last-result").innerHTML = `<div class="result-header"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><h3>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</h3><p>${escapeHtml(result.reason)}</p></div></div><div class="result-cost">${result.quantity.toLocaleString()} ${escapeHtml(result.productName)}</div><p class="muted">Billed cost: ${money(result.cost, "USD")} · ${result.date}</p>${split}${impacts || `<div class="impact-row"><small>No budget counters changed.</small></div>`}`;
 }

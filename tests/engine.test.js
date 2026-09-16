@@ -92,6 +92,7 @@ test("AI credits use the shared included pool before creating spend", () => {
   assert.equal(replay.pool.consumed, 1000);
   assert.equal(replay.results[0].includedQuantity, 1000);
   assert.equal(replay.results[0].meteredQuantity, 0);
+  assert.equal(replay.results[0].fundingRoute, "included");
   assert.equal(replay.results[0].cost, 0);
   assert.deepEqual(replay.results[0].affectedBudgets.map((item) => item.budgetId), ["ulb-alice", "metered-enterprise", "metered-ai-team"]);
 });
@@ -206,8 +207,24 @@ test("cost-center AI credit pool can roll over into paid metered budgets", () =>
   assert.equal(replay.results[1].status, "accepted");
   assert.equal(replay.results[1].includedQuantity, 0);
   assert.equal(replay.results[1].meteredQuantity, 2400);
+  assert.equal(replay.results[1].fundingRoute, "overage");
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 24);
   assert.ok(replay.alerts.some((item) => item.budgetId === "metered-ai-team" && item.threshold === 75));
+});
+
+test("cost-center overage remains visible while enterprise pool has headroom", () => {
+  const scenario = createDefaultScenario("compact");
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" });
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("pool", "2026-09-15", 3900), usage("overage", "2026-09-15", 100)];
+  const replay = replayScenario(scenario);
+  const result = replay.results[1];
+  assert.equal(replay.pool.remaining, 1900);
+  assert.equal(result.fundingRoute, "overage");
+  assert.equal(result.poolName, "AI Innovation included AI-credit pool");
+  assert.equal(result.poolRemainingBefore, 0);
+  assert.equal(result.meteredQuantity, 100);
+  assert.equal(result.cost, 1);
 });
 
 test("paid usage policy blocks overage regardless of budget headroom", () => {
@@ -217,6 +234,7 @@ test("paid usage policy blocks overage regardless of budget headroom", () => {
   scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "blocked");
+  assert.equal(replay.results[0].fundingRoute, "blocked");
   assert.match(replay.results[0].reason, /paid usage policy is disabled/);
 });
 

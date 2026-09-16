@@ -278,17 +278,19 @@ export function replayScenario(scenario) {
 
     if (!blockingReason && userBudget && stateFor(states, userBudgetKey).spent + grossAiValue > Number(userBudget.amount)) blockingReason = `${userBudget.name} user-level hard stop would be exceeded`;
     if (!blockingReason && costCenterPoolEnabled && meteredQuantity > 0 && eventCostCenter.aiCreditPoolCapMode === "block") blockingReason = `${eventCostCenter.name} AI credit pool cap would be exceeded`;
-    if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = "AI credits paid usage policy is disabled and the shared pool is exhausted";
+    if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = `AI credits paid usage policy is disabled and the eligible ${costCenterPoolEnabled ? `${eventCostCenter.name} cost-center pool` : "enterprise shared pool"} is exhausted`;
     if (!blockingReason) {
       const blocker = meteredBudgets.find((budget) => (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
       if (blocker) blockingReason = `${blocker.name} metered-spend hard stop would be exceeded`;
     }
 
+    const fundingRoute = !isAi ? "metered" : blockingReason ? "blocked" : meteredQuantity > 0 ? (includedQuantity > 0 ? "split" : "overage") : "included";
     const result = {
       eventId: event.id, date: event.date, userId: event.userId || null, repositoryId: event.repositoryId || null, productId: event.productId || null,
       userName: user?.name || "Unknown user", productName: product?.name || "Unknown product",
       quantity, includedQuantity, meteredQuantity, cost: billedCost, grossAiValue, poolBefore, poolAfter: blockingReason ? poolBefore : poolBefore + includedQuantity, poolTotal,
       poolStateKey, poolName: costCenterPoolEnabled ? `${eventCostCenter.name} included AI-credit pool` : "Enterprise shared included AI-credit pool", poolType: costCenterPoolEnabled ? "costCenter" : "enterprise",
+      poolRemainingBefore: Math.max(0, poolTotal - poolBefore), fundingRoute,
       status: blockingReason ? "blocked" : "accepted", reason: blockingReason || (isAi && billedCost === 0 ? "Usage accepted from included AI credits" : "Usage accepted with metered charges"), affectedBudgets: [],
     };
 
@@ -437,6 +439,9 @@ export function bucketsForEvent(scenario, event, result) {
   const product = scenario.products.find((item) => item.id === event.productId);
   if (product?.billingMode === "aiCredits" && result.includedQuantity > 0) {
     buckets.push({ kind: "included", label: "Included AI-credit pool", scopeLabel: result.poolName || "Shared enterprise pool", amount: result.includedQuantity });
+  }
+  if (product?.billingMode === "aiCredits" && result.meteredQuantity > 0) {
+    buckets.push({ kind: "overage", label: "Paid AI overage", scopeLabel: `${result.poolName || "Eligible included pool"} exhausted`, amount: result.meteredQuantity, cost: result.cost });
   }
   for (const impact of result.affectedBudgets) {
     const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
