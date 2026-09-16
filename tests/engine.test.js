@@ -245,6 +245,18 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
 });
 
+test("optimized UI is isolated from legacy pages and exposes bucket attribution controls", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  for (const id of ["optimized", "optimized-hierarchy", "optimized-buckets", "optimized-scope-type", "optimized-scrubber", "optimized-event-detail"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /data-view="optimized"/);
+  assert.match(app, /renderOptimizedExperience\(replay, currency\)/);
+  assert.match(app, /Included credits/);
+  assert.match(app, /User-level budgets/);
+  assert.match(app, /Budget controls/);
+  assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
+});
+
 test("budget health scenario catalog stays aligned with the underlying progress math", async () => {
   const catalog = JSON.parse(await readFile(new URL("../docs/budget-health-scenarios.json", import.meta.url), "utf8"));
   assert.ok(Array.isArray(catalog) && catalog.length >= 5);

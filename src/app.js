@@ -534,7 +534,8 @@ function scopeOptionsFor(type) {
 
 function eventMatchesOptimizedScope(result) {
   if (!result || optimizedScope.type === "enterprise") return true;
-  const user = scenario.users.find((item) => item.name === result.userName);
+  const event = scenario.events.find((item) => item.id === result.eventId);
+  const user = scenario.users.find((item) => item.id === event?.userId);
   const costCenter = costCenterForUser(scenario, user);
   if (optimizedScope.type === "organization") return user?.organizationIds.includes(optimizedScope.id);
   if (optimizedScope.type === "costCenter") return costCenter?.id === optimizedScope.id;
