@@ -572,26 +572,20 @@ function bucketImpactHtml(result) {
   }).join("");
 }
 
-function hashString(value) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  return hash;
-}
-
 function daysInMonth(yearMonth) {
   const [year, month] = yearMonth.split("-").map(Number);
   return new Date(year, month, 0).getDate();
 }
 
-// Only "usage" steps carry a real date. Other step types (checkpoints, configuration changes,
-// date advances) are given a deterministic-but-scattered date within the scenario's starting
-// month, purely so the timeline has something meaningful to plot them at — per-request "for now,
-// just use random times spread across a month".
-function stepDisplayDate(definition, step, index) {
-  if (step.type === "usage" && step.event?.date) return step.event.date;
+// Real scenario step dates in the built-in catalog are frequently identical (e.g. every usage
+// step landing on the same "2026-09-15" test date), which collapses the timeline onto a single
+// point. To actually show progress across the month, spread steps evenly across the days of the
+// scenario's starting month by step order, regardless of the step's real recorded date.
+function stepDisplayDate(definition, step, index, totalSteps) {
   const anchor = (definition.startDate || scenario.simulationDate || "2026-09-01").slice(0, 7);
   const total = daysInMonth(anchor);
-  const day = 1 + (hashString(`${definition.id}:${step.id}:${index}`) % total);
+  const slot = totalSteps > 1 ? Math.round((index * (total - 1)) / (totalSteps - 1)) : 0;
+  const day = Math.min(total, Math.max(1, slot + 1));
   return `${anchor}-${String(day).padStart(2, "0")}`;
 }
 
@@ -686,7 +680,7 @@ function renderOptimizedBuckets(replay) {
 // index — this is what actually lets the bucket panel above reflect real growth as steps advance.
 function renderOptimizedTimeline(definition) {
   const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
-  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index));
+  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index, definition.steps.length));
   const times = dates.map((date) => new Date(`${date}T00:00:00`).getTime());
   const min = Math.min(...times);
   const max = Math.max(...times);
@@ -714,7 +708,7 @@ function renderOptimizedStepDetail(definition, replay) {
   const body = result
     ? (inScope ? `<div class="bucket-impact-list">${bucketImpactHtml(result) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div>` : `<p class="muted">This step's usage event is outside the selected scope — pick a broader scope to see its bucket impact.</p>`)
     : `<p class="muted">This step does not add a usage event; check the credit buckets above for any resulting change.</p>`;
-  $("#optimized-step-detail").innerHTML = `<div class="optimized-event-card ${result?.status || ""}"><div><span class="status-dot ${result?.status || ""}"></span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(stepDisplayDate(definition, step, activeIndex))} · ${escapeHtml(step.type)}</small></div><p>${escapeHtml(step.description)}</p>${body}</div>`;
+  $("#optimized-step-detail").innerHTML = `<div class="optimized-event-card ${result?.status || ""}"><div><span class="status-dot ${result?.status || ""}"></span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(stepDisplayDate(definition, step, activeIndex, definition.steps.length))} · ${escapeHtml(step.type)}</small></div><p>${escapeHtml(step.description)}</p>${body}</div>`;
 }
 
 function renderOptimizedExperience(replay, currency) {
