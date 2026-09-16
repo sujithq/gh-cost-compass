@@ -1,0 +1,57 @@
+[
+  {
+    "id": "shared-pool",
+    "title": "Shared AI credit pool",
+    "scope": "Organization-level shared pool",
+    "currentUsage": 4100,
+    "limit": 5800,
+    "progressPercent": 71,
+    "nextStepTo100": 1700,
+    "mode": "simple-progress",
+    "description": "The pool is well under the reset threshold, so the health bar shows healthy progress without immediately nearing a hard stop."
+  },
+  {
+    "id": "user-ulb",
+    "title": "User-level budget (ULB)",
+    "scope": "User",
+    "currentUsage": 34,
+    "limit": 45,
+    "progressPercent": 76,
+    "nextStepTo100": 11,
+    "mode": "simple-progress",
+    "description": "The user has consumed most of the individual budget, which is a useful warning state before a hard stop is reached."
+  },
+  {
+    "id": "cost-center-budget",
+    "title": "Cost-center budget",
+    "scope": "Cost center",
+    "currentUsage": 190,
+    "limit": 250,
+    "progressPercent": 76,
+    "nextStepTo100": 60,
+    "mode": "simple-progress",
+    "description": "This is a typical cost-center warning state where the next event would push the budget to its cap."
+  },
+  {
+    "id": "org-budget-next-step",
+    "title": "Org budget near cap",
+    "scope": "Organization",
+    "currentUsage": 270,
+    "limit": 300,
+    "progressPercent": 90,
+    "nextStepTo100": 30,
+    "mode": "next-step-100",
+    "description": "At 90% the health badge is elevated, and a single additional simulation step would reach 100% if the same usage pattern continues."
+  },
+  {
+    "id": "user-ulb-next-step",
+    "title": "User budget at the threshold",
+    "scope": "User",
+    "currentUsage": 49,
+    "limit": 50,
+    "progressPercent": 98,
+    "nextStepTo100": 1,
+    "mode": "next-step-100",
+    "description": "This is the clearest demonstration of the next-step saturation case: the next simulation event would push the bar to 100% and trigger a hard-stop condition when the budget is enforced."
+  }
+]

@@ -231,6 +231,25 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
 });
 
+test("budget health scenario catalog stays aligned with the underlying progress math", async () => {
+  const catalog = JSON.parse(await readFile(new URL("../docs/budget-health-scenarios.json", import.meta.url), "utf8"));
+  assert.ok(Array.isArray(catalog) && catalog.length >= 5);
+
+  for (const scenario of catalog) {
+    assert.equal(Math.round((scenario.currentUsage / scenario.limit) * 100), scenario.progressPercent);
+    assert.equal(scenario.limit - scenario.currentUsage, scenario.nextStepTo100);
+    assert.ok(scenario.description.length > 0);
+  }
+
+  const nextStepCases = catalog.filter((scenario) => scenario.mode === "next-step-100");
+  assert.ok(nextStepCases.length >= 2);
+  assert.ok(nextStepCases.every((scenario) => scenario.nextStepTo100 > 0 && scenario.nextStepTo100 <= 30));
+  assert.deepEqual(
+    catalog.map((scenario) => scenario.id).sort(),
+    ["cost-center-budget", "org-budget-next-step", "shared-pool", "user-ulb", "user-ulb-next-step"].sort(),
+  );
+});
+
 test("alert notifications render as a dismissible toast stack", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");

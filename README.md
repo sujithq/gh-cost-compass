@@ -16,6 +16,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Toast notifications when a budget threshold alert fires or an event is blocked, with severity colouring, GitHub's alert-delivery caveat, and a shortcut into the budget history
 - Documentation-backed configuration help, source links, and live cost/access impact previews
 - Scenario import/export, reset, replay, and browser-local persistence
+- A documented scenario catalog for budget health progression and the next-step 100% saturation case
 
 ## Run and test
 
@@ -47,6 +48,12 @@ Open <http://localhost:4173>.
 ## Explicit simulator assumptions
 
 Events are atomic: an event that would cross a hard stop is rejected in full. GitHub documentation describes stopping usage at limits but does not define event-level partial charging behavior. The simulator uses calendar-day proration for mid-cycle seat charges and credits; because GitHub says included credits “may” be prorated without publishing the exact calculation here, full credits remain available as a hypothetical override. Cost-center assignment through enterprise teams, random monthly selection when multiple organizations grant a Copilot license, automatic cost-center included-usage controls, and GitHub's unspecified additional-usage cap are not modeled. Direct user assignment takes precedence over organization-based cost-center assignment.
+
+## Budget health progression scenarios
+
+The project includes a scenario catalog in `docs/budget-health-scenarios.md` and a machine-verified data file in `docs/budget-health-scenarios.json`.
+
+These examples cover both normal budget progress and the edge case where one more simulation step would take a budget to `100%` consumption. They are also checked automatically by the test suite so the dashboard math and the documentation stay aligned.
 
 ## Official references
 
