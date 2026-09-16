@@ -1,4 +1,4 @@
-import { createDefaultScenario, createId, describeScope, money, replayScenario, scopeLabels, validateScenario } from "./engine.js";
+import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 let scenario = loadScenario();
@@ -61,9 +61,13 @@ function render() {
 function renderSummary(replay, currency) {
   const current = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period));
   const blocked = replay.results.filter((item) => item.status === "blocked" && item.date.startsWith(replay.period)).length;
+  const seatCharge = scenario.users.reduce((sum, user) => sum + seatChargeForPeriod(user, scenario.simulationDate), 0);
+  const policyLabel = scenario.enterprise.seatCreditPolicy === "full" ? "Full seat credits (hypothetical)" : "Prorated seat credits";
   $("#summary-cards").innerHTML = [
     ["Shared AI-credit pool", `${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}`, `${Math.round(replay.pool.percent)}% of included credits consumed`],
+    ["Seat charge this cycle", money(seatCharge, currency), `${scenario.users.filter((user) => user.licenseStartsAt || user.licenseEndsAt).length} seats with dated lifecycle`],
     ["Paid AI overage", money(replay.pool.meteredCost, "USD"), scenario.enterprise.paidAiUsage ? "Paid usage policy enabled" : "Paid usage policy disabled"],
+    ["Seat credit policy", policyLabel, "Add behavior for mid-cycle seats"],
     ["Alerts triggered", replay.alerts.filter((item) => item.date.startsWith(replay.period)).length, "Standard thresholds: 75%, 90%, 100%"],
     ["Blocked events", blocked, blocked ? "One or more controls stopped usage" : "No usage blocked"],
   ].map(([label, value, note]) => `<article class="summary-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join("");
@@ -99,7 +103,8 @@ function renderSelectors() {
   setOptions("#usage-product", scenario.products, $("#usage-product").value);
   setOptions("#repository-org", scenario.organizations, $("#repository-org").value);
   setOptions("#user-org", scenario.organizations, $("#user-org").value);
-  setOptions("#user-cost-center", scenario.costCenters, $("#user-cost-center").value);
+  setOptions("#cost-center-org", scenario.organizations, $("#cost-center-org").value, "No organization assignment");
+  setOptions("#user-cost-center", scenario.costCenters, $("#user-cost-center").value, "Use organization assignment");
   setOptions("#budget-product", scenario.products, $("#budget-product").value || "ai-credits");
   const usageProduct = scenario.products.find((item) => item.id === $("#usage-product").value);
   $("#usage-unit-label").textContent = usageProduct?.billingMode === "aiCredits" ? "AI credits" : `${usageProduct?.unit || "Units"}s`;
@@ -121,10 +126,25 @@ function renderConfiguration() {
   $("#enterprise-name").value = scenario.enterprise.name;
   $("#enterprise-currency").value = scenario.enterprise.currency;
   $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
+  $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
   $("#product-list").innerHTML = scenario.products.map((item) => entityRow(item.name, item.billingMode === "aiCredits" ? "Fixed: 1 credit = $0.01" : `${money(item.unitPrice, scenario.enterprise.currency)} / ${item.unit}`, "product", item.id)).join("");
   $("#organization-list").innerHTML = scenario.organizations.map((item) => entityRow(item.name, `${scenario.repositories.filter((repo) => repo.organizationId === item.id).length} repositories`, "organization", item.id)).join("");
-  $("#cost-center-list").innerHTML = scenario.costCenters.map((item) => `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${scenario.users.filter((user) => user.costCenterId === item.id).length} users · ${item.excludeFromEnterpriseBudget ? "excluded from enterprise AI budget" : "counts against enterprise AI budget"}</small></div><div><button class="text-button" data-toggle-costcenter="${item.id}">${item.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`).join("");
-  $("#user-list").innerHTML = scenario.users.map((item) => entityRow(item.name, `${item.licensePlan === "enterprise" ? "3,900" : "1,900"} included credits · ${scenario.costCenters.find((cc) => cc.id === item.costCenterId)?.name || "No cost center"}`, "user", item.id)).join("");
+  $("#cost-center-list").innerHTML = scenario.costCenters.map((item) => {
+    const assignedOrganizations = scenario.organizations.filter((org) => (item.organizationIds || []).includes(org.id)).map((org) => org.name);
+    const members = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === item.id).length;
+    const assignment = assignedOrganizations.length ? ` · organizations: ${assignedOrganizations.join(", ")}` : "";
+    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users${escapeHtml(assignment)} · ${item.excludeFromEnterpriseBudget ? "excluded from enterprise AI budget" : "counts against enterprise AI budget"}</small></div><div><button class="text-button" data-toggle-costcenter="${item.id}">${item.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
+  }).join("");
+  $("#user-list").innerHTML = scenario.users.map((item) => {
+    const seatActive = isSeatActiveForDate(item, scenario.simulationDate);
+    const seatPending = item.licenseStartsAt && item.licenseStartsAt > scenario.simulationDate;
+    const endLabel = item.licenseEndMode === "unassign" ? "unassigned" : "revoked";
+    const seatText = seatPending ? `seat starts ${item.licenseStartsAt}` : seatActive ? `seat active${item.licenseEndsAt ? ` · ${item.licenseEndMode === "unassign" ? "unassigns" : "revokes"} ${item.licenseEndsAt}` : ""}` : `seat ${endLabel} ${item.licenseEndsAt}`;
+    const charge = seatChargeForPeriod(item, scenario.simulationDate);
+    const costCenter = costCenterForUser(scenario, item);
+    const assignment = item.costCenterId ? costCenter?.name : costCenter ? `${costCenter.name} (via organization)` : "No cost center";
+    return entityRow(item.name, `${item.licensePlan === "enterprise" ? "3,900" : "1,900"} included credits · ${assignment} · ${seatText} · ${money(charge, scenario.enterprise.currency)} this cycle`, "user", item.id);
+  }).join("");
   $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Control / scope</span><span>Amount</span><span>Effective</span><span>Enforcement</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span>${item.budgetKind === "user" ? `${item.userBudgetType} ULB` : "Metered"} · ${escapeHtml(describeScope(scenario, item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${item.enforcement}">${item.enforcement === "hard" ? "Hard stop" : "Alert only"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
 }
 
@@ -157,12 +177,20 @@ function renderBudgetScopeOptions() {
 }
 
 function renderTimeline(replay, currency) {
-  $("#event-count").textContent = `${scenario.events.length} event${scenario.events.length === 1 ? "" : "s"}`;
+  const lifecycle = seatLifecycleEvents(scenario);
+  const totalItems = scenario.events.length + lifecycle.length;
+  $("#event-count").textContent = `${totalItems} item${totalItems === 1 ? "" : "s"}`;
   const resultsById = new Map(replay.results.map((item) => [item.eventId, item]));
-  $("#timeline-list").innerHTML = scenario.events.length ? [...scenario.events].reverse().map((event) => {
+  const usageItems = scenario.events.map((event) => {
     const item = resultsById.get(event.id);
-    return `<div class="timeline-item"><span class="status-dot ${item?.status || ""}"></span><div><p><strong>${escapeHtml(item?.userName || "Unknown")}</strong> consumed ${Number(event.quantity).toLocaleString()} units</p><small>${event.date} · ${escapeHtml(item?.productName || "Unknown product")} · ${money(item?.cost || 0, currency)} · ${item?.status || "scheduled"}</small>${item?.status === "blocked" ? `<p><small>${escapeHtml(item.reason)}</small></p>` : ""}</div></div>`;
-  }).join("") : `<div class="empty">The timeline is empty.</div>`;
+    return { date: event.date, html: `<div class="timeline-item"><span class="status-dot ${item?.status || ""}"></span><div><p><strong>${escapeHtml(item?.userName || "Unknown")}</strong> consumed ${Number(event.quantity).toLocaleString()} units</p><small>${event.date} · ${escapeHtml(item?.productName || "Unknown product")} · ${money(item?.cost || 0, currency)} · ${item?.status || "scheduled"}</small>${item?.status === "blocked" ? `<p><small>${escapeHtml(item.reason)}</small></p>` : ""}</div></div>` };
+  });
+  const lifecycleItems = lifecycle.map((event) => ({
+    date: event.date,
+    html: `<div class="timeline-item"><span class="status-dot"></span><div><p><strong>${escapeHtml(event.userName)}</strong> · ${escapeHtml(event.message)}</p><small>${event.date} · ${event.date > scenario.simulationDate ? "scheduled · " : ""}${money(event.chargeDelta, currency)} license charge · ${event.creditDelta >= 0 ? "+" : ""}${event.creditDelta.toLocaleString()} included credits</small></div></div>`,
+  }));
+  const items = [...usageItems, ...lifecycleItems].sort((a, b) => b.date.localeCompare(a.date));
+  $("#timeline-list").innerHTML = items.length ? items.map((item) => item.html).join("") : `<div class="empty">The timeline is empty.</div>`;
   $("#alert-list").innerHTML = replay.alerts.length ? [...replay.alerts].reverse().map((alert) => `<div class="alert-item"><span class="alert-badge">!</span><div><p><strong>${escapeHtml(alert.message)}</strong></p><small>${alert.date} · ${escapeHtml(alert.reliability)}</small></div></div>`).join("") : `<div class="empty">No thresholds have been crossed.</div>`;
 }
 
@@ -224,12 +252,12 @@ $("#usage-form").addEventListener("submit", (event) => {
 });
 ["#usage-user", "#usage-repository", "#usage-product", "#usage-date"].forEach((selector) => $(selector).addEventListener("change", () => { renderSelectors(); renderApplicableControls(replayScenario(scenario), scenario.enterprise.currency); }));
 
-$("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.paidAiUsage = $("#paid-ai-usage").checked; saveAndRender("Enterprise saved"); });
+$("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.paidAiUsage = $("#paid-ai-usage").checked; scenario.enterprise.seatCreditPolicy = $("#seat-credit-policy").value || "prorated"; saveAndRender("Enterprise saved"); });
 $("#product-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.products.push({ id: createId("product"), name: $("#product-name").value.trim(), unit: "unit", unitPrice: Number($("#product-price").value), billingMode: "metered" }); event.target.reset(); saveAndRender("Product added"); });
 $("#organization-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.organizations.push({ id: createId("org"), name: $("#organization-name").value.trim() }); event.target.reset(); saveAndRender("Organization added"); });
 $("#repository-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.repositories.push({ id: createId("repo"), name: $("#repository-name").value.trim(), organizationId: $("#repository-org").value }); event.target.reset(); saveAndRender("Repository added"); });
-$("#cost-center-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.costCenters.push({ id: createId("cc"), name: $("#cost-center-name").value.trim(), excludeFromEnterpriseBudget: $("#cost-center-excluded").checked }); event.target.reset(); saveAndRender("Cost center added"); });
-$("#user-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#user-org").value; scenario.users.push({ id: createId("user"), name: $("#user-name").value.trim(), organizationIds: [organizationId], licenseOrganizationId: organizationId, costCenterId: $("#user-cost-center").value, licensePlan: $("#user-license-plan").value }); event.target.reset(); saveAndRender("User added"); });
+$("#cost-center-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#cost-center-org").value; scenario.costCenters.push({ id: createId("cc"), name: $("#cost-center-name").value.trim(), organizationIds: organizationId ? [organizationId] : [], excludeFromEnterpriseBudget: $("#cost-center-excluded").checked }); event.target.reset(); saveAndRender("Cost center added"); });
+$("#user-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#user-org").value; scenario.users.push({ id: createId("user"), name: $("#user-name").value.trim(), organizationIds: [organizationId], licenseOrganizationId: organizationId, costCenterId: $("#user-cost-center").value || null, licensePlan: $("#user-license-plan").value, licenseStartsAt: $("#user-license-start").value || null, licenseEndsAt: $("#user-license-end").value || null, licenseEndMode: $("#user-license-end").value ? $("#user-license-end-mode").value : null }); event.target.reset(); saveAndRender("User added"); });
 $("#budget-kind").addEventListener("change", renderBudgetScopeOptions);
 $("#budget-product").addEventListener("change", renderBudgetScopeOptions);
 $("#budget-scope-type").addEventListener("change", renderBudgetScopeOptions);
@@ -252,7 +280,7 @@ $("#budget-form").addEventListener("submit", (event) => {
 function deleteEntity(type, id) {
   const key = ({ product: "products", organization: "organizations", costCenter: "costCenters", user: "users", budget: "budgets" })[type];
   if (!key) return;
-  const referenced = type === "organization" && (scenario.repositories.some((item) => item.organizationId === id) || scenario.users.some((item) => item.organizationIds.includes(id))) || type === "costCenter" && scenario.users.some((item) => item.costCenterId === id) || type === "user" && scenario.events.some((item) => item.userId === id) || type === "product" && (scenario.events.some((item) => item.productId === id) || scenario.budgets.some((item) => item.productId === id));
+  const referenced = type === "organization" && (scenario.repositories.some((item) => item.organizationId === id) || scenario.users.some((item) => item.organizationIds.includes(id)) || scenario.costCenters.some((item) => (item.organizationIds || []).includes(id))) || type === "costCenter" && scenario.users.some((item) => item.costCenterId === id) || type === "user" && scenario.events.some((item) => item.userId === id) || type === "product" && (scenario.events.some((item) => item.productId === id) || scenario.budgets.some((item) => item.productId === id));
   if (referenced) return showToast("Cannot delete an item that is still referenced");
   scenario[key] = scenario[key].filter((item) => item.id !== id);
   if (type !== "budget") scenario.budgets = scenario.budgets.filter((item) => !(item.scopeType === type && item.scopeId === id));
