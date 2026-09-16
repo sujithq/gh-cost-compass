@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -95,6 +95,11 @@ test("AI credits use the shared included pool before creating spend", () => {
   assert.equal(replay.results[0].fundingRoute, "included");
   assert.equal(replay.results[0].cost, 0);
   assert.deepEqual(replay.results[0].affectedBudgets.map((item) => item.budgetId), ["ulb-alice", "metered-enterprise", "metered-ai-team"]);
+});
+
+test("percent display retains two decimal places near a budget limit", () => {
+  assert.equal(percent(44.99 / 45 * 100), "99.98%");
+  assert.equal(percent(100), "100.00%");
 });
 
 test("individual ULB overrides cost-center and universal ULBs", () => {
@@ -380,6 +385,11 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(html, /role="dialog" aria-modal="true"/);
   assert.match(app, /data-history-id="pool"/);
   assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
+  assert.match(app, /money, normalizeScenario, percent, replayScenario/);
+  for (const callSite of ["percent(replay.pool.percent)", "percent(pool.percent)", "percent(budget.percent)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
+    assert.match(app, new RegExp(callSite.replaceAll("(", "\\(").replaceAll(")", "\\)")));
+  }
+  assert.match(app, /Math\.min\(100, item\.percent\)/);
 });
 
 test("optimized UI is isolated from legacy pages and exposes bucket attribution controls", async () => {

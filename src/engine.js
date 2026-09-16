@@ -20,6 +20,10 @@ export function money(value, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value || 0);
 }
 
+export function percent(value) {
+  return `${Number(value || 0).toFixed(2)}%`;
+}
+
 export function daysInMonth(date) {
   const [year, month] = String(date).slice(0, 7).split("-").map(Number);
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
