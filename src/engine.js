@@ -411,7 +411,13 @@ export function eventInScope(scenario, event, scope) {
 // Determines whether a budget (or budgetState) is relevant to a scope, including broader ancestor budgets
 // (e.g. the enterprise metered budget still applies while inspecting an organization or user).
 export function budgetInScope(scenario, budget, scope) {
-  if (!scope || scope.type === "enterprise") return true;
+  if (!scope) return true;
+  // replayScenario materializes user-level budgets into one state per user, each carrying its own
+  // userId. Such a state governs only that user, regardless of where the definition is scoped, so it
+  // must be matched on the user rather than on the definition's scopeType — otherwise a universal or
+  // enterprise-scoped ULB definition appears to be "in play" for every user at once.
+  if (budget.userId) return usersInScope(scenario, scope).some((user) => user.id === budget.userId);
+  if (scope.type === "enterprise") return true;
   if (budget.scopeType === "enterprise") return true;
   if (budget.budgetKind === "user" && budget.userBudgetType === "universal") return true;
   const scoped = usersInScope(scenario, scope);
@@ -430,6 +436,93 @@ export function budgetInScope(scenario, budget, scope) {
       return scoped.some((user) => user.organizationIds.includes(repo.organizationId));
     }
     default: return false;
+  }
+}
+
+// Describes a cost center using the two sections GitHub shows on its detail page — "Resources"
+// (what is attributed to the cost center) and "Settings" (the AI credit included usage cap) — so the
+// simulator's wording maps onto the settings an administrator actually configures. Shared by the
+// configuration page and the Optimized UI inspector so the two can never drift apart.
+export function describeCostCenterConfiguration(scenario, costCenter, atDate = scenario.simulationDate) {
+  normalizeScenario(scenario);
+  const namesFor = (collection, ids) => collection.filter((item) => (ids || []).includes(item.id)).map((item) => item.name);
+  const attributedUsers = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === costCenter.id);
+  const licensedUsers = attributedUsers.filter((user) => isSeatActiveForDate(user, atDate));
+  return {
+    name: costCenter.name,
+    resources: [
+      { label: "Enterprise teams", names: namesFor(scenario.enterpriseTeams, costCenter.enterpriseTeamIds) },
+      { label: "Organizations", names: namesFor(scenario.organizations, costCenter.organizationIds) },
+      { label: "Repositories", names: namesFor(scenario.repositories, costCenter.repositoryIds) },
+      // Users are reported by effective attribution rather than the explicit userIds list, because a
+      // user can also land in a cost center via their enterprise team or organization. GitHub's
+      // "N selected" count reflects who is actually attributed, which is what drives the cap below.
+      { label: "Users", names: attributedUsers.map((user) => user.name) },
+    ],
+    settings: {
+      includedUsageCapEnabled: Boolean(costCenter.aiCreditPoolEnabled),
+      // GitHub derives this cap from the Copilot licenses attributed to the cost center rather than
+      // letting an admin type an amount, which is why it is computed here instead of stored.
+      capCredits: Math.round(costCenterIncludedPoolFor(scenario, costCenter.id, atDate)),
+      licenseCount: licensedUsers.length,
+      attributedUserCount: attributedUsers.length,
+      atCapBehavior: costCenter.aiCreditPoolCapMode === "block" ? "block" : "allowOverage",
+      excludeFromEnterpriseBudget: Boolean(costCenter.excludeFromEnterpriseBudget),
+    },
+  };
+}
+
+// Configuration facts for whichever node is selected in the Optimized UI hierarchy, so selecting a
+// node explains how that entity is set up and not only what it has consumed.
+export function describeScopeConfiguration(scenario, scope) {
+  normalizeScenario(scenario);
+  if (!scope) return null;
+  switch (scope.type) {
+    case "costCenter": {
+      const costCenter = scenario.costCenters.find((item) => item.id === scope.id);
+      return costCenter ? { type: "costCenter", ...describeCostCenterConfiguration(scenario, costCenter) } : null;
+    }
+    case "organization": {
+      const organization = scenario.organizations.find((item) => item.id === scope.id);
+      if (!organization) return null;
+      const repositories = scenario.repositories.filter((repo) => repo.organizationId === organization.id);
+      return {
+        type: "organization",
+        name: organization.name,
+        facts: [
+          { label: "Repositories", value: `${repositories.length}` },
+          { label: "Licensed users", value: `${usersInScope(scenario, scope).filter((user) => isSeatActiveForDate(user, scenario.simulationDate)).length}` },
+        ],
+      };
+    }
+    case "user": {
+      const user = scenario.users.find((item) => item.id === scope.id);
+      if (!user) return null;
+      const costCenter = costCenterForUser(scenario, user);
+      const includedCredits = Math.round(userPoolContribution(user, scenario.simulationDate, scenario));
+      return {
+        type: "user",
+        name: user.name,
+        facts: [
+          { label: "Copilot license", value: user.licensePlan === "enterprise" ? "Enterprise" : "Business" },
+          { label: "Included credits", value: `${includedCredits} this cycle` },
+          { label: "Cost center", value: costCenter?.name || "Not attributed" },
+          { label: "Seat status", value: isSeatActiveForDate(user, scenario.simulationDate) ? "Active" : "Inactive" },
+        ],
+      };
+    }
+    default: {
+      const licensed = scenario.users.filter((user) => isSeatActiveForDate(user, scenario.simulationDate)).length;
+      return {
+        type: "enterprise",
+        name: scenario.enterprise.name,
+        facts: [
+          { label: "Licensed users", value: `${licensed}` },
+          { label: "Mid-cycle seat credits", value: scenario.enterprise.seatCreditPolicy === "full" ? "Full" : "Prorated" },
+          { label: "AI credit paid usage", value: scenario.enterprise.paidAiUsage ? "Allowed after included pool" : "Blocked after included pool" },
+        ],
+      };
+    }
   }
 }
 

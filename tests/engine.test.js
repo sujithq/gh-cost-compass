@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, bucketsForEvent, costCenterIncludedPoolFor, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -784,4 +784,63 @@ test("alert notifications render as a dismissible toast stack", async () => {
 test("rejects legacy scenario imports", () => {
   assert.match(validateScenario({ version: 1, enterprise: {}, simulationDate: "2026-09-01" }), /version 2/);
   assert.equal(validateScenario(createDefaultScenario()), null);
+});
+
+test("scope selection narrows budgets to the ones actually governing that scope", () => {
+  const scenario = createDefaultScenario("enterprise");
+  const replay = replayScenario(scenario);
+  const countFor = (scope) => replay.budgetStates.filter((state) => budgetInScope(scenario, state, scope)).length;
+  const user = scenario.users.find((item) => costCenterForUser(scenario, item));
+  const userScope = { type: "user", id: user.id };
+
+  // Regression guard for #15: replayScenario materializes one budget state per user, so a universal
+  // ULB definition expanded into a state for every user. budgetInScope previously matched them all,
+  // which surfaced ~181 of 206 budget cards while inspecting a single person.
+  const scoped = replay.budgetStates.filter((state) => budgetInScope(scenario, state, userScope));
+  assert.ok(scoped.length < 10, `expected a handful of budgets for one user, got ${scoped.length}`);
+  assert.ok(scoped.length > 0, "a user should still resolve their own budgets");
+
+  // Every user-level state shown must belong to the inspected user.
+  for (const state of scoped.filter((item) => item.budgetKind === "user")) {
+    assert.equal(state.userId, user.id);
+  }
+  // Ancestor budgets stay visible: enterprise-wide controls still govern this user.
+  assert.ok(scoped.some((state) => state.scopeType === "enterprise" && state.budgetKind === "metered"));
+
+  // Narrowing the scope must never widen the result set.
+  assert.ok(countFor(userScope) <= countFor({ type: "costCenter", id: costCenterForUser(scenario, user).id }));
+  assert.ok(countFor({ type: "enterprise", id: scenario.enterprise.id }) === replay.budgetStates.length);
+});
+
+test("cost center configuration uses GitHub included-usage-cap wording and derives the cap from licenses", () => {
+  const scenario = createDefaultScenario("enterprise");
+  const costCenter = scenario.costCenters[0];
+  const config = describeCostCenterConfiguration(scenario, costCenter);
+
+  assert.deepEqual(config.resources.map((item) => item.label), ["Enterprise teams", "Organizations", "Repositories", "Users"]);
+  // The cap is derived from attributed licenses rather than stored, mirroring GitHub.
+  assert.equal(config.settings.capCredits, Math.round(costCenterIncludedPoolFor(scenario, costCenter.id)));
+  assert.ok(config.settings.licenseCount > 0);
+  // Users resolve by effective attribution, not just the explicit userIds list.
+  assert.equal(config.resources.find((item) => item.label === "Users").names.length, config.settings.attributedUserCount);
+
+  // The Optimized UI inspector reads the same descriptor, so every scope type must resolve one.
+  const user = scenario.users[0];
+  for (const scope of [{ type: "enterprise", id: scenario.enterprise.id }, { type: "organization", id: scenario.organizations[0].id }, { type: "costCenter", id: costCenter.id }, { type: "user", id: user.id }]) {
+    const described = describeScopeConfiguration(scenario, scope);
+    assert.ok(described, `no configuration described for ${scope.type}`);
+    assert.equal(described.type, scope.type);
+  }
+});
+
+test("configuration UI drops simulator-only cost center jargon", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(html, /AI credit included usage cap/);
+  assert.doesNotMatch(html, /Enable AI credit pool cap/);
+  // The terse, unexplained row labels from #16 must not come back.
+  assert.doesNotMatch(app, /">Enable pool</);
+  assert.doesNotMatch(app, /">Block at cap</);
+  assert.match(app, /attributed licenses/);
+  assert.match(html, /id="optimized-scope-config"/);
 });
