@@ -291,6 +291,25 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
 });
 
+test("hierarchy nodes name their own entity type and share one icon set across pages", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.match(app, /const HIERARCHY_KINDS = \{/);
+  for (const label of ["Enterprise", "Organization", "Cost center", "Repository", "User"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  // Both the dashboard tree and the optimized tree must build nodes through the same helper, so
+  // icons, colors, and type labels can never drift apart between the two pages.
+  assert.match(app, /function hierarchyNodeHtml\(kind, name, detail/);
+  assert.match(app, /hierarchy-kind/);
+  assert.match(app, /\$\("#hierarchy"\)\.innerHTML = legend \+ hierarchyNodeHtml\("enterprise"/);
+  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyNodeHtml\("enterprise"/);
+  assert.doesNotMatch(app, /class="tree-org"/);
+  // Organization and cost-center glyphs were previously near-identical briefcases.
+  const paths = Object.fromEntries([...app.matchAll(/^\s{2}(enterprise|organization|costCenter|user|repo): '(.+)',$/gm)].map((match) => [match[1], match[2]]));
+  assert.equal(new Set(Object.values(paths)).size, 5);
+});
+
 test("progress bars across every page animate from their previous width", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");

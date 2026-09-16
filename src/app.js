@@ -21,14 +21,17 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => 
 
 const ICON_PATHS = {
   hierarchy: '<rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/>',
-  enterprise: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 21v-4h6v4"/><path d="M8 7h1M12 7h1M16 7h1M8 11h1M12 11h1M16 11h1M8 15h1M16 15h1"/>',
-  organization: '<rect x="3" y="7" width="18" height="12" rx="1.5"/><path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"/><path d="M3 12h18"/>',
-  costCenter: '<rect x="3" y="7" width="18" height="12" rx="1.5"/><path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"/>',
-  user: '<circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
-  pool: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6"/>',
+  // Silhouettes are deliberately distinct from one another: a tall tower for the enterprise, a
+  // pitched-roof office for an organization, a briefcase for a cost center, a person for a user.
+  enterprise: '<path d="M4 21V3h10v18M14 9h6v12M2 21h20M7 7h4M7 11h4M7 15h4M17 13v1M17 17v1"/>',
+  organization: '<path d="M3 21V7l9-4 9 4v14M7 21v-7h10v7M7 9h1M12 9h1M17 9h1"/>',
+  costCenter: '<path d="M3 7h18v14H3zM8 7V3h8v4M3 12h18M10 12v3h4v-3"/>',
+  user: '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 21v-3a8 6 0 0 1 16 0v3"/>',
+  team: '<path d="M9 7a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 20v-2a6 5 0 0 1 12 0v2M4 5a3 3 0 0 0 0 6M20 5a3 3 0 0 1 0 6M2 19v-3M22 19v-3"/>',
+  pool: '<path d="M3 6c0-5 18-5 18 0s-18 5-18 0M3 6v12c0 5 18 5 18 0V6M3 12c0 5 18 5 18 0"/>',
   hardStop: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M9.5 12l1.7 1.8L15 10"/>',
   alertOnly: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M12 8v4.2"/><circle cx="12" cy="15" r="0.9" fill="currentColor" stroke="none"/>',
-  repo: '<path d="M9 3v14a2 2 0 0 0 2 2h9"/><rect x="4" y="3" width="5" height="18" rx="1"/>',
+  repo: '<path d="M6.5 3H19v14H6.5A2.5 2.5 0 0 0 4 19.5v-14A2.5 2.5 0 0 1 6.5 3Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19v4H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M9 7h6"/>',
 };
 function icon(name, className = "") {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon${className ? ` ${className}` : ""}" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
@@ -414,12 +417,36 @@ function closeBudgetHistory() {
   budgetHistoryTrigger = null;
 }
 
+// Every node states its own type, because an icon alone doesn't tell a first-time reader which
+// row is the enterprise, the organization, the cost center, the repository, or the user.
+const HIERARCHY_KINDS = {
+  enterprise: { label: "Enterprise", className: "enterprise" },
+  organization: { label: "Organization", className: "org" },
+  costCenter: { label: "Cost center", className: "cost-center" },
+  repo: { label: "Repository", className: "repo" },
+  user: { label: "User", className: "user" },
+};
+
+function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "") {
+  const meta = HIERARCHY_KINDS[kind];
+  return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small></div></div>`;
+}
+
 function renderHierarchy() {
-  $("#hierarchy").innerHTML = `<strong>◆ ${escapeHtml(scenario.enterprise.name)}</strong>` + scenario.organizations.map((org) => {
+  const legend = `<div class="hierarchy-legend">${Object.entries(HIERARCHY_KINDS).map(([kind, meta]) => `<span class="${meta.className}">${icon(kind)}${meta.label}</span>`).join("")}</div>`;
+  const tree = scenario.organizations.map((org) => {
     const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
     const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
-    return `<div class="tree-org"><strong>◉ ${escapeHtml(org.name)}</strong><small>${users.length} user${users.length === 1 ? "" : "s"}</small>${repos.map((repo) => `<div class="tree-repo">⌘ ${escapeHtml(repo.name)}</div>`).join("") || `<div class="tree-repo">No repositories</div>`}</div>`;
-  }).join("");
+    const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
+    const children = [
+      ...costCenters.map((cc) => hierarchyNodeHtml("costCenter", cc.name, `${users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id).length} user${users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id).length === 1 ? "" : "s"} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`)),
+      ...repos.map((repo) => hierarchyNodeHtml("repo", repo.name, `Usage in this repository bills to ${org.name}`)),
+      ...users.map((user) => hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`)),
+    ];
+    return `<div class="hierarchy-branch">${hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"}`)}<div class="hierarchy-lane">${children.join("") || `<div class="empty">No cost centers, repositories, or users yet.</div>`}</div></div>`;
+  }).join("") || `<div class="empty">No organizations configured yet.</div>`;
+
+  $("#hierarchy").innerHTML = legend + hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`) + tree;
 }
 
 function renderActivity(replay, currency) {
@@ -770,19 +797,19 @@ function renderOptimizedExperience(replay, currency) {
   const definition = selectedScenarioDefinition();
   renderOptimizedBuckets(replay);
 
-  const scopeNode = (type, id) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""}`;
-  $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise scope-node" ${scopeNode("enterprise", scenario.enterprise.id)} tabindex="0" role="button" aria-label="Inspect enterprise scope"><span>${icon("enterprise")}</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
+  const scopeNode = (type, id, name) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"`;
+  $("#optimized-hierarchy").innerHTML = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users`, scopeNode("enterprise", scenario.enterprise.id, scenario.enterprise.name), "scope-node") + scenario.organizations.map((org) => {
     const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
     const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
     const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
-    const userNodeHtml = (user) => `<div class="hierarchy-node user scope-node" ${scopeNode("user", user.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(user.name)} scope"><span>${icon("user")}</span><div><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(costCenterForUser(scenario, user)?.name || "No cost center")} · ${user.licensePlan} seat</small></div></div>`;
+    const userNodeHtml = (user) => hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeNode("user", user.id, user.name), "scope-node");
     const unassignedUsers = users.filter((user) => !costCenterForUser(scenario, user));
     const costCenterLanes = costCenters.map((cc) => {
       const ccUsers = users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id);
-      return `<div class="hierarchy-node cost-center scope-node" ${scopeNode("costCenter", cc.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(cc.name)} scope"><span>${icon("costCenter")}</span><div><strong>${escapeHtml(cc.name)}</strong><small>${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}</small></div></div>${ccUsers.length ? `<div class="hierarchy-lane hierarchy-lane-users">${ccUsers.map(userNodeHtml).join("")}</div>` : ""}`;
-    }).join("") || `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`;
-    const unassignedHtml = unassignedUsers.length ? `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><strong>No cost center</strong><small>${unassignedUsers.length} user${unassignedUsers.length === 1 ? "" : "s"} not assigned</small></div></div><div class="hierarchy-lane hierarchy-lane-users">${unassignedUsers.map(userNodeHtml).join("")}</div>` : "";
-    return `<div class="hierarchy-branch"><div class="hierarchy-node org scope-node" ${scopeNode("organization", org.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(org.name)} scope"><span>${icon("organization")}</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
+      return hierarchyNodeHtml("costCenter", cc.name, cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage", scopeNode("costCenter", cc.id, cc.name), "scope-node") + (ccUsers.length ? `<div class="hierarchy-lane hierarchy-lane-users">${ccUsers.map(userNodeHtml).join("")}</div>` : "");
+    }).join("") || `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><span class="hierarchy-kind">Cost center</span><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`;
+    const unassignedHtml = unassignedUsers.length ? `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><span class="hierarchy-kind">Cost center</span><strong>No cost center</strong><small>${unassignedUsers.length} user${unassignedUsers.length === 1 ? "" : "s"} not assigned</small></div></div><div class="hierarchy-lane hierarchy-lane-users">${unassignedUsers.map(userNodeHtml).join("")}</div>` : "";
+    return `<div class="hierarchy-branch">${hierarchyNodeHtml("organization", org.name, `${users.length} users · ${repos.length} repositories`, scopeNode("organization", org.id, org.name), "scope-node")}<div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
   }).join("");
 
   if (definition) {
