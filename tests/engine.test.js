@@ -753,6 +753,10 @@ test("simulation page previews selected steps before explicit execution", async 
   assert.match(app, /SELECTED STEP PREVIEW/);
   assert.match(app, /Predicted changes/);
   assert.match(app, /ACTUAL OUTCOME/);
+  assert.match(app, /function scopeMarker\(/);
+  assert.match(app, /scenario-delta-label/);
+  assert.match(app, /impact-row-label/);
+  assert.match(app, /budget-scope-cell/);
   assert.match(app, /scenarioRun\.selectedStepIndex = Number/);
   assert.match(app, /Confirm run all/);
   assert.match(app, /saveAndRender\(message, \{ toast: false \}\)/);
