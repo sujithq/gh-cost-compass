@@ -14,6 +14,7 @@
       <div class="brand"><span class="brand-mark">⌁</span><div><strong>Copilot Budget Lab</strong><small>Safe simulation sandbox</small></div></div>
       <nav id="navigation">
         <button class="nav-item active" data-view="dashboard">▦ Dashboard</button>
+        <button class="nav-item" data-view="optimized">⬡ Optimized UI</button>
         <button class="nav-item" data-view="simulate">▶ Simulate usage</button>
         <button class="nav-item" data-view="configuration">⚙ Configuration</button>
         <button class="nav-item" data-view="timeline">≡ Timeline & alerts</button>
@@ -34,6 +35,31 @@
         <div class="two-column">
           <article class="panel"><div class="panel-title"><h3>Enterprise structure</h3><span>Live configuration</span></div><div id="hierarchy"></div></article>
           <article class="panel"><div class="panel-title"><h3>Recent activity</h3><button class="text-button" data-go="timeline">View all</button></div><div id="recent-activity"></div></article>
+        </div>
+      </section>
+
+      <section id="optimized" class="view">
+        <div class="section-heading"><div><p class="eyebrow">OPTIMIZED EXPERIENCE</p><h2>Hierarchy, buckets & consumption</h2></div><span class="pill">Non-breaking preview</span></div>
+        <div class="optimized-layout">
+          <article class="panel optimized-map-panel">
+            <div class="panel-title"><h3>Enterprise hierarchy</h3><span>Included credits + controls</span></div>
+            <div id="optimized-hierarchy" class="optimized-hierarchy"></div>
+          </article>
+          <aside class="optimized-side">
+            <article class="panel">
+              <div class="panel-title"><h3>Credit buckets</h3><span>Current period</span></div>
+              <div id="optimized-buckets" class="optimized-buckets"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-title"><h3>Consumption scrubber</h3><span id="optimized-event-count"></span></div>
+              <div class="scrubber-controls">
+                <label>Scope type<select id="optimized-scope-type"><option value="enterprise">Enterprise</option><option value="organization">Organization</option><option value="costCenter">Cost center</option><option value="user">User</option></select></label>
+                <label>Scope<select id="optimized-scope"></select></label>
+              </div>
+              <input id="optimized-scrubber" class="consumption-scrubber" type="range" min="0" max="0" value="0">
+              <div id="optimized-event-detail" class="optimized-event-detail"></div>
+            </article>
+          </aside>
         </div>
       </section>
 

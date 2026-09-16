@@ -14,6 +14,7 @@ let latestEventId = null;
 let budgetHistoryTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
+let optimizedScope = { type: "enterprise", id: "" };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -265,6 +266,7 @@ function render() {
   renderBudgets(replay, currency);
   renderScenarioStudio();
   renderHierarchy();
+  renderOptimizedExperience(replay, currency);
   renderActivity(replay, currency);
   renderSelectors();
   renderApplicableControls(replay, currency);
@@ -515,6 +517,88 @@ function renderBudgetScopeOptions() {
   $("#budget-expiry-label").hidden = !(kind === "user" && type === "user");
 }
 
+function budgetIcon(budget) {
+  if (budget.stateId === "pool" || budget.budgetKind === "pool") return "◎";
+  if (budget.budgetKind === "user") return "◉";
+  if (budget.enforcement === "hard") return "◆";
+  return "◇";
+}
+
+function scopeOptionsFor(type) {
+  if (type === "enterprise") return [scenario.enterprise];
+  if (type === "organization") return scenario.organizations;
+  if (type === "costCenter") return scenario.costCenters;
+  if (type === "user") return scenario.users;
+  return [];
+}
+
+function eventMatchesOptimizedScope(result) {
+  if (!result || optimizedScope.type === "enterprise") return true;
+  const user = scenario.users.find((item) => item.name === result.userName);
+  const costCenter = costCenterForUser(scenario, user);
+  if (optimizedScope.type === "organization") return user?.organizationIds.includes(optimizedScope.id);
+  if (optimizedScope.type === "costCenter") return costCenter?.id === optimizedScope.id;
+  if (optimizedScope.type === "user") return user?.id === optimizedScope.id;
+  return true;
+}
+
+function bucketImpactHtml(result) {
+  if (!result) return "";
+  const poolImpact = result.productName === "Copilot AI credits" ? [{
+    label: "Included credits",
+    detail: `${result.includedQuantity.toLocaleString()} pooled credits`,
+    before: result.poolBefore,
+    after: result.poolAfter,
+    unit: "credits",
+    icon: "◎",
+  }] : [];
+  const budgetImpacts = result.affectedBudgets.map((impact) => {
+    const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
+    return {
+      label: `${budget?.name || impact.budgetId}${impact.userId ? ` · ${result.userName}` : ""}`,
+      detail: impact.basis,
+      before: impact.before,
+      after: impact.after,
+      unit: "money",
+      icon: budgetIcon(budget || {}),
+    };
+  });
+  return [...poolImpact, ...budgetImpacts].map((impact) => `<div class="bucket-impact"><span>${impact.icon}</span><div><strong>${escapeHtml(impact.label)}</strong><small>${escapeHtml(impact.detail)}</small></div><b>${impact.unit === "money" ? `${money(impact.before, "USD")} → ${money(impact.after, "USD")}` : `${Number(impact.before).toLocaleString()} → ${Number(impact.after).toLocaleString()}`}</b></div>`).join("");
+}
+
+function renderOptimizedExperience(replay, currency) {
+  const typeSelect = $("#optimized-scope-type");
+  if (!typeSelect) return;
+  typeSelect.value = optimizedScope.type;
+  const scopeItems = scopeOptionsFor(optimizedScope.type);
+  if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
+  setOptions("#optimized-scope", scopeItems, optimizedScope.id);
+
+  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
+  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user");
+  const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered");
+  $("#optimized-buckets").innerHTML = [
+    { title: "Included credits", items: [pool], note: "Consumed before paid overage starts." },
+    { title: "User-level budgets", items: userBudgets, note: "Hard stops based on total AI-credit value." },
+    { title: "Budget controls", items: meteredBudgets, note: "Track paid metered overage after the pool." },
+  ].map((group) => `<section class="bucket-group"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map((item) => `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`).join("") || `<div class="empty compact-empty">No matching buckets.</div>`}</section>`).join("");
+
+  $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise"><span>⬡</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
+    const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
+    const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
+    const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
+    return `<div class="hierarchy-branch"><div class="hierarchy-node org"><span>◈</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenters.map((cc) => `<div class="hierarchy-node cost-center"><span>${cc.excludeFromEnterpriseBudget ? "◇" : "◆"}</span><div><strong>${escapeHtml(cc.name)}</strong><small>${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}</small></div></div>`).join("") || `<div class="hierarchy-node muted-node"><span>◇</span><div><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`}${users.map((user) => `<div class="hierarchy-node user"><span>●</span><div><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(costCenterForUser(scenario, user)?.name || "No cost center")} · ${user.licensePlan} seat</small></div></div>`).join("")}</div></div>`;
+  }).join("");
+
+  const scopedResults = replay.results.filter(eventMatchesOptimizedScope);
+  const scrubber = $("#optimized-scrubber");
+  scrubber.max = String(Math.max(0, scopedResults.length - 1));
+  scrubber.value = String(Math.min(Number(scrubber.value || 0), Math.max(0, scopedResults.length - 1)));
+  const selected = scopedResults[Number(scrubber.value || 0)] || scopedResults.at(-1);
+  $("#optimized-event-count").textContent = `${scopedResults.length} event${scopedResults.length === 1 ? "" : "s"}`;
+  $("#optimized-event-detail").innerHTML = selected ? `<div class="optimized-event-card ${selected.status}"><div><span class="status-dot ${selected.status}"></span><strong>${escapeHtml(selected.userName)} · ${escapeHtml(selected.productName)}</strong><small>${selected.date} · ${selected.quantity.toLocaleString()} units · ${money(selected.cost, currency)} · ${selected.status}</small></div><p>${escapeHtml(selected.reason)}</p><div class="bucket-impact-list">${bucketImpactHtml(selected) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div></div>` : `<div class="empty">No usage events match this scope yet.</div>`;
+}
+
 function renderTimeline(replay, currency) {
   const lifecycle = seatLifecycleEvents(scenario);
   const totalItems = scenario.events.length + lifecycle.length;
@@ -548,7 +632,7 @@ function renderResult(replay, currency) {
 function navigate(view) {
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === view));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
-  $("#page-title").textContent = ({ dashboard: "Dashboard", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
+  $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Optimized UI", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
 }
 
 function addDays(value, days) {
@@ -564,6 +648,17 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
+$("#optimized-scope-type").addEventListener("change", (event) => {
+  optimizedScope = { type: event.target.value, id: "" };
+  $("#optimized-scrubber").value = "0";
+  renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+});
+$("#optimized-scope").addEventListener("change", (event) => {
+  optimizedScope.id = event.target.value;
+  $("#optimized-scrubber").value = "0";
+  renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+});
+$("#optimized-scrubber").addEventListener("input", () => renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency));
 document.addEventListener("click", (event) => {
   const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { scenarioRun.selectedStepIndex = Number(scenarioStep.dataset.scenarioStep); scenarioRun.runAllArmed = false; renderScenarioStudio(); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
