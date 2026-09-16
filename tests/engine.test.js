@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
+import { budgetInScope, bucketsForEvent, createDefaultScenario, eventInScope, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -255,6 +255,38 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /User-level budgets/);
   assert.match(app, /Budget controls/);
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
+});
+
+test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="optimized-scrubber-prev"/);
+  assert.match(html, /id="optimized-scrubber-next"/);
+  assert.match(app, /data-scope-type="\$\{escapeHtml\(type\)\}" data-scope-id="\$\{escapeHtml\(id\)\}"/);
+  assert.match(app, /closest\("\[data-scope-type\]\[data-scope-id\]"\)/);
+});
+
+test("eventInScope and budgetInScope correlate usage and budgets by scope, not by fragile name matching", () => {
+  const scenario = createDefaultScenario();
+  scenario.events = [usage("one", "2026-09-15", 1000)];
+  const replay = replayScenario(scenario);
+  const result = replay.results[0];
+  const event = scenario.events[0];
+
+  assert.equal(eventInScope(scenario, event, { type: "enterprise" }), true);
+  assert.equal(eventInScope(scenario, event, { type: "user", id: "user-alice" }), true);
+  assert.equal(eventInScope(scenario, event, { type: "user", id: "user-bob" }), false);
+
+  const aliceUlb = scenario.budgets.find((item) => item.id === "ulb-alice");
+  assert.equal(budgetInScope(scenario, aliceUlb, { type: "user", id: "user-alice" }), true);
+  assert.equal(budgetInScope(scenario, aliceUlb, { type: "user", id: "user-bob" }), false);
+
+  const scopedUsers = usersInScope(scenario, { type: "user", id: "user-alice" });
+  assert.deepEqual(scopedUsers.map((item) => item.id), ["user-alice"]);
+
+  const buckets = bucketsForEvent(scenario, event, result);
+  assert.ok(buckets.some((bucket) => bucket.kind === "included"));
+  assert.ok(buckets.some((bucket) => bucket.kind === "ulb"));
 });
 
 test("budget health scenario catalog stays aligned with the underlying progress math", async () => {
