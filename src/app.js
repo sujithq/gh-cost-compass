@@ -19,6 +19,21 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
 
+const ICON_PATHS = {
+  hierarchy: '<rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/>',
+  enterprise: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 21v-4h6v4"/><path d="M8 7h1M12 7h1M16 7h1M8 11h1M12 11h1M16 11h1M8 15h1M16 15h1"/>',
+  organization: '<rect x="3" y="7" width="18" height="12" rx="1.5"/><path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"/><path d="M3 12h18"/>',
+  costCenter: '<rect x="3" y="7" width="18" height="12" rx="1.5"/><path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"/>',
+  user: '<circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
+  pool: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6"/>',
+  hardStop: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M9.5 12l1.7 1.8L15 10"/>',
+  alertOnly: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M12 8v4.2"/><circle cx="12" cy="15" r="0.9" fill="currentColor" stroke="none"/>',
+  repo: '<path d="M9 3v14a2 2 0 0 0 2 2h9"/><rect x="4" y="3" width="5" height="18" rx="1"/>',
+};
+function icon(name, className = "") {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon${className ? ` ${className}` : ""}" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
+}
+
 function loadScenario() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -518,10 +533,10 @@ function renderBudgetScopeOptions() {
 }
 
 function budgetIcon(budget) {
-  if (budget.stateId === "pool" || budget.budgetKind === "pool") return "◎";
-  if (budget.budgetKind === "user") return "◉";
-  if (budget.enforcement === "hard") return "◆";
-  return "◇";
+  if (budget.stateId === "pool" || budget.budgetKind === "pool") return icon("pool");
+  if (budget.budgetKind === "user") return icon("hardStop");
+  if (budget.enforcement === "hard") return icon("hardStop");
+  return icon("alertOnly");
 }
 
 function scopeOptionsFor(type) {
@@ -551,7 +566,7 @@ function bucketImpactHtml(result) {
     before: result.poolBefore,
     after: result.poolAfter,
     unit: "credits",
-    icon: "◎",
+    icon: icon("pool"),
   }] : [];
   const budgetImpacts = result.affectedBudgets.map((impact) => {
     const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
@@ -584,11 +599,11 @@ function renderOptimizedExperience(replay, currency) {
     { title: "Budget controls", items: meteredBudgets, note: "Track paid metered overage after the pool." },
   ].map((group) => `<section class="bucket-group"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map((item) => `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`).join("") || `<div class="empty compact-empty">No matching buckets.</div>`}</section>`).join("");
 
-  $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise"><span>⬡</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
+  $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise"><span>${icon("enterprise")}</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
     const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
     const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
     const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
-    return `<div class="hierarchy-branch"><div class="hierarchy-node org"><span>◈</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenters.map((cc) => `<div class="hierarchy-node cost-center"><span>${cc.excludeFromEnterpriseBudget ? "◇" : "◆"}</span><div><strong>${escapeHtml(cc.name)}</strong><small>${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}</small></div></div>`).join("") || `<div class="hierarchy-node muted-node"><span>◇</span><div><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`}${users.map((user) => `<div class="hierarchy-node user"><span>●</span><div><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(costCenterForUser(scenario, user)?.name || "No cost center")} · ${user.licensePlan} seat</small></div></div>`).join("")}</div></div>`;
+    return `<div class="hierarchy-branch"><div class="hierarchy-node org"><span>${icon("organization")}</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenters.map((cc) => `<div class="hierarchy-node cost-center"><span>${icon("costCenter")}</span><div><strong>${escapeHtml(cc.name)}</strong><small>${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}</small></div></div>`).join("") || `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`}${users.map((user) => `<div class="hierarchy-node user"><span>${icon("user")}</span><div><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(costCenterForUser(scenario, user)?.name || "No cost center")} · ${user.licensePlan} seat</small></div></div>`).join("")}</div></div>`;
   }).join("");
 
   const scopedResults = replay.results.filter(eventMatchesOptimizedScope);
