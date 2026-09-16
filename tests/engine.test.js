@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
 import { BUILT_IN_SCENARIOS, materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
+import { trimToastStack } from "../src/toast-stack.js";
 
 function usage(id, date, quantity, overrides = {}) {
   return { id, date, quantity, userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", ...overrides };
@@ -289,6 +290,23 @@ test("simulation page previews selected steps before explicit execution", async 
   assert.match(app, /ACTUAL OUTCOME/);
   assert.match(app, /scenarioRun\.selectedStepIndex = Number/);
   assert.match(app, /Confirm run all/);
+  assert.match(app, /saveAndRender\(message, \{ toast: false \}\)/);
+  assert.match(app, /trimToastStack\(stack, MAX_VISIBLE_TOASTS\)/);
+});
+
+test("toast trimming removes excess notifications synchronously", () => {
+  const nodes = [];
+  const stack = {
+    get children() { return nodes; },
+    get firstElementChild() { return nodes[0] || null; },
+  };
+  for (let index = 0; index < 8; index += 1) {
+    const node = { id: index, dataset: { timer: "0" } };
+    node.remove = () => nodes.splice(nodes.indexOf(node), 1);
+    nodes.push(node);
+  }
+  trimToastStack(stack, 4);
+  assert.deepEqual(nodes.map((node) => node.id), [4, 5, 6, 7]);
 });
 
 test("alert notifications render as a dismissible toast stack", async () => {

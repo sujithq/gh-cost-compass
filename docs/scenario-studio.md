@@ -11,6 +11,7 @@ The Simulation page contains a guided Scenario Studio. It runs a scenario one st
 - **Run selected step** rebuilds through the selected step; any preceding pending steps are applied in order and are called out in the preview.
 - **Run all** first shows a summary of every remaining step and requires a second confirmation click.
 - The outcome area keeps predictions clearly separated from the actual result of the latest applied step.
+- Step navigation does not create informational toasts; alerts and blocked usage still use the bounded toast stack, so repeated execution remains responsive while important signals remain visible inline.
 - **Import definition** adds or replaces a custom scenario in browser storage.
 - **Export** downloads the selected definition as JSON.
 

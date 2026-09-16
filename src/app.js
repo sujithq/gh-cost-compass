@@ -1,5 +1,6 @@
 import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
 import { BUILT_IN_SCENARIOS, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
+import { trimToastStack } from "./toast-stack.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const CUSTOM_SCENARIOS_KEY = "copilot-budget-lab-custom-scenarios-v1";
@@ -36,9 +37,9 @@ function selectedScenarioDefinition() {
   return scenarioDefinitions().find((item) => item.id === scenarioRun.definitionId) || BUILT_IN_SCENARIOS[0];
 }
 
-function saveAndRender(message) {
+function saveAndRender(message, { toast = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(scenario));
-  if (message) showToast(message);
+  if (message && toast) showToast(message);
   render();
 }
 
@@ -71,7 +72,7 @@ function showToast(message, options = {}) {
   stack.append(toast);
   requestAnimationFrame(() => toast.classList.add("show"));
   scheduleToastDismissal(toast, duration);
-  while (stack.children.length > MAX_VISIBLE_TOASTS) dismissToast(stack.firstElementChild);
+  trimToastStack(stack, MAX_VISIBLE_TOASTS);
 }
 
 function announceSimulationFeedback(replay) {
@@ -215,16 +216,24 @@ function renderScenarioStudio() {
     </section>`;
 }
 
+let scenarioTransitionBusy = false;
+
 function runScenarioToStep(stepIndex, message) {
-  const definition = selectedScenarioDefinition();
-  const boundedIndex = Math.max(-1, Math.min(stepIndex, definition.steps.length - 1));
-  const before = replayScenario(materializeScenario(definition, Math.max(-1, boundedIndex - 1)));
-  seenAlertIds = new Set(before.alerts.map((alert) => alert.id));
-  scenario = materializeScenario(definition, boundedIndex);
-  scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, selectedStepIndex: Math.min(boundedIndex + 1, definition.steps.length - 1), started: true, runAllArmed: false };
-  const step = boundedIndex >= 0 ? definition.steps[boundedIndex] : null;
-  latestEventId = step?.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
-  saveAndRender(message);
+  if (scenarioTransitionBusy) return;
+  scenarioTransitionBusy = true;
+  try {
+    const definition = selectedScenarioDefinition();
+    const boundedIndex = Math.max(-1, Math.min(stepIndex, definition.steps.length - 1));
+    const before = replayScenario(materializeScenario(definition, Math.max(-1, boundedIndex - 1)));
+    seenAlertIds = new Set(before.alerts.map((alert) => alert.id));
+    scenario = materializeScenario(definition, boundedIndex);
+    scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, selectedStepIndex: Math.min(boundedIndex + 1, definition.steps.length - 1), started: true, runAllArmed: false };
+    const step = boundedIndex >= 0 ? definition.steps[boundedIndex] : null;
+    latestEventId = step?.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
+    saveAndRender(message, { toast: false });
+  } finally {
+    scenarioTransitionBusy = false;
+  }
 }
 
 function render() {
