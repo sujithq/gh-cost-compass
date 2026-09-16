@@ -14,8 +14,8 @@
       <div class="brand"><span class="brand-mark">⌁</span><div><strong>Copilot Budget Lab</strong><small>Safe simulation sandbox</small></div></div>
       <nav id="navigation">
         <button class="nav-item active" data-view="dashboard">▦ Dashboard</button>
-        <button class="nav-item" data-view="optimized"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/></svg> Optimized UI</button>
         <button class="nav-item" data-view="simulate">▶ Simulate usage</button>
+        <button class="nav-item nav-subitem" data-view="optimized"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/></svg> Optimized UI</button>
         <button class="nav-item" data-view="configuration">⚙ Configuration</button>
         <button class="nav-item" data-view="timeline">≡ Timeline & alerts</button>
       </nav>
@@ -40,6 +40,14 @@
 
       <section id="optimized" class="view">
         <div class="section-heading"><div><p class="eyebrow">OPTIMIZED EXPERIENCE</p><h2>Hierarchy, buckets & consumption</h2></div><span class="pill">Non-breaking preview</span></div>
+
+        <article class="panel optimized-scenario-panel">
+          <div class="optimized-scenario-header">
+            <div><p class="eyebrow">SCENARIO STUDIO</p><h3 id="optimized-scenario-title"></h3><p class="muted" id="optimized-scenario-summary"></p><div id="optimized-scenario-tags" class="scenario-tags"></div></div>
+            <label>Scenario<select id="optimized-scenario-definition"></select></label>
+          </div>
+        </article>
+
         <div class="optimized-layout">
           <article class="panel optimized-map-panel">
             <div class="panel-title"><h3>Enterprise hierarchy</h3><span>Included credits + controls</span></div>
@@ -48,16 +56,17 @@
           <aside class="optimized-side">
             <article class="panel">
               <div class="panel-title"><h3>Credit buckets</h3><span>Current period</span></div>
-              <div id="optimized-buckets" class="optimized-buckets"></div>
-            </article>
-            <article class="panel">
-              <div class="panel-title"><h3>Consumption scrubber</h3><span id="optimized-event-count"></span></div>
               <div class="scrubber-controls">
                 <label>Scope type<select id="optimized-scope-type"><option value="enterprise">Enterprise</option><option value="organization">Organization</option><option value="costCenter">Cost center</option><option value="user">User</option></select></label>
                 <label>Scope<select id="optimized-scope"></select></label>
               </div>
-              <div class="scrubber-row"><button type="button" id="optimized-scrubber-prev" title="Previous event">‹</button><input id="optimized-scrubber" class="consumption-scrubber" type="range" min="0" max="0" value="0"><button type="button" id="optimized-scrubber-next" title="Next event">›</button></div>
-              <div id="optimized-event-detail" class="optimized-event-detail"></div>
+              <div id="optimized-buckets" class="optimized-buckets"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-title"><h3>Scenario timeline</h3><span id="optimized-timeline-label"></span></div>
+              <p class="muted timeline-hint">Steps are plotted by date across the current month so you can see when thresholds and alerts are reached. Click a step to jump there.</p>
+              <div class="timeline-row"><button type="button" id="optimized-timeline-prev" title="Previous step">‹</button><div id="optimized-timeline" class="scenario-timeline" role="list"></div><button type="button" id="optimized-timeline-next" title="Next step">›</button></div>
+              <div id="optimized-step-detail" class="optimized-event-detail"></div>
             </article>
           </aside>
         </div>

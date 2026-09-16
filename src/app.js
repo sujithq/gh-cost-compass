@@ -1,4 +1,4 @@
-import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, replayScenario, replayScenarioThroughEvent, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -572,6 +572,151 @@ function bucketImpactHtml(result) {
   }).join("");
 }
 
+function hashString(value) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  return hash;
+}
+
+function daysInMonth(yearMonth) {
+  const [year, month] = yearMonth.split("-").map(Number);
+  return new Date(year, month, 0).getDate();
+}
+
+// Only "usage" steps carry a real date. Other step types (checkpoints, configuration changes,
+// date advances) are given a deterministic-but-scattered date within the scenario's starting
+// month, purely so the timeline has something meaningful to plot them at — per-request "for now,
+// just use random times spread across a month".
+function stepDisplayDate(definition, step, index) {
+  if (step.type === "usage" && step.event?.date) return step.event.date;
+  const anchor = (definition.startDate || scenario.simulationDate || "2026-09-01").slice(0, 7);
+  const total = daysInMonth(anchor);
+  const day = 1 + (hashString(`${definition.id}:${step.id}:${index}`) % total);
+  return `${anchor}-${String(day).padStart(2, "0")}`;
+}
+
+function changeScenarioDefinition(id) {
+  scenarioRun = { definitionId: id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
+  latestEventId = null;
+  render();
+}
+
+function renderOptimizedScenarioHeader(definition, definitions) {
+  const selector = $("#optimized-scenario-definition");
+  if (!selector) return;
+  if (!definition) {
+    selector.innerHTML = `<option>No scenarios available</option>`;
+    selector.disabled = true;
+    $("#optimized-scenario-title").textContent = "Scenario catalog unavailable";
+    $("#optimized-scenario-summary").textContent = scenarioCatalogError || "Import a valid custom scenario to continue.";
+    $("#optimized-scenario-tags").innerHTML = "";
+    return;
+  }
+  selector.disabled = false;
+  selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${builtInScenarioDefinitions.includes(item) ? "" : " · custom"}</option>`).join("");
+  $("#optimized-scenario-title").textContent = definition.title;
+  $("#optimized-scenario-summary").textContent = definition.summary;
+  $("#optimized-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+}
+
+function bucketRowHtml(item) {
+  return `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`;
+}
+
+function bucketGroupHtml(group) {
+  return `<section class="bucket-group" data-bucket-group="${escapeHtml(group.title)}"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map(bucketRowHtml).join("") || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`;
+}
+
+// Diffing keeps existing DOM nodes (and their in-flight CSS width transition) in place whenever the
+// same set of bucket rows is still shown and only their numbers changed — e.g. stepping the scenario
+// timeline forward. A full innerHTML replace on every update would tear down and recreate the bars,
+// which is why the fill used to visually "jump" instead of animating.
+function updateBucketPanel(groups) {
+  const container = $("#optimized-buckets");
+  if (!container) return;
+  const signature = groups.map((group) => `${group.title}:${group.items.map((item) => item.stateId).join(",")}`).join("|");
+  if (container.dataset.signature !== signature) {
+    container.dataset.signature = signature;
+    container.innerHTML = groups.map(bucketGroupHtml).join("");
+    return;
+  }
+  groups.forEach((group) => {
+    const section = [...container.children].find((child) => child.dataset.bucketGroup === group.title);
+    if (!section) return;
+    const note = section.querySelector("p");
+    if (note) note.textContent = group.note;
+    group.items.forEach((item) => {
+      const row = section.querySelector(`[data-history-id="${item.stateId}"]`);
+      if (!row) return;
+      const bar = row.querySelector(".progress > div");
+      const track = row.querySelector(".progress");
+      const percentEl = row.querySelector("b");
+      const smallEl = row.querySelector("small");
+      if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
+      if (track) track.className = `progress ${statusClass(item.percent)}`;
+      if (percentEl) percentEl.textContent = `${Math.round(item.percent)}%`;
+      if (smallEl) smallEl.textContent = item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`;
+    });
+  });
+}
+
+function renderOptimizedBuckets(replay) {
+  const scopeItems = scopeOptionsFor(optimizedScope.type);
+  const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
+  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
+  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
+  const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
+  const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
+  let poolNote = "Consumed before paid overage starts.";
+  if (optimizedScope.type !== "enterprise") {
+    const scopedUsers = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
+    const scopedContribution = usersInScope(scenario, optimizedScope).reduce((sum, user) => sum + userPoolContribution(user, scenario.simulationDate, scenario), 0);
+    const scopedConsumed = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
+    poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
+  }
+  updateBucketPanel([
+    { title: "Included credits", items: [pool], note: poolNote },
+    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.` },
+    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.` },
+  ]);
+}
+
+// Plots the guided scenario's steps along a horizontal date axis so scrubbing through history is
+// driven by the same stepper used on the Simulate usage page, instead of an independent raw-event
+// index — this is what actually lets the bucket panel above reflect real growth as steps advance.
+function renderOptimizedTimeline(definition) {
+  const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
+  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index));
+  const times = dates.map((date) => new Date(`${date}T00:00:00`).getTime());
+  const min = Math.min(...times);
+  const max = Math.max(...times);
+  const span = Math.max(1, max - min);
+  $("#optimized-timeline").innerHTML = definition.steps.map((step, index) => {
+    const position = ((times[index] - min) / span) * 100;
+    const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
+    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
+  }).join("");
+  $("#optimized-timeline-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length}`;
+  $("#optimized-timeline-prev").disabled = !scenarioRun.started || activeIndex < 0;
+  $("#optimized-timeline-next").disabled = activeIndex >= definition.steps.length - 1;
+}
+
+function renderOptimizedStepDetail(definition, replay) {
+  const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
+  const step = activeIndex >= 0 ? definition.steps[activeIndex] : null;
+  if (!step) {
+    $("#optimized-step-detail").innerHTML = `<div class="empty">Run the first scenario step to see consumption and threshold impact here.</div>`;
+    return;
+  }
+  const resultId = step.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
+  const result = resultId ? replay.results.find((item) => item.eventId === resultId) : null;
+  const inScope = !result || eventMatchesOptimizedScope(result);
+  const body = result
+    ? (inScope ? `<div class="bucket-impact-list">${bucketImpactHtml(result) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div>` : `<p class="muted">This step's usage event is outside the selected scope — pick a broader scope to see its bucket impact.</p>`)
+    : `<p class="muted">This step does not add a usage event; check the credit buckets above for any resulting change.</p>`;
+  $("#optimized-step-detail").innerHTML = `<div class="optimized-event-card ${result?.status || ""}"><div><span class="status-dot ${result?.status || ""}"></span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(stepDisplayDate(definition, step, activeIndex))} · ${escapeHtml(step.type)}</small></div><p>${escapeHtml(step.description)}</p>${body}</div>`;
+}
+
 function renderOptimizedExperience(replay, currency) {
   const typeSelect = $("#optimized-scope-type");
   if (!typeSelect) return;
@@ -580,35 +725,9 @@ function renderOptimizedExperience(replay, currency) {
   if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
   setOptions("#optimized-scope", scopeItems, optimizedScope.id);
 
-  // Resolve the scrubber position against the full (final) replay results first, so the scrubbed-to
-  // event can drive a truncated "as of this event" replay for the bucket panel below.
-  const scopedResults = replay.results.filter(eventMatchesOptimizedScope);
-  const scrubber = $("#optimized-scrubber");
-  scrubber.max = String(Math.max(0, scopedResults.length - 1));
-  scrubber.value = String(Math.min(Number(scrubber.value || 0), Math.max(0, scopedResults.length - 1)));
-  const position = Number(scrubber.value || 0);
-  const selected = scopedResults[position] || scopedResults.at(-1);
-  const atLatest = !selected || position >= scopedResults.length - 1;
-  const snapshot = atLatest ? replay : replayScenarioThroughEvent(scenario, selected.eventId);
-
-  const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
-  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: snapshot.pool.consumed, amount: snapshot.pool.total, remaining: snapshot.pool.remaining, percent: snapshot.pool.percent, budgetKind: "pool" };
-  const userBudgets = snapshot.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
-  const meteredBudgets = snapshot.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
-  const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
-  const snapshotNote = atLatest ? "" : ` Showing totals as of event ${position + 1} of ${scopedResults.length} — drag the scrubber to the end for current totals.`;
-  let poolNote = `Consumed before paid overage starts.${snapshotNote}`;
-  if (optimizedScope.type !== "enterprise") {
-    const scopedUsers = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
-    const scopedContribution = usersInScope(scenario, optimizedScope).reduce((sum, user) => sum + userPoolContribution(user, scenario.simulationDate, scenario), 0);
-    const scopedConsumed = snapshot.results.filter((item) => item.status === "accepted" && item.date.startsWith(snapshot.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
-    poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.${snapshotNote}`;
-  }
-  $("#optimized-buckets").innerHTML = [
-    { title: "Included credits", items: [pool], note: poolNote },
-    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.${snapshotNote}` },
-    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.${snapshotNote}` },
-  ].map((group) => `<section class="bucket-group"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map((item) => `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`).join("") || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`).join("");
+  const definition = selectedScenarioDefinition();
+  renderOptimizedScenarioHeader(definition, scenarioDefinitions());
+  renderOptimizedBuckets(replay);
 
   const scopeNode = (type, id) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""}`;
   $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise scope-node" ${scopeNode("enterprise", scenario.enterprise.id)} tabindex="0" role="button" aria-label="Inspect enterprise scope"><span>${icon("enterprise")}</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
@@ -625,11 +744,18 @@ function renderOptimizedExperience(replay, currency) {
     return `<div class="hierarchy-branch"><div class="hierarchy-node org scope-node" ${scopeNode("organization", org.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(org.name)} scope"><span>${icon("organization")}</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
   }).join("");
 
-  $("#optimized-scrubber-prev").disabled = position <= 0;
-  $("#optimized-scrubber-next").disabled = position >= scopedResults.length - 1;
-  $("#optimized-event-count").textContent = scopedResults.length ? `Event ${position + 1} of ${scopedResults.length}` : "0 events";
-  $("#optimized-event-detail").innerHTML = selected ? `<div class="optimized-event-card ${selected.status}"><div><span class="status-dot ${selected.status}"></span><strong>${escapeHtml(selected.userName)} · ${escapeHtml(selected.productName)}</strong><small>${selected.date} · ${selected.quantity.toLocaleString()} units · ${money(selected.cost, currency)} · ${selected.status}</small></div><p>${escapeHtml(selected.reason)}</p><div class="bucket-impact-list">${bucketImpactHtml(selected) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div></div>` : `<div class="empty">No usage events match this scope yet.</div>`;
+  if (definition) {
+    renderOptimizedTimeline(definition);
+    renderOptimizedStepDetail(definition, replay);
+  } else {
+    $("#optimized-timeline").innerHTML = "";
+    $("#optimized-timeline-label").textContent = "";
+    $("#optimized-timeline-prev").disabled = true;
+    $("#optimized-timeline-next").disabled = true;
+    $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
+  }
 }
+
 
 
 function renderTimeline(replay, currency) {
@@ -681,27 +807,25 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
+$("#optimized-scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
 $("#optimized-scope-type").addEventListener("change", (event) => {
   optimizedScope = { type: event.target.value, id: "" };
-  $("#optimized-scrubber").value = "0";
   renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
 });
 $("#optimized-scope").addEventListener("change", (event) => {
   optimizedScope.id = event.target.value;
-  $("#optimized-scrubber").value = "0";
   renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
 });
-$("#optimized-scrubber").addEventListener("input", () => renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency));
-$("#optimized-scrubber-prev").addEventListener("click", () => { $("#optimized-scrubber").value = String(Math.max(0, Number($("#optimized-scrubber").value) - 1)); renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency); });
-$("#optimized-scrubber-next").addEventListener("click", () => { $("#optimized-scrubber").value = String(Number($("#optimized-scrubber").value) + 1); renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency); });
+$("#optimized-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
+$("#optimized-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
 document.addEventListener("click", (event) => {
   const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
   if (scopeNode) {
     optimizedScope = { type: scopeNode.dataset.scopeType, id: scopeNode.dataset.scopeId };
-    $("#optimized-scrubber").value = "0";
     renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
     return;
   }
+  const timelineStep = event.target.closest("[data-scenario-timeline-step]"); if (timelineStep) { runScenarioToStep(Number(timelineStep.dataset.scenarioTimelineStep), "Scenario advanced to the selected step"); return; }
   const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { scenarioRun.selectedStepIndex = Number(scenarioStep.dataset.scenarioStep); scenarioRun.runAllArmed = false; renderScenarioStudio(); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
   const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
@@ -730,11 +854,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-$("#scenario-definition").addEventListener("change", (event) => {
-  scenarioRun = { definitionId: event.target.value, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
-  latestEventId = null;
-  renderScenarioStudio();
-});
+$("#scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
 $("#scenario-reset").addEventListener("click", () => runScenarioToStep(-1, "Scenario reset to its baseline"));
 $("#scenario-previous").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#scenario-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
