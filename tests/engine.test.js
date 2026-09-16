@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { costCenterIncludedPoolFor, createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
+import { budgetInScope, bucketsForEvent, costCenterIncludedPoolFor, createDefaultScenario, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -294,6 +294,151 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(html, /role="dialog" aria-modal="true"/);
   assert.match(app, /data-history-id="pool"/);
   assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
+});
+
+test("optimized UI is isolated from legacy pages and exposes bucket attribution controls", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  for (const id of ["optimized", "optimized-hierarchy", "optimized-buckets", "optimized-scope-type", "optimized-step-detail"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /data-view="optimized"/);
+  assert.match(app, /renderOptimizedExperience\(replay, currency\)/);
+  assert.match(app, /Included credits/);
+  assert.match(app, /User-level budgets/);
+  assert.match(app, /Budget controls/);
+  assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
+});
+
+test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="global-timeline-prev"/);
+  assert.match(html, /id="global-timeline-next"/);
+  assert.match(app, /data-scope-type="\$\{escapeHtml\(type\)\}" data-scope-id="\$\{escapeHtml\(id\)\}"/);
+  assert.match(app, /closest\("\[data-scope-type\]\[data-scope-id\]"\)/);
+});
+
+test("scenario timeline lives in the app header so it scrubs every page, not just the optimized subpage", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const simulateIndex = html.indexOf('data-view="simulate"');
+  const optimizedIndex = html.indexOf('data-view="optimized"');
+  assert.ok(simulateIndex > -1 && optimizedIndex > simulateIndex, "Optimized UI nav item should come after Simulate usage");
+  assert.match(html, /nav-item nav-subitem" data-view="optimized"/);
+
+  // The timeline bar must sit above the first page section so it is shared by every view.
+  const barIndex = html.indexOf('id="global-timeline-bar"');
+  const firstViewIndex = html.indexOf('class="view');
+  assert.ok(barIndex > -1 && firstViewIndex > barIndex, "global timeline bar should precede the page sections");
+  for (const id of ["global-scenario-definition", "global-timeline", "global-timeline-label"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.doesNotMatch(html, /id="optimized-scrubber"/);
+  assert.doesNotMatch(html, /id="optimized-timeline"/);
+
+  assert.match(app, /data-scenario-timeline-step="\$\{index\}"/);
+  assert.match(app, /closest\("\[data-scenario-timeline-step\]"\)/);
+  assert.match(app, /function stepDisplayDate\(/);
+  assert.match(app, /function updateBucketPanel\(/);
+  // Rendered on every render() pass rather than from renderOptimizedExperience.
+  assert.match(app, /renderGlobalScenarioBar\(\);/);
+  assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
+});
+
+test("hierarchy nodes name their own entity type and share one icon set across pages", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.match(app, /const HIERARCHY_KINDS = \{/);
+  for (const label of ["Enterprise", "Organization", "Cost center", "Repository", "User"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  // Both pages must build their tree from the same function, so structure, icons, colors, and type
+  // labels can never drift apart between the dashboard and the optimized page.
+  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false \} = \{\}\)/);
+  assert.match(app, /\$\("#hierarchy"\)\.innerHTML = hierarchyTreeHtml\("dashboard"\);/);
+  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true \}\);/);
+  assert.match(app, /hierarchy-kind/);
+  assert.doesNotMatch(app, /class="tree-org"/);
+  // Organization and cost-center glyphs were previously near-identical briefcases.
+  const paths = Object.fromEntries([...app.matchAll(/^\s{2}(enterprise|organization|costCenter|user|repo): '(.+)',$/gm)].map((match) => [match[1], match[2]]));
+  assert.equal(new Set(Object.values(paths)).size, 5);
+});
+
+test("the hierarchy tree stays usable at enterprise scale", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  // Enterprise-grade simulations mean many orgs and cost centers and hundreds of users, so the
+  // tree must collapse branches, page oversized leaf lists, and support filtering.
+  assert.match(app, /function hierarchyBranchHtml\(key, nodeHtml, open, summary, childrenHtml\)/);
+  assert.match(app, /data-tree-toggle=/);
+  assert.match(app, /aria-expanded="\$\{open\}"/);
+  // A collapsed branch must not build its subtree at all — that is the point of collapsing.
+  assert.match(app, /\$\{open \? `<div class="hierarchy-children">\$\{childrenHtml\(\)\}<\/div>` : ""\}/);
+  assert.match(app, /const HIERARCHY_LEAF_PAGE = \d+;/);
+  assert.match(app, /const HIERARCHY_AUTO_COLLAPSE_USERS = \d+;/);
+  assert.match(app, /function hierarchyLeafListHtml\(key, leaves\)/);
+  assert.match(app, /data-tree-filter=/);
+  assert.match(app, /data-tree-expand=/);
+  assert.match(app, /data-tree-collapse=/);
+  // "Expand all" must work from scenario data, since collapsed descendants are not in the DOM.
+  assert.match(app, /function setHierarchyExpansionForHost\(hostId, open\)[\s\S]{0,400}scenario\.costCenters\.forEach/);
+});
+
+test("progress bars across every page animate from their previous width", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /function setPanelHtmlWithBarTransitions\(selector, html\)/);
+  assert.match(app, /function progressBarKey\(bar, index\)/);
+  // Every panel that rebuilds bar markup wholesale must route through the helper, otherwise its
+  // bars jump instead of transitioning.
+  assert.match(app, /setPanelHtmlWithBarTransitions\("#budget-grid"/);
+  assert.match(app, /setPanelHtmlWithBarTransitions\("#scenario-outcome"/);
+  assert.doesNotMatch(app, /\$\("#budget-grid"\)\.innerHTML =/);
+  assert.match(app, /requestAnimationFrame\(\(\) => requestAnimationFrame\(/);
+  assert.match(css, /prefers-reduced-motion:reduce\)\{[^}]*\}\.progress>div[^{]*\{transition:none\}/);
+});
+
+test("eventInScope and budgetInScope correlate usage and budgets by scope, not by fragile name matching", () => {
+  const scenario = createDefaultScenario();
+  scenario.events = [usage("one", "2026-09-15", 1000)];
+  const replay = replayScenario(scenario);
+  const result = replay.results[0];
+  const event = scenario.events[0];
+
+  assert.equal(eventInScope(scenario, event, { type: "enterprise" }), true);
+  assert.equal(eventInScope(scenario, event, { type: "user", id: "user-alice" }), true);
+  assert.equal(eventInScope(scenario, event, { type: "user", id: "user-bob" }), false);
+
+  const aliceUlb = scenario.budgets.find((item) => item.id === "ulb-alice");
+  assert.equal(budgetInScope(scenario, aliceUlb, { type: "user", id: "user-alice" }), true);
+  assert.equal(budgetInScope(scenario, aliceUlb, { type: "user", id: "user-bob" }), false);
+
+  const scopedUsers = usersInScope(scenario, { type: "user", id: "user-alice" });
+  assert.deepEqual(scopedUsers.map((item) => item.id), ["user-alice"]);
+
+  const buckets = bucketsForEvent(scenario, event, result);
+  assert.ok(buckets.some((bucket) => bucket.kind === "included"));
+  assert.ok(buckets.some((bucket) => bucket.kind === "ulb"));
+});
+
+test("replayScenarioThroughEvent lets the optimized UI's scrubber show consumption growing event by event", () => {
+  const scenario = createDefaultScenario();
+  scenario.simulationDate = "2026-09-30";
+  scenario.events = [usage("evt-a", "2026-09-05", 5), usage("evt-b", "2026-09-15", 7), usage("evt-c", "2026-09-25", 9)];
+  const full = replayScenario(scenario);
+
+  const throughFirst = replayScenarioThroughEvent(scenario, "evt-a");
+  const throughSecond = replayScenarioThroughEvent(scenario, "evt-b");
+  const throughLast = replayScenarioThroughEvent(scenario, "evt-c");
+
+  // Pool/ULB consumption should strictly grow as later events are included, proving the bucket
+  // panel is no longer frozen at the final totals regardless of scrubber position.
+  assert.ok(throughFirst.pool.consumed < throughSecond.pool.consumed);
+  assert.ok(throughSecond.pool.consumed < throughLast.pool.consumed);
+  assert.deepEqual(throughLast.pool, full.pool);
+  assert.deepEqual(throughLast.budgetStates, full.budgetStates);
+
+  // An unknown or missing event id falls back to the full replay rather than throwing.
+  assert.deepEqual(replayScenarioThroughEvent(scenario, "does-not-exist"), full);
+  assert.deepEqual(replayScenarioThroughEvent(scenario, null), full);
 });
 
 test("budget health scenario catalog stays aligned with the underlying progress math", async () => {
