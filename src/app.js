@@ -686,7 +686,9 @@ function renderOptimizedTimeline(definition) {
   const max = Math.max(...times);
   const span = Math.max(1, max - min);
   $("#optimized-timeline").innerHTML = definition.steps.map((step, index) => {
-    const position = ((times[index] - min) / span) * 100;
+    // Inset the plotted range so the first/last markers (centered via translateX(-50%)) keep their
+    // date labels inside the track instead of overflowing the panel edges.
+    const position = 6 + ((times[index] - min) / span) * 88;
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
     return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");
