@@ -570,6 +570,65 @@ test("guided scenarios preserve historical cost-center pool consumption after di
   assert.equal(replay.pool.consumed, 0);
 });
 
+test("cost-center pool enablement does not create extra included-credit capacity", () => {
+  const definition = {
+    version: 1,
+    id: "pool-capacity-conservation",
+    title: "Pool capacity conservation",
+    summary: "Moving a user into a cost center pool preserves prior included-credit consumption.",
+    setup: [{ target: "budget", id: "ulb-alice", changes: { amount: 200 } }],
+    steps: [
+      {
+        id: "enterprise-before-pool",
+        type: "usage",
+        title: "Use enterprise pool",
+        description: "Alice consumes included credits before the cost center pool is enabled.",
+        expected: "The usage draws from Alice's monthly included-credit contribution.",
+        event: { date: "2026-09-15", userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", quantity: 1000 },
+      },
+      {
+        id: "enable-pool",
+        type: "configuration",
+        title: "Enable pool",
+        description: "AI Innovation enables its own included pool.",
+        expected: "Alice's remaining included capacity is reduced by earlier usage.",
+        mutation: { target: "costCenter", id: "cc-ai", changes: { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" } },
+      },
+      {
+        id: "alice-remaining-capacity",
+        type: "usage",
+        title: "Use remaining capacity",
+        description: "Alice asks for her full 3,900-credit pool after already using 1,000 credits.",
+        expected: "Only 2,900 credits are included; the rest becomes paid overage.",
+        event: { date: "2026-09-15", userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", quantity: 3900 },
+      },
+      {
+        id: "bob-full-capacity",
+        type: "usage",
+        title: "Use Bob's capacity",
+        description: "Bob consumes his Business-seat included credits.",
+        expected: "Bob can still use his own 1,900 included credits.",
+        event: { date: "2026-09-15", userId: "user-bob", repositoryId: "repo-tools", productId: "ai-credits", quantity: 1900 },
+      },
+    ],
+  };
+  const replay = replayScenario(materializeScenario(definition, 3));
+  assert.equal(replay.results[1].includedQuantity, 2900);
+  assert.equal(replay.results[1].meteredQuantity, 1000);
+  assert.equal(replay.results[2].includedQuantity, 1900);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.includedQuantity, 0), 5800);
+  assert.ok(replay.pool.percent <= 100);
+});
+
+test("optimized bucket attribution names cost-center included pools", () => {
+  const scenario = createDefaultScenario();
+  scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled = true;
+  scenario.events = [usage("pool", "2026-09-15", 1000)];
+  const replay = replayScenario(scenario);
+  const bucket = bucketsForEvent(scenario, scenario.events[0], replay.results[0]).find((item) => item.kind === "included");
+  assert.match(bucket.scopeLabel, /AI Innovation included AI-credit pool/);
+});
+
 test("built-in scenarios are loaded from the external catalog", async () => {
   const catalog = JSON.parse(await readFile(new URL("../scenarios/catalog.json", import.meta.url), "utf8"));
   const runner = await readFile(new URL("../src/scenario-runner.js", import.meta.url), "utf8");

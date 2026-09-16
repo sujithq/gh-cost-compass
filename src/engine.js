@@ -209,6 +209,13 @@ export function costCenterIncludedPoolFor(scenario, costCenterId, atDate = scena
   }, 0);
 }
 
+function includedPoolUsers(scenario, costCenter = null) {
+  return scenario.users.filter((user) => {
+    const userCostCenter = costCenterForUser(scenario, user);
+    return costCenter ? userCostCenter?.id === costCenter.id : !userCostCenter?.aiCreditPoolEnabled;
+  });
+}
+
 function nextMonthStart(date) {
   const value = new Date(`${monthKey(date)}-01T00:00:00Z`);
   value.setUTCMonth(value.getUTCMonth() + 1);
@@ -268,6 +275,7 @@ export function replayScenario(scenario) {
   const states = new Map();
   const pools = new Map();
   const costCenterPools = new Map();
+  const includedConsumedByUser = new Map();
   const results = [];
   const alerts = [];
   const orderedEvents = scenario.events.map((event, index) => ({ ...event, _order: index })).filter((event) => event.date <= scenario.simulationDate).sort((a, b) => a.date.localeCompare(b.date) || a._order - b._order);
@@ -286,7 +294,12 @@ export function replayScenario(scenario) {
     const poolTotal = costCenterPoolEnabled ? costCenterIncludedPoolFor(effectiveScenario, eventCostCenter.id, event.date) : includedPoolFor(effectiveScenario, event.date, { excludeCostCenterPools: true });
     const userAccessBlocked = user && !isSeatActiveForDate(user, event.date);
     let blockingReason = userAccessBlocked ? `${user.name} does not have an active Copilot seat on ${event.date}` : null;
-    const includedQuantity = isAi ? Math.min(quantity, Math.max(0, poolTotal - poolBefore)) : 0;
+    const eligiblePoolUsers = isAi ? includedPoolUsers(effectiveScenario, costCenterPoolEnabled ? eventCostCenter : null) : [];
+    const includedCapacityRemaining = eligiblePoolUsers.reduce((sum, poolUser) => {
+      const key = `${poolUser.id}:${period}`;
+      return sum + Math.max(0, userPoolContribution(poolUser, event.date, effectiveScenario) - (includedConsumedByUser.get(key) || 0));
+    }, 0);
+    const includedQuantity = isAi ? Math.min(quantity, includedCapacityRemaining) : 0;
     const meteredQuantity = isAi ? quantity - includedQuantity : quantity;
     const billedCost = meteredQuantity * Number(product?.unitPrice || 0);
     const grossAiValue = isAi ? quantity * AI_CREDIT_PRICE : 0;
@@ -313,6 +326,18 @@ export function replayScenario(scenario) {
     if (!blockingReason) {
       if (isAi && costCenterPoolEnabled) costCenterPools.set(poolStateKey, poolBefore + includedQuantity);
       else if (isAi) pools.set(period, poolBefore + includedQuantity);
+      if (isAi && includedQuantity > 0) {
+        let remainingIncluded = includedQuantity;
+        const allocationOrder = [...eligiblePoolUsers].sort((left, right) => (left.id === user?.id ? -1 : right.id === user?.id ? 1 : left.id.localeCompare(right.id)));
+        for (const poolUser of allocationOrder) {
+          if (remainingIncluded <= 0) break;
+          const key = `${poolUser.id}:${period}`;
+          const remainingContribution = Math.max(0, userPoolContribution(poolUser, event.date, effectiveScenario) - (includedConsumedByUser.get(key) || 0));
+          const allocation = Math.min(remainingIncluded, remainingContribution);
+          if (allocation > 0) includedConsumedByUser.set(key, (includedConsumedByUser.get(key) || 0) + allocation);
+          remainingIncluded -= allocation;
+        }
+      }
       if (userBudget) updateBudget(states, alerts, result, userBudget, userBudgetKey, grossAiValue, event, user.id);
       for (const budget of meteredBudgets) updateBudget(states, alerts, result, budget, `${budget.id}:${period}`, billedCost, event);
     }
@@ -332,6 +357,7 @@ export function replayScenario(scenario) {
   });
   const poolTotal = includedPoolFor(scenario, scenario.simulationDate, { excludeCostCenterPools: true });
   const consumed = pools.get(selectedPeriod) || 0;
+  const effectivePoolTotal = Math.max(poolTotal, consumed);
   const meteredCost = results.filter((item) => item.status === "accepted" && item.date.startsWith(selectedPeriod)).reduce((sum, item) => sum + item.cost, 0);
   const historicalCostCenterPools = new Map(results.filter((item) => item.status === "accepted" && item.date.startsWith(selectedPeriod) && item.poolType === "costCenter").map((item) => [item.poolStateKey, item]));
   const costCenterPoolKeys = new Map(scenario.costCenters.filter((item) => item.aiCreditPoolEnabled).map((costCenter) => [`${costCenter.id}:${selectedPeriod}`, { costCenter }]));
@@ -359,7 +385,7 @@ export function replayScenario(scenario) {
     };
   });
 
-  return { results, alerts, budgetStates, costCenterPoolStates, period: selectedPeriod, pool: { stateId: `enterprise:${selectedPeriod}`, total: poolTotal, consumed, remaining: Math.max(0, poolTotal - consumed), percent: poolTotal ? consumed / poolTotal * 100 : 100, meteredCost } };
+  return { results, alerts, budgetStates, costCenterPoolStates, period: selectedPeriod, pool: { stateId: `enterprise:${selectedPeriod}`, total: effectivePoolTotal, consumed, remaining: Math.max(0, effectivePoolTotal - consumed), percent: effectivePoolTotal ? consumed / effectivePoolTotal * 100 : 100, meteredCost } };
 }
 
 // Re-runs replayScenario as if only events up to and including eventId had happened yet, using the
@@ -441,7 +467,7 @@ export function bucketsForEvent(scenario, event, result) {
   const buckets = [];
   const product = scenario.products.find((item) => item.id === event.productId);
   if (product?.billingMode === "aiCredits" && result.includedQuantity > 0) {
-    buckets.push({ kind: "included", label: "Included AI-credit pool", scopeLabel: "Shared enterprise pool", amount: result.includedQuantity });
+    buckets.push({ kind: "included", label: "Included AI-credit pool", scopeLabel: result.poolName || "Shared enterprise pool", amount: result.includedQuantity });
   }
   for (const impact of result.affectedBudgets) {
     const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
