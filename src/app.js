@@ -280,6 +280,7 @@ function render() {
   renderSummary(replay, currency);
   renderBudgets(replay, currency);
   renderScenarioStudio();
+  renderGlobalScenarioBar();
   renderHierarchy();
   renderOptimizedExperience(replay, currency);
   renderActivity(replay, currency);
@@ -595,22 +596,22 @@ function changeScenarioDefinition(id) {
   render();
 }
 
-function renderOptimizedScenarioHeader(definition, definitions) {
-  const selector = $("#optimized-scenario-definition");
+function renderGlobalScenarioHeader(definition, definitions) {
+  const selector = $("#global-scenario-definition");
   if (!selector) return;
   if (!definition) {
     selector.innerHTML = `<option>No scenarios available</option>`;
     selector.disabled = true;
-    $("#optimized-scenario-title").textContent = "Scenario catalog unavailable";
-    $("#optimized-scenario-summary").textContent = scenarioCatalogError || "Import a valid custom scenario to continue.";
-    $("#optimized-scenario-tags").innerHTML = "";
+    $("#global-scenario-title").textContent = "Scenario catalog unavailable";
+    $("#global-scenario-summary").textContent = scenarioCatalogError || "Import a valid custom scenario to continue.";
+    $("#global-scenario-tags").innerHTML = "";
     return;
   }
   selector.disabled = false;
   selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${builtInScenarioDefinitions.includes(item) ? "" : " · custom"}</option>`).join("");
-  $("#optimized-scenario-title").textContent = definition.title;
-  $("#optimized-scenario-summary").textContent = definition.summary;
-  $("#optimized-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+  $("#global-scenario-title").textContent = definition.title;
+  $("#global-scenario-summary").textContent = definition.summary;
+  $("#global-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
 }
 
 function bucketRowHtml(item) {
@@ -675,26 +676,40 @@ function renderOptimizedBuckets(replay) {
   ]);
 }
 
-// Plots the guided scenario's steps along a horizontal date axis so scrubbing through history is
-// driven by the same stepper used on the Simulate usage page, instead of an independent raw-event
-// index — this is what actually lets the bucket panel above reflect real growth as steps advance.
-function renderOptimizedTimeline(definition) {
+// Plots the guided scenario's steps along a horizontal date axis in the app header, so the same
+// scrubber drives every page (dashboard, simulate usage, optimized UI, timeline & alerts) instead
+// of living on a single subpage. Stepping it re-materializes the scenario via runScenarioToStep,
+// which is what lets every page reflect consumption growth at that point in the month.
+function renderGlobalTimeline(definition) {
   const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
   const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index, definition.steps.length));
   const times = dates.map((date) => new Date(`${date}T00:00:00`).getTime());
   const min = Math.min(...times);
   const max = Math.max(...times);
   const span = Math.max(1, max - min);
-  $("#optimized-timeline").innerHTML = definition.steps.map((step, index) => {
+  $("#global-timeline").innerHTML = definition.steps.map((step, index) => {
     // Inset the plotted range so the first/last markers (centered via translateX(-50%)) keep their
     // date labels inside the track instead of overflowing the panel edges.
     const position = 6 + ((times[index] - min) / span) * 88;
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
     return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");
-  $("#optimized-timeline-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length}`;
-  $("#optimized-timeline-prev").disabled = !scenarioRun.started || activeIndex < 0;
-  $("#optimized-timeline-next").disabled = activeIndex >= definition.steps.length - 1;
+  $("#global-timeline-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}`;
+  $("#global-timeline-prev").disabled = !scenarioRun.started || activeIndex < 0;
+  $("#global-timeline-next").disabled = activeIndex >= definition.steps.length - 1;
+}
+
+function renderGlobalScenarioBar() {
+  const definition = selectedScenarioDefinition();
+  renderGlobalScenarioHeader(definition, scenarioDefinitions());
+  if (definition) {
+    renderGlobalTimeline(definition);
+    return;
+  }
+  $("#global-timeline").innerHTML = "";
+  $("#global-timeline-label").textContent = "";
+  $("#global-timeline-prev").disabled = true;
+  $("#global-timeline-next").disabled = true;
 }
 
 function renderOptimizedStepDetail(definition, replay) {
@@ -722,7 +737,6 @@ function renderOptimizedExperience(replay, currency) {
   setOptions("#optimized-scope", scopeItems, optimizedScope.id);
 
   const definition = selectedScenarioDefinition();
-  renderOptimizedScenarioHeader(definition, scenarioDefinitions());
   renderOptimizedBuckets(replay);
 
   const scopeNode = (type, id) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""}`;
@@ -741,13 +755,8 @@ function renderOptimizedExperience(replay, currency) {
   }).join("");
 
   if (definition) {
-    renderOptimizedTimeline(definition);
     renderOptimizedStepDetail(definition, replay);
   } else {
-    $("#optimized-timeline").innerHTML = "";
-    $("#optimized-timeline-label").textContent = "";
-    $("#optimized-timeline-prev").disabled = true;
-    $("#optimized-timeline-next").disabled = true;
     $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
   }
 }
@@ -787,6 +796,7 @@ function renderResult(replay, currency) {
 function navigate(view) {
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === view));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  $("#global-timeline-bar").classList.toggle("hidden", view === "configuration");
   $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Optimized UI", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
 }
 
@@ -803,7 +813,7 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
-$("#optimized-scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
+$("#global-scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
 $("#optimized-scope-type").addEventListener("change", (event) => {
   optimizedScope = { type: event.target.value, id: "" };
   renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
@@ -812,8 +822,8 @@ $("#optimized-scope").addEventListener("change", (event) => {
   optimizedScope.id = event.target.value;
   renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
 });
-$("#optimized-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
-$("#optimized-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
+$("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
+$("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
 document.addEventListener("click", (event) => {
   const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
   if (scopeNode) {

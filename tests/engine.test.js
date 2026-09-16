@@ -248,7 +248,7 @@ test("dashboard includes an accessible budget history dialog", async () => {
 test("optimized UI is isolated from legacy pages and exposes bucket attribution controls", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  for (const id of ["optimized", "optimized-hierarchy", "optimized-buckets", "optimized-scope-type", "optimized-timeline", "optimized-step-detail"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["optimized", "optimized-hierarchy", "optimized-buckets", "optimized-scope-type", "optimized-step-detail"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /data-view="optimized"/);
   assert.match(app, /renderOptimizedExperience\(replay, currency\)/);
   assert.match(app, /Included credits/);
@@ -260,25 +260,35 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
 test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  assert.match(html, /id="optimized-timeline-prev"/);
-  assert.match(html, /id="optimized-timeline-next"/);
+  assert.match(html, /id="global-timeline-prev"/);
+  assert.match(html, /id="global-timeline-next"/);
   assert.match(app, /data-scope-type="\$\{escapeHtml\(type\)\}" data-scope-id="\$\{escapeHtml\(id\)\}"/);
   assert.match(app, /closest\("\[data-scope-type\]\[data-scope-id\]"\)/);
 });
 
-test("optimized UI is nested under Simulate usage and plots a scenario-step timeline instead of a raw event scrubber", async () => {
+test("scenario timeline lives in the app header so it scrubs every page, not just the optimized subpage", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const simulateIndex = html.indexOf('data-view="simulate"');
   const optimizedIndex = html.indexOf('data-view="optimized"');
   assert.ok(simulateIndex > -1 && optimizedIndex > simulateIndex, "Optimized UI nav item should come after Simulate usage");
   assert.match(html, /nav-item nav-subitem" data-view="optimized"/);
-  assert.match(html, /id="optimized-scenario-definition"/);
+
+  // The timeline bar must sit above the first page section so it is shared by every view.
+  const barIndex = html.indexOf('id="global-timeline-bar"');
+  const firstViewIndex = html.indexOf('class="view');
+  assert.ok(barIndex > -1 && firstViewIndex > barIndex, "global timeline bar should precede the page sections");
+  for (const id of ["global-scenario-definition", "global-timeline", "global-timeline-label"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.doesNotMatch(html, /id="optimized-scrubber"/);
+  assert.doesNotMatch(html, /id="optimized-timeline"/);
+
   assert.match(app, /data-scenario-timeline-step="\$\{index\}"/);
   assert.match(app, /closest\("\[data-scenario-timeline-step\]"\)/);
   assert.match(app, /function stepDisplayDate\(/);
   assert.match(app, /function updateBucketPanel\(/);
+  // Rendered on every render() pass rather than from renderOptimizedExperience.
+  assert.match(app, /renderGlobalScenarioBar\(\);/);
+  assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
 });
 
 test("eventInScope and budgetInScope correlate usage and budgets by scope, not by fragile name matching", () => {
