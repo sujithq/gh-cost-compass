@@ -17,6 +17,12 @@ The Simulation page contains a guided Scenario Studio. It runs a scenario one st
 
 Previous and jump operations are deterministic: the runner recreates the default environment, applies `setup`, and then applies each step through the requested index. It does not attempt to undo mutable state.
 
+## Default enterprise baseline
+
+Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. The enterprise baseline is a deterministic synthetic tenant with 10 organizations, 20 cost centers, 20 repositories, and 200 licensed users. The compact baseline keeps the original two-user demo shape for focused walkthroughs. The enterprise user set includes software engineers, data scientists, project managers, security engineers, SREs, analysts, and designers. Some users intentionally have `costCenterId: null`; those users can still consume the enterprise shared AI-credit pool and fall back to organization or enterprise budget attribution unless an organization-based cost-center assignment applies.
+
+Built-in scenarios should prefer stable seed entities such as `user-alice`, `user-bob`, `org-product`, `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is not important. This keeps examples readable while the surrounding generated tenant gives the dashboard enterprise-scale context.
+
 ## Definition format
 
 Scenario definitions use version 1:

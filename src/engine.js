@@ -1,3 +1,5 @@
+import { DEFAULT_SCENARIO_SET_ID, createScenarioFromDefaultSet, defaultScenarioSetOptions } from "./default-scenario-sets.js";
+
 export const scopeLabels = {
   enterprise: "Enterprise",
   organization: "Organization",
@@ -42,45 +44,12 @@ export function seatChargeForPeriod(user, atDate = new Date().toISOString().slic
   return Number(SEAT_PRICE[user.licensePlan] || 0) * (remainingDays / totalDays);
 }
 
-export function createDefaultScenario() {
-  return {
-    version: 2,
-    enterprise: { id: "ent-acme", name: "Acme Enterprise", currency: "USD", paidAiUsage: true, seatCreditPolicy: "prorated" },
-    organizations: [
-      { id: "org-platform", name: "Platform Engineering" },
-      { id: "org-product", name: "Product Delivery" },
-    ],
-    repositories: [
-      { id: "repo-portal", name: "customer-portal", organizationId: "org-product" },
-      { id: "repo-tools", name: "developer-tools", organizationId: "org-platform" },
-    ],
-    enterpriseTeams: [
-      { id: "team-ai", name: "AI Platform Team", userIds: ["user-alice"] },
-      { id: "team-core", name: "Core Engineering Team", userIds: ["user-bob"] },
-    ],
-    costCenters: [
-      { id: "cc-ai", name: "AI Innovation", organizationIds: [], repositoryIds: [], userIds: [], enterpriseTeamIds: [], aiCreditPoolEnabled: false, aiCreditPoolCapMode: "allowOverage", excludeFromEnterpriseBudget: false },
-      { id: "cc-core", name: "Core Engineering", organizationIds: [], repositoryIds: [], userIds: [], enterpriseTeamIds: [], aiCreditPoolEnabled: false, aiCreditPoolCapMode: "allowOverage", excludeFromEnterpriseBudget: false },
-    ],
-    users: [
-      { id: "user-alice", name: "Alice", organizationIds: ["org-product"], licenseOrganizationId: "org-product", costCenterId: "cc-ai", licensePlan: "enterprise", licenseStartsAt: "2026-09-01", licenseEndsAt: null, licenseEndMode: null },
-      { id: "user-bob", name: "Bob", organizationIds: ["org-platform"], licenseOrganizationId: "org-platform", costCenterId: "cc-core", licensePlan: "business", licenseStartsAt: "2026-09-01", licenseEndsAt: null, licenseEndMode: null },
-    ],
-    products: [
-      { id: "ai-credits", name: "Copilot AI credits", unit: "AI credit", unitPrice: AI_CREDIT_PRICE, billingMode: "aiCredits" },
-      { id: "actions", name: "Actions overage", unit: "minute", unitPrice: 0.008, billingMode: "metered" },
-    ],
-    budgets: [
-      { id: "ulb-universal", name: "Universal ULB", budgetKind: "user", userBudgetType: "universal", scopeType: "enterprise", scopeId: "ent-acme", productId: "ai-credits", amount: 50, effectiveFrom: "2026-09-01", enforcement: "hard", thresholds: [75, 90, 100] },
-      { id: "ulb-ai-team", name: "AI team ULB", budgetKind: "user", userBudgetType: "costCenter", scopeType: "costCenter", scopeId: "cc-ai", productId: "ai-credits", amount: 35, effectiveFrom: "2026-09-01", enforcement: "hard", thresholds: [75, 90, 100] },
-      { id: "ulb-alice", name: "Alice temporary ULB", budgetKind: "user", userBudgetType: "individual", scopeType: "user", scopeId: "user-alice", productId: "ai-credits", amount: 45, effectiveFrom: "2026-09-01", expiresAt: null, enforcement: "hard", thresholds: [75, 90, 100] },
-      { id: "metered-enterprise", name: "Enterprise AI overage", budgetKind: "metered", scopeType: "enterprise", scopeId: "ent-acme", productId: "ai-credits", amount: 100, effectiveFrom: "2026-09-01", enforcement: "hard", thresholds: [75, 90, 100] },
-      { id: "metered-product-org", name: "Product org AI overage", budgetKind: "metered", scopeType: "organization", scopeId: "org-product", productId: "ai-credits", amount: 50, effectiveFrom: "2026-09-01", enforcement: "soft", thresholds: [75, 90, 100] },
-      { id: "metered-ai-team", name: "AI team overage", budgetKind: "metered", scopeType: "costCenter", scopeId: "cc-ai", productId: "ai-credits", amount: 30, effectiveFrom: "2026-09-10", enforcement: "hard", thresholds: [75, 90, 100] },
-    ],
-    events: [],
-    simulationDate: "2026-09-15",
-  };
+export { DEFAULT_SCENARIO_SET_ID, defaultScenarioSetOptions };
+
+export function createDefaultScenario(defaultSetId = DEFAULT_SCENARIO_SET_ID) {
+  // Default sets are authored as JSON and may predate newer fields (enterprise teams, cost center
+  // AI-credit pools), so normalize before handing the scenario out.
+  return normalizeScenario(createScenarioFromDefaultSet(defaultSetId));
 }
 
 export function normalizeScenario(scenario) {
@@ -491,7 +460,51 @@ export function validateScenario(value) {
   normalizeScenario(value);
   const requiredArrays = ["organizations", "repositories", "costCenters", "users", "products", "budgets", "events", "enterpriseTeams"];
   const missing = requiredArrays.find((key) => !Array.isArray(value[key]));
-  return missing ? `Missing ${missing} array.` : null;
+  if (missing) return `Missing ${missing} array.`;
+  const collections = {
+    organizations: value.organizations,
+    repositories: value.repositories,
+    costCenters: value.costCenters,
+    users: value.users,
+    products: value.products,
+    budgets: value.budgets,
+    events: value.events,
+  };
+  for (const [name, items] of Object.entries(collections)) {
+    const ids = items.map((item) => item?.id).filter(Boolean);
+    if (ids.length !== items.length) return `Every ${name} item needs an id.`;
+    const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
+    if (duplicate) return `Duplicate ${name} id: ${duplicate}.`;
+  }
+  const organizationIds = new Set(value.organizations.map((item) => item.id));
+  const repositoryIds = new Set(value.repositories.map((item) => item.id));
+  const costCenterIds = new Set(value.costCenters.map((item) => item.id));
+  const userIds = new Set(value.users.map((item) => item.id));
+  const productIds = new Set(value.products.map((item) => item.id));
+  for (const repository of value.repositories) {
+    if (!organizationIds.has(repository.organizationId)) return `Repository ${repository.id} references unknown organization ${repository.organizationId}.`;
+  }
+  for (const costCenter of value.costCenters) {
+    const unknownOrganization = (costCenter.organizationIds || []).find((id) => !organizationIds.has(id));
+    if (unknownOrganization) return `Cost center ${costCenter.id} references unknown organization ${unknownOrganization}.`;
+  }
+  for (const user of value.users) {
+    if (!organizationIds.has(user.licenseOrganizationId)) return `User ${user.id} references unknown license organization ${user.licenseOrganizationId}.`;
+    const unknownOrganization = (user.organizationIds || []).find((id) => !organizationIds.has(id));
+    if (unknownOrganization) return `User ${user.id} references unknown organization ${unknownOrganization}.`;
+    if (user.costCenterId && !costCenterIds.has(user.costCenterId)) return `User ${user.id} references unknown cost center ${user.costCenterId}.`;
+  }
+  for (const budget of value.budgets) {
+    if (!productIds.has(budget.productId)) return `Budget ${budget.id} references unknown product ${budget.productId}.`;
+    const scopeSets = { enterprise: new Set([value.enterprise.id]), organization: organizationIds, repository: repositoryIds, costCenter: costCenterIds, user: userIds };
+    if (!scopeSets[budget.scopeType]?.has(budget.scopeId)) return `Budget ${budget.id} references unknown ${scopeLabels[budget.scopeType] || budget.scopeType} ${budget.scopeId}.`;
+  }
+  for (const event of value.events) {
+    if (!userIds.has(event.userId)) return `Event ${event.id} references unknown user ${event.userId}.`;
+    if (!productIds.has(event.productId)) return `Event ${event.id} references unknown product ${event.productId}.`;
+    if (event.repositoryId && !repositoryIds.has(event.repositoryId)) return `Event ${event.id} references unknown repository ${event.repositoryId}.`;
+  }
+  return null;
 }
 
 export function createId(prefix) {

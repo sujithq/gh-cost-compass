@@ -1,10 +1,12 @@
-import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, normalizeScenario, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeScope, eventInScope, isSeatActiveForDate, money, normalizeScenario, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
+const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
 const CUSTOM_SCENARIOS_KEY = "copilot-budget-lab-custom-scenarios-v1";
+let defaultScenarioSetId = loadDefaultScenarioSetId();
 let scenario = loadScenario();
 let builtInScenarioDefinitions = [];
 let customScenarioDefinitions = loadCustomScenarioDefinitions();
@@ -18,6 +20,11 @@ let optimizedScope = { type: "enterprise", id: "" };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+const groupBy = (items, keyFor) => items.reduce((groups, item) => {
+  const key = keyFor(item);
+  groups.set(key, [...(groups.get(key) || []), item]);
+  return groups;
+}, new Map());
 
 const ICON_PATHS = {
   hierarchy: '<rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/>',
@@ -40,8 +47,13 @@ function icon(name, className = "") {
 function loadScenario() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return validateScenario(saved) ? createDefaultScenario() : normalizeScenario(saved);
-  } catch { return createDefaultScenario(); }
+    return validateScenario(saved) ? createDefaultScenario(defaultScenarioSetId) : normalizeScenario(saved);
+  } catch { return createDefaultScenario(defaultScenarioSetId); }
+}
+
+function loadDefaultScenarioSetId() {
+  const saved = localStorage.getItem(DEFAULT_SET_STORAGE_KEY);
+  return defaultScenarioSetOptions.some((item) => item.id === saved) ? saved : DEFAULT_SCENARIO_SET_ID;
 }
 
 function loadCustomScenarioDefinitions() {
@@ -60,6 +72,10 @@ function selectedScenarioDefinition() {
   return definitions.find((item) => item.id === scenarioRun.definitionId) || definitions[0] || null;
 }
 
+function materializeScenarioForDefaultSet(definition, stepIndex) {
+  return materializeScenario(definition, stepIndex, { defaultSetId: defaultScenarioSetId });
+}
+
 function saveAndRender(message, { toast = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(scenario));
   if (message && toast) showToast(message);
@@ -67,6 +83,7 @@ function saveAndRender(message, { toast = true } = {}) {
 }
 
 const MAX_VISIBLE_TOASTS = 4;
+const MAX_DASHBOARD_BUDGET_CARDS = 80;
 const TOAST_ICONS = { info: "✓", warning: "!", danger: "×" };
 
 function dismissToast(toast) {
@@ -126,6 +143,21 @@ function statusClass(percent) {
   if (percent >= 90) return "danger";
   if (percent >= 75) return "warning";
   return "";
+}
+
+function scenarioHealthSortRank(item) {
+  if (item.stateId === "pool") return 0;
+  if (item.budgetKind === "user") return 3;
+  if (item.scopeType === "enterprise") return 0;
+  if (item.budgetKind === "metered" && item.scopeType === "organization") return 1;
+  if (item.budgetKind === "metered" && item.scopeType === "costCenter") return 2;
+  return 4;
+}
+
+function sortScenarioHealth(items) {
+  return [...items].sort((left, right) => scenarioHealthSortRank(left) - scenarioHealthSortRank(right)
+    || right.percent - left.percent
+    || left.displayName.localeCompare(right.displayName));
 }
 
 // Identifies a progress bar across re-renders so its previous width can be restored before the new
@@ -238,8 +270,8 @@ function renderScenarioStudio() {
   $("#scenario-run-all").disabled = !hasRemaining;
   $("#scenario-run-all").textContent = scenarioRun.runAllArmed ? `Confirm run all (${definition.steps.length - activeIndex - 1})` : "Run all";
 
-  const currentScenario = scenarioRun.started ? materializeScenario(definition, activeIndex) : materializeScenario(definition, -1);
-  const beforeScenario = materializeScenario(definition, Math.max(-1, activeIndex - 1));
+  const currentScenario = scenarioRun.started ? materializeScenarioForDefaultSet(definition, activeIndex) : materializeScenarioForDefaultSet(definition, -1);
+  const beforeScenario = materializeScenarioForDefaultSet(definition, Math.max(-1, activeIndex - 1));
   const currentReplay = replayScenario(currentScenario);
   const beforeReplay = replayScenario(beforeScenario);
   const currentStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
@@ -251,8 +283,8 @@ function renderScenarioStudio() {
 
   const selectedStep = definition.steps[selectedIndex];
   const previewBeforeIndex = selectedIndex > activeIndex ? activeIndex : Math.max(-1, selectedIndex - 1);
-  const previewBefore = replayScenario(materializeScenario(definition, previewBeforeIndex));
-  const previewAfter = replayScenario(materializeScenario(definition, selectedIndex));
+  const previewBefore = replayScenario(materializeScenarioForDefaultSet(definition, previewBeforeIndex));
+  const previewAfter = replayScenario(materializeScenarioForDefaultSet(definition, selectedIndex));
   const previewChanges = budgetChanges(previewBefore, previewAfter);
   const previewResultId = selectedStep.type === "usage" ? `scenario-${definition.id}-${selectedStep.id}` : null;
   const previewResult = previewResultId ? previewAfter.results.find((item) => item.eventId === previewResultId) : null;
@@ -269,6 +301,7 @@ function renderScenarioStudio() {
     ...currentReplay.costCenterPoolStates.map((pool) => ({ stateId: pool.stateId, displayName: pool.displayName, spent: pool.consumed, amount: pool.total, percent: pool.percent, unit: "credits" })),
     ...currentReplay.budgetStates,
   ];
+  const sortedHealth = sortScenarioHealth(health);
   setPanelHtmlWithBarTransitions("#scenario-outcome", `
     <section class="selected-step-preview">
       <div class="scenario-outcome-heading"><div><p class="eyebrow">SELECTED STEP PREVIEW</p><h3>${escapeHtml(selectedStep.title)}</h3></div><span class="scenario-status preview">Preview · Step ${selectedIndex + 1}</span></div>
@@ -294,7 +327,7 @@ function renderScenarioStudio() {
         ${!changedPools.length && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
         ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
-      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${changedIds.has(item.stateId) ? "changed" : ""}" data-bar-key="${escapeHtml(item.stateId)}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>Enterprise → org → cost center → user · highest percentage first</span></div>${sortedHealth.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}" data-bar-key="${escapeHtml(item.stateId)}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
     </section>`);
 }
 
@@ -306,9 +339,9 @@ function runScenarioToStep(stepIndex, message) {
   try {
     const definition = selectedScenarioDefinition();
     const boundedIndex = Math.max(-1, Math.min(stepIndex, definition.steps.length - 1));
-    const before = replayScenario(materializeScenario(definition, Math.max(-1, boundedIndex - 1)));
+    const before = replayScenario(materializeScenarioForDefaultSet(definition, Math.max(-1, boundedIndex - 1)));
     seenAlertIds = new Set(before.alerts.map((alert) => alert.id));
-    scenario = materializeScenario(definition, boundedIndex);
+    scenario = materializeScenarioForDefaultSet(definition, boundedIndex);
     scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, selectedStepIndex: Math.min(boundedIndex + 1, definition.steps.length - 1), started: true, runAllArmed: false };
     const step = boundedIndex >= 0 ? definition.steps[boundedIndex] : null;
     latestEventId = step?.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
@@ -360,13 +393,18 @@ function renderSummary(replay, currency) {
 function renderBudgets(replay, currency) {
   const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
   const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(pool.displayName)}</h3><p>Cost center included pool · ${pool.capMode === "block" ? "Blocks at cap" : "Continues into paid overage"} · simulator health</p></div><span class="percent">${Math.round(pool.percent)}%</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div></article>`).join("");
-  const cards = replay.budgetStates.map((budget) => {
+  const prioritized = replay.budgetStates.filter((budget) => budget.spent > 0 || budget.triggered.length);
+  const prioritizedIds = new Set(prioritized.map((budget) => budget.stateId));
+  const visibleBudgets = [...prioritized, ...replay.budgetStates.filter((budget) => !prioritizedIds.has(budget.stateId))].slice(0, MAX_DASHBOARD_BUDGET_CARDS);
+  const hiddenCount = replay.budgetStates.length - visibleBudgets.length;
+  const cards = visibleBudgets.map((budget) => {
     const isUlb = budget.budgetKind === "user";
     const scope = isUlb ? `Per user · ${budget.userBudgetType} ULB` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
     return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
-  setPanelHtmlWithBarTransitions("#budget-grid", poolCard + costCenterPoolCards + cards);
+  const hiddenNotice = hiddenCount > 0 ? `<div class="empty">${hiddenCount} lower-activity budget controls are hidden on the dashboard. They remain active in simulation and export data.</div>` : "";
+  setPanelHtmlWithBarTransitions("#budget-grid", poolCard + costCenterPoolCards + cards + hiddenNotice);
 }
 
 function historyEntries(results, detailForResult, emptyMessage) {
@@ -638,8 +676,15 @@ function renderConfiguration() {
   $("#enterprise-currency").value = scenario.enterprise.currency;
   $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
   $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
+  $("#default-scenario-set").innerHTML = defaultScenarioSetOptions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === defaultScenarioSetId ? "selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.summary)}</option>`).join("");
+  const reposByOrg = groupBy(scenario.repositories, (repo) => repo.organizationId);
+  const costCenterMembers = new Map();
+  for (const user of scenario.users) {
+    const costCenterId = costCenterForUser(scenario, user)?.id;
+    if (costCenterId) costCenterMembers.set(costCenterId, (costCenterMembers.get(costCenterId) || 0) + 1);
+  }
   $("#product-list").innerHTML = scenario.products.map((item) => entityRow(item.name, item.billingMode === "aiCredits" ? "Fixed: 1 credit = $0.01" : `${money(item.unitPrice, scenario.enterprise.currency)} / ${item.unit}`, "product", item.id)).join("");
-  $("#organization-list").innerHTML = scenario.organizations.map((item) => entityRow(item.name, `${scenario.repositories.filter((repo) => repo.organizationId === item.id).length} repositories`, "organization", item.id)).join("");
+  $("#organization-list").innerHTML = scenario.organizations.map((item) => entityRow(item.name, `${(reposByOrg.get(item.id) || []).length} repositories`, "organization", item.id)).join("");
   $("#enterprise-team-list").innerHTML = scenario.enterpriseTeams.map((item) => {
     const members = scenario.users.filter((user) => item.userIds.includes(user.id)).map((user) => user.name);
     const costCenters = scenario.costCenters.filter((costCenter) => costCenter.enterpriseTeamIds.includes(item.id)).map((costCenter) => costCenter.name);
@@ -650,7 +695,7 @@ function renderConfiguration() {
     const assignedRepositories = scenario.repositories.filter((repo) => (item.repositoryIds || []).includes(repo.id)).map((repo) => repo.name);
     const assignedTeams = scenario.enterpriseTeams.filter((team) => (item.enterpriseTeamIds || []).includes(team.id)).map((team) => team.name);
     const assignedUsers = scenario.users.filter((user) => (item.userIds || []).includes(user.id)).map((user) => user.name);
-    const members = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === item.id).length;
+    const members = costCenterMembers.get(item.id) || 0;
     const pool = replay.costCenterPoolStates.find((state) => state.costCenterId === item.id);
     const assignments = [
       assignedUsers.length ? `users: ${assignedUsers.join(", ")}` : "",
@@ -1158,7 +1203,7 @@ $("#import-scenario-definition").addEventListener("change", async (event) => {
       const error = validateScenarioDefinition(definition);
       if (error) throw new Error(error);
       if (builtInScenarioDefinitions.some((item) => item.id === definition.id)) throw new Error(`The id ${definition.id} is reserved by a built-in scenario.`);
-      materializeScenario(definition, -1);
+      materializeScenarioForDefaultSet(definition, -1);
       customScenarioDefinitions = customScenarioDefinitions.filter((item) => item.id !== definition.id);
       customScenarioDefinitions.push(definition);
     }
@@ -1228,7 +1273,15 @@ function deleteEntity(type, id) {
 
 $("#export-config").addEventListener("click", () => { const blob = new Blob([JSON.stringify(scenario, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `copilot-budget-scenario-${scenario.simulationDate}.json`; link.click(); URL.revokeObjectURL(link.href); showToast("Scenario exported"); });
 $("#import-config").addEventListener("change", async (event) => { try { const imported = JSON.parse(await event.target.files[0].text()); const error = validateScenario(imported); if (error) throw new Error(error); scenario = imported; latestEventId = null; saveAndRender("Scenario imported"); } catch (error) { showToast(`Import failed: ${error.message}`); } finally { event.target.value = ""; } });
-$("#reset-scenario").addEventListener("click", () => { scenario = createDefaultScenario(); latestEventId = null; $("#last-result").className = "result-placeholder"; $("#last-result").innerHTML = `<span>◎</span><h3>Ready to simulate</h3><p>Submit usage to see attribution, cost, alerts, and enforcement.</p>`; saveAndRender("Demo scenario reset"); });
+$("#default-scenario-set").addEventListener("change", (event) => {
+  defaultScenarioSetId = event.target.value;
+  localStorage.setItem(DEFAULT_SET_STORAGE_KEY, defaultScenarioSetId);
+  scenarioRun.started = false;
+  scenario = createDefaultScenario(defaultScenarioSetId);
+  latestEventId = null;
+  saveAndRender("Default scenario set loaded");
+});
+$("#reset-scenario").addEventListener("click", () => { scenario = createDefaultScenario(defaultScenarioSetId); latestEventId = null; $("#last-result").className = "result-placeholder"; $("#last-result").innerHTML = `<span>◎</span><h3>Ready to simulate</h3><p>Submit usage to see attribution, cost, alerts, and enforcement.</p>`; saveAndRender("Default scenario reset"); });
 $("#clear-events").addEventListener("click", () => { scenario.events = []; latestEventId = null; saveAndRender("Usage history cleared"); });
 
 async function initializeScenarioCatalog() {

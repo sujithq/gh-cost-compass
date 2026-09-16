@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, bucketsForEvent, costCenterIncludedPoolFor, createDefaultScenario, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, bucketsForEvent, costCenterIncludedPoolFor, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -21,11 +21,74 @@ function usage(id, date, quantity, overrides = {}) {
   return { id, date, quantity, userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", ...overrides };
 }
 
+function poolTotalFor(scenario, date = "2026-09-15") {
+  scenario.events = [];
+  scenario.simulationDate = date;
+  return replayScenario(scenario).pool.total;
+}
+
+function quantityWithOverage(scenario, overage = 200, date = "2026-09-15") {
+  return poolTotalFor(scenario, date) + overage;
+}
+
+test("default scenario provides an enterprise-grade synthetic tenant", () => {
+  const scenario = createDefaultScenario();
+  assert.equal(scenario.organizations.length, 10);
+  assert.equal(scenario.costCenters.length, 20);
+  assert.equal(scenario.users.length, 200);
+  assert.ok(scenario.users.some((user) => user.role === "Software Engineer"));
+  assert.ok(scenario.users.some((user) => user.role === "Data Scientist"));
+  assert.ok(scenario.users.some((user) => user.role === "Project Manager"));
+  assert.ok(scenario.users.some((user) => user.costCenterId === null));
+  assert.equal(validateScenario(scenario), null);
+  assert.equal(new Set(scenario.users.map((user) => user.id)).size, scenario.users.length);
+  assert.equal(replayScenario(scenario).results.length, 2);
+});
+
+test("default scenario sets can load the compact demo tenant", () => {
+  assert.ok(defaultScenarioSetOptions.some((item) => item.id === "enterprise"));
+  assert.ok(defaultScenarioSetOptions.some((item) => item.id === "compact"));
+  const scenario = createDefaultScenario("compact");
+  assert.equal(scenario.organizations.length, 2);
+  assert.equal(scenario.costCenters.length, 2);
+  assert.equal(scenario.users.length, 2);
+  assert.equal(validateScenario(scenario), null);
+  assert.equal(replayScenario(scenario).pool.total, 5800);
+});
+
+test("default scenario sets are backed by JSON files", async () => {
+  for (const name of ["enterprise", "compact"]) {
+    const content = await readFile(new URL(`../scenarios/default-sets/${name}.json`, import.meta.url), "utf8");
+    const definition = JSON.parse(content);
+    assert.equal(definition.id, name);
+    assert.equal(definition.scenario.version, 2);
+  }
+});
+
+test("guided scenario materialization can use a selected default set", () => {
+  const definition = {
+    version: 1,
+    id: "selected-default-smoke",
+    title: "Selected default smoke",
+    summary: "Verifies scenario replay can use a non-enterprise default set.",
+    steps: [{ id: "use-ai", type: "usage", title: "Use AI", description: "Alice uses credits.", expected: "Usage is accepted.", event: usage("unused", "2026-09-15", 100) }],
+  };
+  const compact = materializeScenario(definition, 0, { defaultSetId: "compact" });
+  assert.equal(compact.users.length, 2);
+  assert.equal(replayScenario(compact).pool.total, 5800);
+});
+
+test("scenario validation rejects broken enterprise data references", () => {
+  const scenario = createDefaultScenario();
+  scenario.users[0].costCenterId = "cc-missing";
+  assert.match(validateScenario(scenario), /unknown cost center/);
+});
+
 test("AI credits use the shared included pool before creating spend", () => {
   const scenario = createDefaultScenario();
   scenario.events = [usage("one", "2026-09-15", 1000)];
   const replay = replayScenario(scenario);
-  assert.equal(replay.pool.total, 5800);
+  assert.equal(replay.pool.total, 666000);
   assert.equal(replay.pool.consumed, 1000);
   assert.equal(replay.results[0].includedQuantity, 1000);
   assert.equal(replay.results[0].meteredQuantity, 0);
@@ -41,7 +104,7 @@ test("individual ULB overrides cost-center and universal ULBs", () => {
   const bob = replay.budgetStates.find((item) => item.userId === "user-bob");
   assert.equal(alice.id, "ulb-alice");
   assert.equal(alice.spent, 40);
-  assert.equal(bob.id, "ulb-universal");
+  assert.equal(bob.id, "ulb-core-team");
 });
 
 test("ULB counts total consumption and always blocks even while pool remains", () => {
@@ -56,10 +119,10 @@ test("ULB counts total consumption and always blocks even while pool remains", (
 
 test("enterprise and cost-center budgets count only metered overage", () => {
   const scenario = createDefaultScenario();
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
-  assert.equal(replay.results[0].includedQuantity, 5800);
+  assert.equal(replay.results[0].includedQuantity, 666000);
   assert.equal(replay.results[0].meteredQuantity, 200);
   assert.equal(replay.results[0].cost, 2);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 2);
@@ -69,8 +132,8 @@ test("enterprise and cost-center budgets count only metered overage", () => {
 test("cost-center exclusion removes its AI usage from the enterprise budget", () => {
   const scenario = createDefaultScenario();
   scenario.costCenters.find((item) => item.id === "cc-ai").excludeFromEnterpriseBudget = true;
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 0);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 2);
@@ -79,8 +142,8 @@ test("cost-center exclusion removes its AI usage from the enterprise budget", ()
 test("organization AI budget applies only when no cost center is assigned", () => {
   const scenario = createDefaultScenario();
   scenario.users.find((item) => item.id === "user-alice").costCenterId = null;
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-product-org").spent, 2);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 0);
@@ -90,15 +153,15 @@ test("organization cost-center assignment provides fallback attribution", () => 
   const scenario = createDefaultScenario();
   scenario.users.find((item) => item.id === "user-alice").costCenterId = null;
   scenario.costCenters.find((item) => item.id === "cc-ai").organizationIds = ["org-product"];
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 2);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-product-org").spent, 0);
 });
 
 test("enterprise team assignment can attribute users to a cost center", () => {
-  const scenario = createDefaultScenario();
+  const scenario = createDefaultScenario("compact");
   scenario.users.find((item) => item.id === "user-alice").costCenterId = null;
   scenario.costCenters.find((item) => item.id === "cc-ai").enterpriseTeamIds = ["team-ai"];
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
@@ -109,7 +172,8 @@ test("enterprise team assignment can attribute users to a cost center", () => {
 });
 
 test("enabled cost-center AI credit pools partition included credits from the enterprise pool", () => {
-  const scenario = createDefaultScenario();
+  // Pinned to the compact tenant: these credit totals assume cc-ai is funded by Alice alone.
+  const scenario = createDefaultScenario("compact");
   scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled = true;
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("pool", "2026-09-15", 1000)];
@@ -122,7 +186,7 @@ test("enabled cost-center AI credit pools partition included credits from the en
 });
 
 test("cost-center AI credit pool can block at its included cap", () => {
-  const scenario = createDefaultScenario();
+  const scenario = createDefaultScenario("compact");
   Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "block" });
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("near-cap", "2026-09-15", 3800), usage("blocked", "2026-09-15", 200)];
@@ -134,7 +198,7 @@ test("cost-center AI credit pool can block at its included cap", () => {
 });
 
 test("cost-center AI credit pool can roll over into paid metered budgets", () => {
-  const scenario = createDefaultScenario();
+  const scenario = createDefaultScenario("compact");
   Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" });
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("pool", "2026-09-15", 3900), usage("overage", "2026-09-15", 2400)];
@@ -149,8 +213,8 @@ test("cost-center AI credit pool can roll over into paid metered budgets", () =>
 test("paid usage policy blocks overage regardless of budget headroom", () => {
   const scenario = createDefaultScenario();
   scenario.enterprise.paidAiUsage = false;
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "blocked");
   assert.match(replay.results[0].reason, /paid usage policy is disabled/);
@@ -158,9 +222,9 @@ test("paid usage policy blocks overage regardless of budget headroom", () => {
 
 test("metered hard budget blocks overage but not included consumption", () => {
   const scenario = createDefaultScenario();
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
   scenario.budgets.find((item) => item.id === "metered-ai-team").amount = 1;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "blocked");
   assert.match(replay.results[0].reason, /metered-spend hard stop/);
@@ -169,9 +233,9 @@ test("metered hard budget blocks overage but not included consumption", () => {
 test("zero-dollar AI-credit budget blocks metered usage even when configured alert-only", () => {
   const scenario = createDefaultScenario();
   scenario.users.find((item) => item.id === "user-alice").costCenterId = null;
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
   scenario.budgets.find((item) => item.id === "metered-product-org").amount = 0;
-  scenario.events = [usage("over", "2026-09-15", 6000)];
+  scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "blocked");
   assert.match(replay.results[0].reason, /metered-spend hard stop/);
@@ -179,8 +243,9 @@ test("zero-dollar AI-credit budget blocks metered usage even when configured ale
 
 test("a mid-month budget ignores usage before its effective date", () => {
   const scenario = createDefaultScenario();
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
-  scenario.events = [usage("pool", "2026-09-05", 5800), usage("before", "2026-09-09", 100), usage("after", "2026-09-12", 100)];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.events = [usage("pool", "2026-09-05", quantityWithOverage(scenario, 0, "2026-09-05")), usage("before", "2026-09-09", 100), usage("after", "2026-09-12", 100)];
+  scenario.simulationDate = "2026-09-12";
   const replay = replayScenario(scenario);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 1);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 2);
@@ -215,6 +280,7 @@ test("unassignment preserves access through month end while revocation stops it 
 test("pool capacity changes on the effective seat-grant date without rewriting earlier usage", () => {
   const scenario = createDefaultScenario();
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.users = scenario.users.filter((user) => ["user-alice", "user-bob"].includes(user.id));
   scenario.users.find((user) => user.id === "user-alice").licenseStartsAt = "2026-09-20";
   scenario.events = [
     usage("before-add", "2026-09-10", 2000, { userId: "user-bob", repositoryId: "repo-tools" }),
@@ -259,6 +325,7 @@ test("future events remain scheduled until the clock advances", () => {
 test("configuration help exposes impact regions and official GitHub citations", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   for (const id of ["enterprise-impact", "cost-center-impact", "user-impact", "budget-impact"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /id="default-scenario-set"/);
   for (const id of ["enterprise-team-form", "enterprise-team-users", "cost-center-ai-pool", "cost-center-pool-mode", "cost-center-team", "cost-center-repository"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /docs\.github\.com\/en\/copilot\/concepts\/billing-and-usage\/organizations-and-enterprises\/billing/);
   assert.match(html, /docs\.github\.com\/en\/billing\/reference\/cost-center-allocation/);
@@ -268,9 +335,10 @@ test("configuration help exposes impact regions and official GitHub citations", 
 
 test("threshold alerts carry the state key needed to open budget history", () => {
   const scenario = createDefaultScenario();
-  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+  scenario.budgets.find((item) => item.id === "metered-ai-team").amount = 30;
   scenario.budgets.find((item) => item.id === "metered-ai-team").thresholds = [75, 90, 100];
-  scenario.events = [usage("pool", "2026-09-15", 5800), usage("over", "2026-09-15", 2400)];
+  scenario.events = [usage("pool", "2026-09-15", quantityWithOverage(scenario, 0)), usage("over", "2026-09-15", 2400)];
   const replay = replayScenario(scenario);
   const alert = replay.alerts.find((item) => item.budgetId === "metered-ai-team");
   assert.equal(alert.stateKey, "metered-ai-team:2026-09");
@@ -470,9 +538,13 @@ test("guided scenarios are declarative, reversible, and produce their documented
     assert.deepEqual(materializeScenario(definition, -1), baseline);
   }
 
+  // Outcome assertions below reference the user-alice / cc-ai fixtures and the credit arithmetic of
+  // the two-user tenant, so they pin the compact set rather than the enterprise default.
+  const compactAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "compact" });
+
   const progression = BUILT_IN_SCENARIOS.find((item) => item.id === "budget-health-progression");
-  const atNinety = replayScenario(materializeScenario(progression, 3));
-  const atHundred = replayScenario(materializeScenario(progression, 4));
+  const atNinety = replayScenario(compactAt(progression, 3));
+  const atHundred = replayScenario(compactAt(progression, 4));
   const aliceAtNinety = atNinety.budgetStates.find((item) => item.id === "ulb-alice");
   const aliceAtHundred = atHundred.budgetStates.find((item) => item.id === "ulb-alice");
   assert.equal(aliceAtNinety.percent, 90);
@@ -481,17 +553,17 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.ok(atHundred.alerts.some((alert) => alert.budgetId === "ulb-alice" && alert.threshold === 100));
 
   const hardStop = BUILT_IN_SCENARIOS.find((item) => item.id === "hard-stop-boundary");
-  const blocked = replayScenario(materializeScenario(hardStop, 1));
+  const blocked = replayScenario(compactAt(hardStop, 1));
   assert.equal(blocked.results.at(-1).status, "blocked");
   assert.match(blocked.results.at(-1).reason, /user-level hard stop/);
 
   const poolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-blocks");
-  const blockedAtPool = replayScenario(materializeScenario(poolBlocks, 1));
+  const blockedAtPool = replayScenario(compactAt(poolBlocks, 1));
   assert.equal(blockedAtPool.results.at(-1).status, "blocked");
   assert.match(blockedAtPool.results.at(-1).reason, /AI credit pool cap/);
 
   const poolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-to-overage");
-  const overage = replayScenario(materializeScenario(poolOverage, 1));
+  const overage = replayScenario(compactAt(poolOverage, 1));
   assert.equal(overage.results.at(-1).status, "accepted");
   assert.equal(overage.results.at(-1).meteredQuantity, 2400);
   assert.ok(overage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
@@ -612,7 +684,9 @@ test("cost-center pool enablement does not create extra included-credit capacity
       },
     ],
   };
-  const replay = replayScenario(materializeScenario(definition, 3));
+  // Pinned to the compact set: the assertions below depend on cc-ai's pool being funded by Alice
+  // alone, which is only true in the two-user tenant.
+  const replay = replayScenario(materializeScenario(definition, 3, { defaultSetId: "compact" }));
   assert.equal(replay.results[1].includedQuantity, 2900);
   assert.equal(replay.results[1].meteredQuantity, 1000);
   assert.equal(replay.results[2].includedQuantity, 1900);

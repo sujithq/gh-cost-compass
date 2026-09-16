@@ -1,0 +1,111 @@
+{
+  "id": "enterprise",
+  "name": "Enterprise synthetic tenant",
+  "summary": "10 orgs, 20 cost centers, 200 licensed users",
+  "scenario": {
+    "version": 2,
+    "enterprise": { "id": "ent-acme", "name": "Acme Enterprise", "currency": "USD", "paidAiUsage": true, "seatCreditPolicy": "prorated" },
+    "organizations": [
+      { "id": "org-platform", "name": "Platform Engineering" },
+      { "id": "org-product", "name": "Product Delivery" },
+      { "id": "org-data", "name": "Data & AI" },
+      { "id": "org-security", "name": "Security Engineering" },
+      { "id": "org-cloud", "name": "Cloud Infrastructure" },
+      { "id": "org-mobile", "name": "Mobile Experiences" },
+      { "id": "org-finance", "name": "Finance Systems" },
+      { "id": "org-sales", "name": "Sales Technology" },
+      { "id": "org-support", "name": "Customer Support Platforms" },
+      { "id": "org-research", "name": "Research Labs" }
+    ],
+    "repositories": [
+      { "id": "repo-tools", "name": "developer-tools", "organizationId": "org-platform" },
+      { "id": "repo-internal-platform", "name": "internal-platform", "organizationId": "org-platform" },
+      { "id": "repo-portal", "name": "customer-portal", "organizationId": "org-product" },
+      { "id": "repo-commerce-api", "name": "commerce-api", "organizationId": "org-product" },
+      { "id": "repo-data-services", "name": "data-services", "organizationId": "org-data" },
+      { "id": "repo-data-ops", "name": "data-ops", "organizationId": "org-data" },
+      { "id": "repo-security-services", "name": "security-services", "organizationId": "org-security" },
+      { "id": "repo-security-ops", "name": "security-ops", "organizationId": "org-security" },
+      { "id": "repo-cloud-services", "name": "cloud-services", "organizationId": "org-cloud" },
+      { "id": "repo-cloud-ops", "name": "cloud-ops", "organizationId": "org-cloud" },
+      { "id": "repo-mobile-services", "name": "mobile-services", "organizationId": "org-mobile" },
+      { "id": "repo-mobile-ops", "name": "mobile-ops", "organizationId": "org-mobile" },
+      { "id": "repo-finance-services", "name": "finance-services", "organizationId": "org-finance" },
+      { "id": "repo-finance-ops", "name": "finance-ops", "organizationId": "org-finance" },
+      { "id": "repo-sales-services", "name": "sales-services", "organizationId": "org-sales" },
+      { "id": "repo-sales-ops", "name": "sales-ops", "organizationId": "org-sales" },
+      { "id": "repo-support-services", "name": "support-services", "organizationId": "org-support" },
+      { "id": "repo-support-ops", "name": "support-ops", "organizationId": "org-support" },
+      { "id": "repo-research-services", "name": "research-services", "organizationId": "org-research" },
+      { "id": "repo-research-ops", "name": "research-ops", "organizationId": "org-research" }
+    ],
+    "costCenters": [
+      { "id": "cc-ai", "name": "AI Innovation", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-core", "name": "Core Engineering", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-developer-experience", "name": "Developer Experience", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-data-science", "name": "Data Science", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-product-management", "name": "Product Management", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-security-operations", "name": "Security Operations", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-cloud-platform", "name": "Cloud Platform", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-mobile-engineering", "name": "Mobile Engineering", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-finance-automation", "name": "Finance Automation", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-revenue-systems", "name": "Revenue Systems", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-support-engineering", "name": "Support Engineering", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-research-prototypes", "name": "Research Prototypes", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-enterprise-architecture", "name": "Enterprise Architecture", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-quality-engineering", "name": "Quality Engineering", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-sre-operations", "name": "SRE Operations", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-partner-integrations", "name": "Partner Integrations", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-analytics-enablement", "name": "Analytics Enablement", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-compliance-technology", "name": "Compliance Technology", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-customer-success", "name": "Customer Success", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+      { "id": "cc-internal-tools", "name": "Internal Tools", "organizationIds": [], "excludeFromEnterpriseBudget": false }
+    ],
+    "users": [
+      { "id": "user-alice", "name": "Alice Chen - Software Engineer", "role": "Software Engineer", "organizationIds": ["org-product"], "licenseOrganizationId": "org-product", "costCenterId": "cc-ai", "licensePlan": "enterprise", "licenseStartsAt": "2026-09-01", "licenseEndsAt": null, "licenseEndMode": null },
+      { "id": "user-bob", "name": "Bob Singh - Project Manager", "role": "Project Manager", "organizationIds": ["org-platform"], "licenseOrganizationId": "org-platform", "costCenterId": "cc-core", "licensePlan": "business", "licenseStartsAt": "2026-09-01", "licenseEndsAt": null, "licenseEndMode": null }
+    ],
+    "products": [
+      { "id": "ai-credits", "name": "Copilot AI credits", "unit": "AI credit", "unitPrice": 0.01, "billingMode": "aiCredits" },
+      { "id": "actions", "name": "Actions overage", "unit": "minute", "unitPrice": 0.008, "billingMode": "metered" }
+    ],
+    "budgets": [
+      { "id": "ulb-universal", "name": "Universal ULB", "budgetKind": "user", "userBudgetType": "universal", "scopeType": "enterprise", "scopeId": "ent-acme", "productId": "ai-credits", "amount": 50, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "ulb-ai-team", "name": "AI team ULB", "budgetKind": "user", "userBudgetType": "costCenter", "scopeType": "costCenter", "scopeId": "cc-ai", "productId": "ai-credits", "amount": 35, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "ulb-core-team", "name": "Core engineering ULB", "budgetKind": "user", "userBudgetType": "costCenter", "scopeType": "costCenter", "scopeId": "cc-core", "productId": "ai-credits", "amount": 30, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "ulb-data-science", "name": "Data science ULB", "budgetKind": "user", "userBudgetType": "costCenter", "scopeType": "costCenter", "scopeId": "cc-data-science", "productId": "ai-credits", "amount": 40, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "ulb-alice", "name": "Alice temporary ULB", "budgetKind": "user", "userBudgetType": "individual", "scopeType": "user", "scopeId": "user-alice", "productId": "ai-credits", "amount": 45, "effectiveFrom": "2026-09-01", "expiresAt": null, "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "metered-enterprise", "name": "Enterprise AI overage", "budgetKind": "metered", "scopeType": "enterprise", "scopeId": "ent-acme", "productId": "ai-credits", "amount": 5000, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "metered-product-org", "name": "Product org AI overage", "budgetKind": "metered", "scopeType": "organization", "scopeId": "org-product", "productId": "ai-credits", "amount": 1250, "effectiveFrom": "2026-09-01", "enforcement": "soft", "thresholds": [75, 90, 100] },
+      { "id": "metered-data-org", "name": "Data org AI overage", "budgetKind": "metered", "scopeType": "organization", "scopeId": "org-data", "productId": "ai-credits", "amount": 1500, "effectiveFrom": "2026-09-01", "enforcement": "soft", "thresholds": [75, 90, 100] },
+      { "id": "metered-ai-team", "name": "AI team overage", "budgetKind": "metered", "scopeType": "costCenter", "scopeId": "cc-ai", "productId": "ai-credits", "amount": 1000, "effectiveFrom": "2026-09-10", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "metered-core-team", "name": "Core engineering overage", "budgetKind": "metered", "scopeType": "costCenter", "scopeId": "cc-core", "productId": "ai-credits", "amount": 1000, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+      { "id": "metered-actions-enterprise", "name": "Enterprise Actions overage", "budgetKind": "metered", "scopeType": "enterprise", "scopeId": "ent-acme", "productId": "actions", "amount": 2500, "effectiveFrom": "2026-09-01", "enforcement": "soft", "thresholds": [75, 90, 100] }
+    ],
+    "events": [
+      { "id": "evt-ai-alice", "date": "2026-09-15", "userId": "user-alice", "repositoryId": "repo-portal", "productId": "ai-credits", "quantity": 1200 },
+      { "id": "evt-ai-bob", "date": "2026-09-15", "userId": "user-bob", "repositoryId": "repo-tools", "productId": "ai-credits", "quantity": 850 },
+      { "id": "evt-ai-data", "date": "2026-09-16", "userId": "user-scientist-003", "repositoryId": "repo-data-services", "productId": "ai-credits", "quantity": 1800 },
+      { "id": "evt-ai-unassigned", "date": "2026-09-16", "userId": "user-engineer-012", "repositoryId": "repo-cloud-services", "productId": "ai-credits", "quantity": 650 },
+      { "id": "evt-actions-platform", "date": "2026-09-16", "userId": "user-engineer-004", "repositoryId": "repo-tools", "productId": "actions", "quantity": 2400 }
+    ],
+    "simulationDate": "2026-09-15"
+  },
+  "generatedUsers": {
+    "skipFirst": 2,
+    "licenseStartsAt": "2026-09-01",
+    "secondaryOrganizationEvery": 17,
+    "secondaryOrganizationOffset": 3,
+    "nullCostCenterEvery": 14,
+    "nullCostCenterUserIds": ["user-engineer-012"],
+    "roleProfiles": [
+      { "role": "Software Engineer", "prefix": "Engineer", "count": 74, "licensePlan": "enterprise" },
+      { "role": "Data Scientist", "prefix": "Scientist", "count": 34, "licensePlan": "enterprise" },
+      { "role": "Project Manager", "prefix": "Manager", "count": 26, "licensePlan": "business" },
+      { "role": "Security Engineer", "prefix": "Security", "count": 18, "licensePlan": "enterprise" },
+      { "role": "Site Reliability Engineer", "prefix": "SRE", "count": 18, "licensePlan": "enterprise" },
+      { "role": "Business Analyst", "prefix": "Analyst", "count": 16, "licensePlan": "business" },
+      { "role": "UX Designer", "prefix": "Designer", "count": 14, "licensePlan": "business" }
+    ]
+  }
+}
