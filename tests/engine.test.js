@@ -298,16 +298,36 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   for (const label of ["Enterprise", "Organization", "Cost center", "Repository", "User"]) {
     assert.match(app, new RegExp(`label: "${label}"`));
   }
-  // Both the dashboard tree and the optimized tree must build nodes through the same helper, so
-  // icons, colors, and type labels can never drift apart between the two pages.
-  assert.match(app, /function hierarchyNodeHtml\(kind, name, detail/);
+  // Both pages must build their tree from the same function, so structure, icons, colors, and type
+  // labels can never drift apart between the dashboard and the optimized page.
+  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false \} = \{\}\)/);
+  assert.match(app, /\$\("#hierarchy"\)\.innerHTML = hierarchyTreeHtml\("dashboard"\);/);
+  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true \}\);/);
   assert.match(app, /hierarchy-kind/);
-  assert.match(app, /\$\("#hierarchy"\)\.innerHTML = legend \+ hierarchyNodeHtml\("enterprise"/);
-  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyNodeHtml\("enterprise"/);
   assert.doesNotMatch(app, /class="tree-org"/);
   // Organization and cost-center glyphs were previously near-identical briefcases.
   const paths = Object.fromEntries([...app.matchAll(/^\s{2}(enterprise|organization|costCenter|user|repo): '(.+)',$/gm)].map((match) => [match[1], match[2]]));
   assert.equal(new Set(Object.values(paths)).size, 5);
+});
+
+test("the hierarchy tree stays usable at enterprise scale", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  // Enterprise-grade simulations mean many orgs and cost centers and hundreds of users, so the
+  // tree must collapse branches, page oversized leaf lists, and support filtering.
+  assert.match(app, /function hierarchyBranchHtml\(key, nodeHtml, open, summary, childrenHtml\)/);
+  assert.match(app, /data-tree-toggle=/);
+  assert.match(app, /aria-expanded="\$\{open\}"/);
+  // A collapsed branch must not build its subtree at all — that is the point of collapsing.
+  assert.match(app, /\$\{open \? `<div class="hierarchy-children">\$\{childrenHtml\(\)\}<\/div>` : ""\}/);
+  assert.match(app, /const HIERARCHY_LEAF_PAGE = \d+;/);
+  assert.match(app, /const HIERARCHY_AUTO_COLLAPSE_USERS = \d+;/);
+  assert.match(app, /function hierarchyLeafListHtml\(key, leaves\)/);
+  assert.match(app, /data-tree-filter=/);
+  assert.match(app, /data-tree-expand=/);
+  assert.match(app, /data-tree-collapse=/);
+  // "Expand all" must work from scenario data, since collapsed descendants are not in the DOM.
+  assert.match(app, /function setHierarchyExpansionForHost\(hostId, open\)[\s\S]{0,400}scenario\.costCenters\.forEach/);
 });
 
 test("progress bars across every page animate from their previous width", async () => {

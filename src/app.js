@@ -427,26 +427,143 @@ const HIERARCHY_KINDS = {
   user: { label: "User", className: "user" },
 };
 
+// Enterprise-grade scenarios are the target: many organizations and cost centers, and hundreds of
+// users. Everything below keeps the tree readable at that size — branches collapse, oversized leaf
+// lists page in on demand, and a filter narrows the tree instead of forcing a manual hunt.
+const HIERARCHY_LEAF_PAGE = 25;
+const HIERARCHY_AUTO_COLLAPSE_USERS = 40;
+const hierarchyExpansion = new Map();
+const hierarchyFilters = new Map();
+
+function hierarchyExpanded(key, fallback) {
+  return hierarchyExpansion.has(key) ? hierarchyExpansion.get(key) : fallback;
+}
 function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "") {
   const meta = HIERARCHY_KINDS[kind];
   return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small></div></div>`;
 }
 
-function renderHierarchy() {
-  const legend = `<div class="hierarchy-legend">${Object.entries(HIERARCHY_KINDS).map(([kind, meta]) => `<span class="${meta.className}">${icon(kind)}${meta.label}</span>`).join("")}</div>`;
-  const tree = scenario.organizations.map((org) => {
+function hierarchyLeafHtml(nodeHtml) {
+  return `<div class="hierarchy-row leaf">${nodeHtml}</div>`;
+}
+
+// `childrenHtml` is a thunk so a collapsed branch never pays to build its subtree — the point of
+// collapsing at enterprise scale is to avoid generating thousands of nodes per render.
+function hierarchyBranchHtml(key, nodeHtml, open, summary, childrenHtml) {
+  return `<div class="hierarchy-branch"><div class="hierarchy-row"><button type="button" class="hierarchy-toggle" data-tree-toggle="${escapeHtml(key)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="sr-only">${open ? "Collapse" : "Expand"} ${escapeHtml(summary)}</span></button>${nodeHtml}</div>${open ? `<div class="hierarchy-children">${childrenHtml()}</div>` : ""}</div>`;
+}
+
+// Renders a long list of sibling leaves in pages so a cost center with 300 users doesn't emit 300
+// DOM nodes on every scrub tick.
+function hierarchyLeafListHtml(key, leaves) {
+  if (!leaves.length) return "";
+  if (leaves.length <= HIERARCHY_LEAF_PAGE) return leaves.join("");
+  const showAll = hierarchyExpanded(`${key}::all`, false);
+  const shown = showAll ? leaves : leaves.slice(0, HIERARCHY_LEAF_PAGE);
+  return shown.join("") + `<button type="button" class="hierarchy-more" data-tree-toggle="${escapeHtml(key)}::all">${showAll ? `Show fewer` : `Show all ${leaves.length}`}</button>`;
+}
+
+function hierarchyMatches(filter, ...values) {
+  if (!filter) return true;
+  return values.some((value) => String(value || "").toLowerCase().includes(filter));
+}
+
+// Builds the enterprise → organization → cost center → user/repository tree used by both the
+// dashboard and the optimized page, so the two can never present different structures.
+function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
+  const filter = (hierarchyFilters.get(hostId) || "").trim().toLowerCase();
+  const autoCollapse = scenario.users.length > HIERARCHY_AUTO_COLLAPSE_USERS;
+  // While filtering, matches are always revealed: a stored collapse from before the search would
+  // otherwise hide the very rows the user just searched for.
+  const branchOpen = (key, fallback) => (filter ? true : hierarchyExpanded(key, fallback));
+  const scopeAttributes = (type, id, name) => (scopeNodes ? `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"` : "");
+  const scopeClass = scopeNodes ? "scope-node" : "";
+  let matchCount = 0;
+
+  const branches = scenario.organizations.map((org) => {
+    const orgKey = `${hostId}:org:${org.id}`;
     const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
     const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
     const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
-    const children = [
-      ...costCenters.map((cc) => hierarchyNodeHtml("costCenter", cc.name, `${users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id).length} user${users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id).length === 1 ? "" : "s"} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`)),
-      ...repos.map((repo) => hierarchyNodeHtml("repo", repo.name, `Usage in this repository bills to ${org.name}`)),
-      ...users.map((user) => hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`)),
-    ];
-    return `<div class="hierarchy-branch">${hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"}`)}<div class="hierarchy-lane">${children.join("") || `<div class="empty">No cost centers, repositories, or users yet.</div>`}</div></div>`;
-  }).join("") || `<div class="empty">No organizations configured yet.</div>`;
+    const orgMatches = hierarchyMatches(filter, org.name);
 
-  $("#hierarchy").innerHTML = legend + hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`) + tree;
+    const userLeafHtml = (user) => hierarchyLeafHtml(hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeAttributes("user", user.id, user.name), scopeClass));
+    const visibleUsers = (list) => list.filter((user) => orgMatches || hierarchyMatches(filter, user.name, costCenterForUser(scenario, user)?.name));
+
+    const costCenterHtml = costCenters.map((cc) => {
+      const ccKey = `${hostId}:cc:${cc.id}`;
+      const ccUsers = users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id);
+      const ccMatches = orgMatches || hierarchyMatches(filter, cc.name);
+      const shownUsers = ccMatches ? ccUsers : visibleUsers(ccUsers);
+      if (filter && !ccMatches && !shownUsers.length) return "";
+      matchCount += 1 + shownUsers.length;
+      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUsers.length} user${ccUsers.length === 1 ? "" : "s"} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass);
+      const open = branchOpen(ccKey, !autoCollapse);
+      return hierarchyBranchHtml(ccKey, node, open, `${cc.name} members`, () => hierarchyLeafListHtml(ccKey, shownUsers.map(userLeafHtml)) || `<div class="empty">No users assigned.</div>`);
+    }).join("");
+
+    const unassigned = visibleUsers(users.filter((user) => !costCenterForUser(scenario, user)));
+    const unassignedKey = `${hostId}:unassigned:${org.id}`;
+    const unassignedOpen = branchOpen(unassignedKey, !autoCollapse);
+    let unassignedHtml = "";
+    if (unassigned.length) {
+      matchCount += unassigned.length;
+      const node = `<div class="hierarchy-node cost-center muted-node"><span>${icon("costCenter")}</span><div><span class="hierarchy-kind">Cost center</span><strong>No cost center</strong><small>${unassigned.length} user${unassigned.length === 1 ? "" : "s"} not assigned</small></div></div>`;
+      unassignedHtml = hierarchyBranchHtml(unassignedKey, node, unassignedOpen, "unassigned users", () => hierarchyLeafListHtml(unassignedKey, unassigned.map(userLeafHtml)));
+    }
+
+    const visibleRepos = repos.filter((repo) => orgMatches || hierarchyMatches(filter, repo.name));
+    const repoKey = `${hostId}:repos:${org.id}`;
+    const repoOpen = branchOpen(repoKey, !autoCollapse);
+    let repoHtml = "";
+    if (visibleRepos.length) {
+      matchCount += visibleRepos.length;
+      const node = `<div class="hierarchy-node repo"><span>${icon("repo")}</span><div><span class="hierarchy-kind">Repositories</span><strong>${visibleRepos.length} repositor${visibleRepos.length === 1 ? "y" : "ies"}</strong><small>Usage here bills to ${escapeHtml(org.name)}</small></div></div>`;
+      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`)))));
+    }
+
+    const children = costCenterHtml + unassignedHtml + repoHtml;
+    if (filter && !orgMatches && !children) return "";
+    if (orgMatches) matchCount += 1;
+    const orgOpen = branchOpen(orgKey, true);
+    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass);
+    return hierarchyBranchHtml(orgKey, orgNode, orgOpen, org.name, () => children || `<div class="empty">No cost centers, repositories, or users yet.</div>`);
+  }).join("");
+
+  const enterpriseKey = `${hostId}:enterprise`;
+  const enterpriseOpen = branchOpen(enterpriseKey, true);
+  const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass);
+  const body = branches || `<div class="empty">${filter ? "No organizations, cost centers, repositories, or users match this filter." : "No organizations configured yet."}</div>`;
+
+  const legend = `<div class="hierarchy-legend">${Object.entries(HIERARCHY_KINDS).map(([kind, meta]) => `<span class="${meta.className}">${icon(kind)}${meta.label}</span>`).join("")}</div>`;
+  const controls = `<div class="hierarchy-controls"><input type="search" class="hierarchy-filter" data-tree-filter="${escapeHtml(hostId)}" value="${escapeHtml(hierarchyFilters.get(hostId) || "")}" placeholder="Filter organizations, cost centers, repositories, users" aria-label="Filter the enterprise hierarchy"><button type="button" class="text-button" data-tree-expand="${escapeHtml(hostId)}">Expand all</button><button type="button" class="text-button" data-tree-collapse="${escapeHtml(hostId)}">Collapse all</button></div>${filter ? `<p class="hierarchy-hint">${matchCount} match${matchCount === 1 ? "" : "es"} for “${escapeHtml(filter)}”.</p>` : ""}`;
+
+  return legend + controls + hierarchyBranchHtml(enterpriseKey, enterpriseNode, enterpriseOpen, scenario.enterprise.name, () => body);
+}
+
+function renderHierarchy() {
+  $("#hierarchy").innerHTML = hierarchyTreeHtml("dashboard");
+}
+
+// Repaints both trees without a full app render, then restores keyboard focus to the control the
+// user just activated — otherwise collapsing a branch would drop focus back to the document body.
+function renderHierarchyTrees(focusKey = null) {
+  renderHierarchy();
+  if ($("#optimized-hierarchy")) $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
+  if (focusKey) document.querySelector(`[data-tree-toggle="${CSS.escape(focusKey)}"]`)?.focus();
+}
+
+// Expansion must be set from the scenario data rather than from rendered DOM: a collapsed branch
+// doesn't render its descendants, so "Expand all" would otherwise miss everything below the fold.
+function setHierarchyExpansionForHost(hostId, open) {
+  hierarchyExpansion.set(`${hostId}:enterprise`, open);
+  scenario.organizations.forEach((org) => {
+    hierarchyExpansion.set(`${hostId}:org:${org.id}`, open);
+    hierarchyExpansion.set(`${hostId}:repos:${org.id}`, open);
+    hierarchyExpansion.set(`${hostId}:unassigned:${org.id}`, open);
+  });
+  scenario.costCenters.forEach((cc) => hierarchyExpansion.set(`${hostId}:cc:${cc.id}`, open));
+  renderHierarchyTrees();
 }
 
 function renderActivity(replay, currency) {
@@ -797,20 +914,7 @@ function renderOptimizedExperience(replay, currency) {
   const definition = selectedScenarioDefinition();
   renderOptimizedBuckets(replay);
 
-  const scopeNode = (type, id, name) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"`;
-  $("#optimized-hierarchy").innerHTML = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users`, scopeNode("enterprise", scenario.enterprise.id, scenario.enterprise.name), "scope-node") + scenario.organizations.map((org) => {
-    const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
-    const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
-    const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
-    const userNodeHtml = (user) => hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeNode("user", user.id, user.name), "scope-node");
-    const unassignedUsers = users.filter((user) => !costCenterForUser(scenario, user));
-    const costCenterLanes = costCenters.map((cc) => {
-      const ccUsers = users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id);
-      return hierarchyNodeHtml("costCenter", cc.name, cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage", scopeNode("costCenter", cc.id, cc.name), "scope-node") + (ccUsers.length ? `<div class="hierarchy-lane hierarchy-lane-users">${ccUsers.map(userNodeHtml).join("")}</div>` : "");
-    }).join("") || `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><span class="hierarchy-kind">Cost center</span><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`;
-    const unassignedHtml = unassignedUsers.length ? `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><span class="hierarchy-kind">Cost center</span><strong>No cost center</strong><small>${unassignedUsers.length} user${unassignedUsers.length === 1 ? "" : "s"} not assigned</small></div></div><div class="hierarchy-lane hierarchy-lane-users">${unassignedUsers.map(userNodeHtml).join("")}</div>` : "";
-    return `<div class="hierarchy-branch">${hierarchyNodeHtml("organization", org.name, `${users.length} users · ${repos.length} repositories`, scopeNode("organization", org.id, org.name), "scope-node")}<div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
-  }).join("");
+  $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
 
   if (definition) {
     renderOptimizedStepDetail(definition, replay);
@@ -883,6 +987,22 @@ $("#optimized-scope").addEventListener("change", (event) => {
 $("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
 document.addEventListener("click", (event) => {
+  // Tree chrome is checked before scope selection so that clicking a disclosure arrow inside a
+  // clickable scope node only collapses the branch instead of also changing the inspected scope.
+  const treeToggle = event.target.closest("[data-tree-toggle]");
+  if (treeToggle) {
+    const key = treeToggle.dataset.treeToggle;
+    const open = treeToggle.hasAttribute("aria-expanded") ? treeToggle.getAttribute("aria-expanded") === "true" : hierarchyExpanded(key, false);
+    hierarchyExpansion.set(key, !open);
+    renderHierarchyTrees(key);
+    return;
+  }
+  const expandAll = event.target.closest("[data-tree-expand]");
+  const collapseAll = event.target.closest("[data-tree-collapse]");
+  if (expandAll || collapseAll) {
+    setHierarchyExpansionForHost((expandAll || collapseAll).dataset.treeExpand || (expandAll || collapseAll).dataset.treeCollapse, Boolean(expandAll));
+    return;
+  }
   const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
   if (scopeNode) {
     optimizedScope = { type: scopeNode.dataset.scopeType, id: scopeNode.dataset.scopeId };
@@ -904,6 +1024,18 @@ document.addEventListener("click", (event) => {
     }
   }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
+});
+
+document.addEventListener("input", (event) => {
+  const filterInput = event.target.closest("[data-tree-filter]");
+  if (!filterInput) return;
+  const hostId = filterInput.dataset.treeFilter;
+  hierarchyFilters.set(hostId, filterInput.value);
+  const caret = filterInput.selectionStart;
+  renderHierarchyTrees();
+  // The tree host is rebuilt wholesale, so the live input is a new element; put the cursor back.
+  const restored = document.querySelector(`[data-tree-filter="${CSS.escape(hostId)}"]`);
+  if (restored) { restored.focus(); restored.setSelectionRange(caret, caret); }
 });
 
 document.addEventListener("keydown", (event) => {
