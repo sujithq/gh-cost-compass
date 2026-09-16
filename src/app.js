@@ -1,4 +1,4 @@
-import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
+import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -547,39 +547,29 @@ function scopeOptionsFor(type) {
   return [];
 }
 
+// Delegates to the engine's userId/repository-aware scope match instead of a fragile name lookup,
+// so org membership picked up via a repository (not just a user's home org) is also honored.
 function eventMatchesOptimizedScope(result) {
-  if (!result || optimizedScope.type === "enterprise") return true;
-  const event = scenario.events.find((item) => item.id === result.eventId);
-  const user = scenario.users.find((item) => item.id === event?.userId);
-  const costCenter = costCenterForUser(scenario, user);
-  if (optimizedScope.type === "organization") return user?.organizationIds.includes(optimizedScope.id);
-  if (optimizedScope.type === "costCenter") return costCenter?.id === optimizedScope.id;
-  if (optimizedScope.type === "user") return user?.id === optimizedScope.id;
-  return true;
+  if (!result) return true;
+  return eventInScope(scenario, result, optimizedScope);
 }
 
+function bucketIconFor(kind) {
+  return icon({ included: "pool", ulb: "hardStop", metered: "alertOnly", blocked: "alertOnly" }[kind] || "pool");
+}
+
+// Reuses the engine's bucketsForEvent so the event-level attribution shown here always matches
+// the same logic that drives the budget/pool state cards (single source of truth).
 function bucketImpactHtml(result) {
   if (!result) return "";
-  const poolImpact = result.productName === "Copilot AI credits" ? [{
-    label: "Included credits",
-    detail: `${result.includedQuantity.toLocaleString()} pooled credits`,
-    before: result.poolBefore,
-    after: result.poolAfter,
-    unit: "credits",
-    icon: icon("pool"),
-  }] : [];
-  const budgetImpacts = result.affectedBudgets.map((impact) => {
-    const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
-    return {
-      label: `${budget?.name || impact.budgetId}${impact.userId ? ` · ${result.userName}` : ""}`,
-      detail: impact.basis,
-      before: impact.before,
-      after: impact.after,
-      unit: "money",
-      icon: budgetIcon(budget || {}),
-    };
-  });
-  return [...poolImpact, ...budgetImpacts].map((impact) => `<div class="bucket-impact"><span>${impact.icon}</span><div><strong>${escapeHtml(impact.label)}</strong><small>${escapeHtml(impact.detail)}</small></div><b>${impact.unit === "money" ? `${money(impact.before, "USD")} → ${money(impact.after, "USD")}` : `${Number(impact.before).toLocaleString()} → ${Number(impact.after).toLocaleString()}`}</b></div>`).join("");
+  const event = scenario.events.find((item) => item.id === result.eventId) || result;
+  const buckets = bucketsForEvent(scenario, event, result);
+  return buckets.map((bucket) => {
+    const value = bucket.kind === "included"
+      ? `${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}`
+      : bucket.kind === "blocked" ? "—" : `${money(bucket.before, "USD")} → ${money(bucket.after, "USD")}`;
+    return `<div class="bucket-impact bucket-impact-${bucket.kind}"><span>${bucketIconFor(bucket.kind)}</span><div><strong>${escapeHtml(bucket.label)}</strong><small>${escapeHtml(bucket.scopeLabel)}</small></div><b>${value}</b></div>`;
+  }).join("");
 }
 
 function renderOptimizedExperience(replay, currency) {
@@ -590,35 +580,48 @@ function renderOptimizedExperience(replay, currency) {
   if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
   setOptions("#optimized-scope", scopeItems, optimizedScope.id);
 
+  const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
   const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
-  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user");
-  const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered");
+  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
+  const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
+  const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
+  let poolNote = "Consumed before paid overage starts.";
+  if (optimizedScope.type !== "enterprise") {
+    const scopedUsers = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
+    const scopedContribution = usersInScope(scenario, optimizedScope).reduce((sum, user) => sum + userPoolContribution(user, scenario.simulationDate, scenario), 0);
+    const scopedConsumed = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
+    poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
+  }
   $("#optimized-buckets").innerHTML = [
-    { title: "Included credits", items: [pool], note: "Consumed before paid overage starts." },
-    { title: "User-level budgets", items: userBudgets, note: "Hard stops based on total AI-credit value." },
-    { title: "Budget controls", items: meteredBudgets, note: "Track paid metered overage after the pool." },
-  ].map((group) => `<section class="bucket-group"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map((item) => `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`).join("") || `<div class="empty compact-empty">No matching buckets.</div>`}</section>`).join("");
+    { title: "Included credits", items: [pool], note: poolNote },
+    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.` },
+    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.` },
+  ].map((group) => `<section class="bucket-group"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map((item) => `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`).join("") || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`).join("");
 
-  $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise"><span>${icon("enterprise")}</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
+  const scopeNode = (type, id) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""}`;
+  $("#optimized-hierarchy").innerHTML = `<div class="hierarchy-node enterprise scope-node" ${scopeNode("enterprise", scenario.enterprise.id)} tabindex="0" role="button" aria-label="Inspect enterprise scope"><span>${icon("enterprise")}</span><div><strong>${escapeHtml(scenario.enterprise.name)}</strong><small>${scenario.organizations.length} orgs · ${scenario.costCenters.length} cost centers · ${scenario.users.length} users</small></div></div>` + scenario.organizations.map((org) => {
     const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
     const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
     const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
-    const userNodeHtml = (user) => `<div class="hierarchy-node user"><span>${icon("user")}</span><div><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(costCenterForUser(scenario, user)?.name || "No cost center")} · ${user.licensePlan} seat</small></div></div>`;
+    const userNodeHtml = (user) => `<div class="hierarchy-node user scope-node" ${scopeNode("user", user.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(user.name)} scope"><span>${icon("user")}</span><div><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(costCenterForUser(scenario, user)?.name || "No cost center")} · ${user.licensePlan} seat</small></div></div>`;
     const unassignedUsers = users.filter((user) => !costCenterForUser(scenario, user));
     const costCenterLanes = costCenters.map((cc) => {
       const ccUsers = users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id);
-      return `<div class="hierarchy-node cost-center"><span>${icon("costCenter")}</span><div><strong>${escapeHtml(cc.name)}</strong><small>${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}</small></div></div>${ccUsers.length ? `<div class="hierarchy-lane hierarchy-lane-users">${ccUsers.map(userNodeHtml).join("")}</div>` : ""}`;
+      return `<div class="hierarchy-node cost-center scope-node" ${scopeNode("costCenter", cc.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(cc.name)} scope"><span>${icon("costCenter")}</span><div><strong>${escapeHtml(cc.name)}</strong><small>${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}</small></div></div>${ccUsers.length ? `<div class="hierarchy-lane hierarchy-lane-users">${ccUsers.map(userNodeHtml).join("")}</div>` : ""}`;
     }).join("") || `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><strong>No cost-center bucket</strong><small>Organization-level controls may apply</small></div></div>`;
     const unassignedHtml = unassignedUsers.length ? `<div class="hierarchy-node muted-node"><span>${icon("costCenter")}</span><div><strong>No cost center</strong><small>${unassignedUsers.length} user${unassignedUsers.length === 1 ? "" : "s"} not assigned</small></div></div><div class="hierarchy-lane hierarchy-lane-users">${unassignedUsers.map(userNodeHtml).join("")}</div>` : "";
-    return `<div class="hierarchy-branch"><div class="hierarchy-node org"><span>${icon("organization")}</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
+    return `<div class="hierarchy-branch"><div class="hierarchy-node org scope-node" ${scopeNode("organization", org.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(org.name)} scope"><span>${icon("organization")}</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
   }).join("");
 
   const scopedResults = replay.results.filter(eventMatchesOptimizedScope);
   const scrubber = $("#optimized-scrubber");
   scrubber.max = String(Math.max(0, scopedResults.length - 1));
   scrubber.value = String(Math.min(Number(scrubber.value || 0), Math.max(0, scopedResults.length - 1)));
-  const selected = scopedResults[Number(scrubber.value || 0)] || scopedResults.at(-1);
-  $("#optimized-event-count").textContent = `${scopedResults.length} event${scopedResults.length === 1 ? "" : "s"}`;
+  const position = Number(scrubber.value || 0);
+  const selected = scopedResults[position] || scopedResults.at(-1);
+  $("#optimized-scrubber-prev").disabled = position <= 0;
+  $("#optimized-scrubber-next").disabled = position >= scopedResults.length - 1;
+  $("#optimized-event-count").textContent = scopedResults.length ? `Event ${position + 1} of ${scopedResults.length}` : "0 events";
   $("#optimized-event-detail").innerHTML = selected ? `<div class="optimized-event-card ${selected.status}"><div><span class="status-dot ${selected.status}"></span><strong>${escapeHtml(selected.userName)} · ${escapeHtml(selected.productName)}</strong><small>${selected.date} · ${selected.quantity.toLocaleString()} units · ${money(selected.cost, currency)} · ${selected.status}</small></div><p>${escapeHtml(selected.reason)}</p><div class="bucket-impact-list">${bucketImpactHtml(selected) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div></div>` : `<div class="empty">No usage events match this scope yet.</div>`;
 }
 
@@ -682,7 +685,16 @@ $("#optimized-scope").addEventListener("change", (event) => {
   renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
 });
 $("#optimized-scrubber").addEventListener("input", () => renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency));
+$("#optimized-scrubber-prev").addEventListener("click", () => { $("#optimized-scrubber").value = String(Math.max(0, Number($("#optimized-scrubber").value) - 1)); renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency); });
+$("#optimized-scrubber-next").addEventListener("click", () => { $("#optimized-scrubber").value = String(Number($("#optimized-scrubber").value) + 1); renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency); });
 document.addEventListener("click", (event) => {
+  const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
+  if (scopeNode) {
+    optimizedScope = { type: scopeNode.dataset.scopeType, id: scopeNode.dataset.scopeId };
+    $("#optimized-scrubber").value = "0";
+    renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+    return;
+  }
   const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { scenarioRun.selectedStepIndex = Number(scenarioStep.dataset.scenarioStep); scenarioRun.runAllArmed = false; renderScenarioStudio(); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
   const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
@@ -704,6 +716,10 @@ document.addEventListener("keydown", (event) => {
   if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-history-id]")) {
     event.preventDefault();
     openBudgetHistory(event.target.dataset.historyId, event.target);
+  }
+  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-scope-type][data-scope-id]")) {
+    event.preventDefault();
+    event.target.click();
   }
 });
 
