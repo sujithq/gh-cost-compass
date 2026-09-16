@@ -10,6 +10,14 @@
       "file": "pool-to-paid-overage.json"
     },
     {
+      "id": "cost-center-pool-blocks",
+      "file": "cost-center-pool-blocks.json"
+    },
+    {
+      "id": "cost-center-pool-to-overage",
+      "file": "cost-center-pool-to-overage.json"
+    },
+    {
       "id": "hard-stop-boundary",
       "file": "hard-stop-boundary.json"
     }

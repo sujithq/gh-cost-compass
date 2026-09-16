@@ -67,7 +67,9 @@ Scenario definitions use version 1:
 | `configuration` | `mutation` | Applies an effective scenario configuration change. |
 | `checkpoint` | None beyond common fields | Pauses for explanation and previews the next step when available. |
 
-Every step requires a unique `id`, `title`, `description`, and `expected` outcome. Setup and configuration mutations target `enterprise`, `budget`, `user`, `organization`, `repository`, `costCenter`, or `product`. Non-enterprise targets also require the existing entity `id` and a `changes` object.
+Every step requires a unique `id`, `title`, `description`, and `expected` outcome. Setup and configuration mutations target `enterprise`, `budget`, `user`, `organization`, `repository`, `costCenter`, `enterpriseTeam`, or `product`. Non-enterprise targets also require the existing entity `id` and a `changes` object.
+
+Cost-center scenarios can toggle `aiCreditPoolEnabled` and `aiCreditPoolCapMode` to model the documented included-usage control. Use `aiCreditPoolCapMode: "block"` when the cost center should stop at its included-pool cap, or `"allowOverage"` when usage should continue into paid overage subject to the enterprise paid-usage policy and metered budgets.
 
 ## Adding scenarios
 
