@@ -125,6 +125,37 @@ function statusClass(percent) {
   return "";
 }
 
+// Identifies a progress bar across re-renders so its previous width can be restored before the new
+// one is applied. Cards carry a stable data-history-id; anything else falls back to its ordinal
+// position within the panel, which is stable as long as the list order doesn't change.
+function progressBarKey(bar, index) {
+  const owner = bar.closest("[data-history-id]") || bar.closest("[data-bar-key]");
+  return owner?.dataset.historyId || owner?.dataset.barKey || `index:${index}`;
+}
+
+// Panels that rebuild their markup wholesale destroy and recreate their bar elements, so the
+// `transition: width` on `.progress > div` never has a previous value to animate from and the fill
+// appears to jump. This replaces the markup, immediately paints each bar at the width its
+// predecessor had, then flips it to the real target on the next frame so the transition runs.
+function setPanelHtmlWithBarTransitions(selector, html) {
+  const container = $(selector);
+  if (!container) return;
+  const previous = new Map();
+  [...container.querySelectorAll(".progress > div")].forEach((bar, index) => {
+    previous.set(progressBarKey(bar, index), bar.style.width);
+  });
+
+  container.innerHTML = html;
+
+  const pending = [...container.querySelectorAll(".progress > div")].map((bar, index) => ({ bar, target: bar.style.width, before: previous.get(progressBarKey(bar, index)) }))
+    .filter((item) => item.before !== undefined && item.before !== item.target);
+  if (!pending.length) return;
+  pending.forEach((item) => { item.bar.style.width = item.before; });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    pending.forEach((item) => { item.bar.style.width = item.target; });
+  }));
+}
+
 function safeSourceUrl(value) {
   try {
     const url = new URL(value);
@@ -222,7 +253,7 @@ function renderScenarioStudio() {
     { stateId: "pool", displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
     ...currentReplay.budgetStates,
   ];
-  $("#scenario-outcome").innerHTML = `
+  setPanelHtmlWithBarTransitions("#scenario-outcome", `
     <section class="selected-step-preview">
       <div class="scenario-outcome-heading"><div><p class="eyebrow">SELECTED STEP PREVIEW</p><h3>${escapeHtml(selectedStep.title)}</h3></div><span class="scenario-status preview">Preview · Step ${selectedIndex + 1}</span></div>
       <p class="scenario-step-description">${escapeHtml(selectedStep.description)}</p>
@@ -247,8 +278,8 @@ function renderScenarioStudio() {
         ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
         ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
-      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
-    </section>`;
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}" data-bar-key="${escapeHtml(item.stateId)}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+    </section>`);
 }
 
 let scenarioTransitionBusy = false;
@@ -316,7 +347,7 @@ function renderBudgets(replay, currency) {
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
     return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
-  $("#budget-grid").innerHTML = poolCard + cards;
+  setPanelHtmlWithBarTransitions("#budget-grid", poolCard + cards);
 }
 
 function historyEntries(results, detailForResult, emptyMessage) {

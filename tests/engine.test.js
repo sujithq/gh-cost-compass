@@ -291,6 +291,21 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
 });
 
+test("progress bars across every page animate from their previous width", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /function setPanelHtmlWithBarTransitions\(selector, html\)/);
+  assert.match(app, /function progressBarKey\(bar, index\)/);
+  // Every panel that rebuilds bar markup wholesale must route through the helper, otherwise its
+  // bars jump instead of transitioning.
+  assert.match(app, /setPanelHtmlWithBarTransitions\("#budget-grid"/);
+  assert.match(app, /setPanelHtmlWithBarTransitions\("#scenario-outcome"/);
+  assert.doesNotMatch(app, /\$\("#budget-grid"\)\.innerHTML =/);
+  assert.match(app, /requestAnimationFrame\(\(\) => requestAnimationFrame\(/);
+  assert.match(css, /prefers-reduced-motion:reduce\)\{[^}]*\}\.progress>div[^{]*\{transition:none\}/);
+});
+
 test("eventInScope and budgetInScope correlate usage and budgets by scope, not by fragile name matching", () => {
   const scenario = createDefaultScenario();
   scenario.events = [usage("one", "2026-09-15", 1000)];
