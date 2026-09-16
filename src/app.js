@@ -17,6 +17,11 @@ let lastBlockedToastId = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+const groupBy = (items, keyFor) => items.reduce((groups, item) => {
+  const key = keyFor(item);
+  groups.set(key, [...(groups.get(key) || []), item]);
+  return groups;
+}, new Map());
 
 function loadScenario() {
   try {
@@ -48,6 +53,7 @@ function saveAndRender(message, { toast = true } = {}) {
 }
 
 const MAX_VISIBLE_TOASTS = 4;
+const MAX_DASHBOARD_BUDGET_CARDS = 80;
 const TOAST_ICONS = { info: "✓", warning: "!", danger: "×" };
 
 function dismissToast(toast) {
@@ -292,13 +298,18 @@ function renderSummary(replay, currency) {
 
 function renderBudgets(replay, currency) {
   const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
-  const cards = replay.budgetStates.map((budget) => {
+  const prioritized = replay.budgetStates.filter((budget) => budget.spent > 0 || budget.triggered.length);
+  const prioritizedIds = new Set(prioritized.map((budget) => budget.stateId));
+  const visibleBudgets = [...prioritized, ...replay.budgetStates.filter((budget) => !prioritizedIds.has(budget.stateId))].slice(0, MAX_DASHBOARD_BUDGET_CARDS);
+  const hiddenCount = replay.budgetStates.length - visibleBudgets.length;
+  const cards = visibleBudgets.map((budget) => {
     const isUlb = budget.budgetKind === "user";
     const scope = isUlb ? `Per user · ${budget.userBudgetType} ULB` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
     return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
-  $("#budget-grid").innerHTML = poolCard + cards;
+  const hiddenNotice = hiddenCount > 0 ? `<div class="empty">${hiddenCount} lower-activity budget controls are hidden on the dashboard. They remain active in simulation and export data.</div>` : "";
+  $("#budget-grid").innerHTML = poolCard + cards + hiddenNotice;
 }
 
 function historyEntries(results, detailForResult, emptyMessage) {
@@ -366,9 +377,14 @@ function closeBudgetHistory() {
 }
 
 function renderHierarchy() {
+  const reposByOrg = groupBy(scenario.repositories, (repo) => repo.organizationId);
+  const usersByOrg = new Map();
+  for (const user of scenario.users) {
+    for (const orgId of user.organizationIds || []) usersByOrg.set(orgId, [...(usersByOrg.get(orgId) || []), user]);
+  }
   $("#hierarchy").innerHTML = `<strong>◆ ${escapeHtml(scenario.enterprise.name)}</strong>` + scenario.organizations.map((org) => {
-    const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
-    const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
+    const repos = reposByOrg.get(org.id) || [];
+    const users = usersByOrg.get(org.id) || [];
     return `<div class="tree-org"><strong>◉ ${escapeHtml(org.name)}</strong><small>${users.length} user${users.length === 1 ? "" : "s"}</small>${repos.map((repo) => `<div class="tree-repo">⌘ ${escapeHtml(repo.name)}</div>`).join("") || `<div class="tree-repo">No repositories</div>`}</div>`;
   }).join("");
 }
@@ -408,11 +424,17 @@ function renderConfiguration() {
   $("#enterprise-currency").value = scenario.enterprise.currency;
   $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
   $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
+  const reposByOrg = groupBy(scenario.repositories, (repo) => repo.organizationId);
+  const costCenterMembers = new Map();
+  for (const user of scenario.users) {
+    const costCenterId = costCenterForUser(scenario, user)?.id;
+    if (costCenterId) costCenterMembers.set(costCenterId, (costCenterMembers.get(costCenterId) || 0) + 1);
+  }
   $("#product-list").innerHTML = scenario.products.map((item) => entityRow(item.name, item.billingMode === "aiCredits" ? "Fixed: 1 credit = $0.01" : `${money(item.unitPrice, scenario.enterprise.currency)} / ${item.unit}`, "product", item.id)).join("");
-  $("#organization-list").innerHTML = scenario.organizations.map((item) => entityRow(item.name, `${scenario.repositories.filter((repo) => repo.organizationId === item.id).length} repositories`, "organization", item.id)).join("");
+  $("#organization-list").innerHTML = scenario.organizations.map((item) => entityRow(item.name, `${(reposByOrg.get(item.id) || []).length} repositories`, "organization", item.id)).join("");
   $("#cost-center-list").innerHTML = scenario.costCenters.map((item) => {
     const assignedOrganizations = scenario.organizations.filter((org) => (item.organizationIds || []).includes(org.id)).map((org) => org.name);
-    const members = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === item.id).length;
+    const members = costCenterMembers.get(item.id) || 0;
     const assignment = assignedOrganizations.length ? ` · organizations: ${assignedOrganizations.join(", ")}` : "";
     return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users${escapeHtml(assignment)} · ${item.excludeFromEnterpriseBudget ? "excluded from enterprise AI budget" : "counts against enterprise AI budget"}</small></div><div><button class="text-button" data-toggle-costcenter="${item.id}">${item.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
   }).join("");
