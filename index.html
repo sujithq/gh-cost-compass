@@ -15,6 +15,7 @@
       <nav id="navigation">
         <button class="nav-item active" data-view="dashboard">▦ Dashboard</button>
         <button class="nav-item" data-view="simulate">▶ Simulate usage</button>
+        <button class="nav-item nav-subitem" data-view="optimized"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/></svg> Optimized UI</button>
         <button class="nav-item" data-view="configuration">⚙ Configuration</button>
         <button class="nav-item" data-view="timeline">≡ Timeline & alerts</button>
       </nav>
@@ -27,6 +28,15 @@
         <div class="clock-control"><label for="simulation-date">Simulation date</label><div><button id="previous-day" title="Previous day">‹</button><input id="simulation-date" type="date"><button id="next-day" title="Next day">›</button><button id="next-month">+ Month</button></div></div>
       </header>
 
+      <section id="global-timeline-bar" class="global-timeline-bar">
+        <div class="global-timeline-head">
+          <div class="global-timeline-titles"><p class="eyebrow">SCENARIO TIMELINE</p><h2 id="global-scenario-title"></h2><p class="muted" id="global-scenario-summary"></p></div>
+          <label>Scenario<select id="global-scenario-definition"></select></label>
+        </div>
+        <div class="timeline-row"><button type="button" id="global-timeline-prev" title="Previous step">‹</button><div id="global-timeline" class="scenario-timeline" role="list"></div><button type="button" id="global-timeline-next" title="Next step">›</button></div>
+        <div class="global-timeline-foot"><div id="global-scenario-tags" class="scenario-tags"></div><span id="global-timeline-label"></span></div>
+      </section>
+
       <section id="dashboard" class="view active">
         <div id="summary-cards" class="summary-grid"></div>
         <div class="section-heading"><div><p class="eyebrow">CURRENT BILLING PERIOD</p><h2>Budget health</h2></div><span id="period-label" class="pill"></span></div>
@@ -34,6 +44,32 @@
         <div class="two-column">
           <article class="panel"><div class="panel-title"><h3>Enterprise structure</h3><span>Live configuration</span></div><div id="hierarchy"></div></article>
           <article class="panel"><div class="panel-title"><h3>Recent activity</h3><button class="text-button" data-go="timeline">View all</button></div><div id="recent-activity"></div></article>
+        </div>
+      </section>
+
+      <section id="optimized" class="view">
+        <div class="section-heading"><div><p class="eyebrow">OPTIMIZED EXPERIENCE</p><h2>Hierarchy, buckets & consumption</h2></div><span class="pill">Non-breaking preview</span></div>
+
+        <div class="optimized-layout">
+          <article class="panel optimized-map-panel">
+            <div class="panel-title"><h3>Enterprise hierarchy</h3><span>Included credits + controls</span></div>
+            <div id="optimized-hierarchy" class="optimized-hierarchy"></div>
+          </article>
+          <aside class="optimized-side">
+            <article class="panel">
+              <div class="panel-title"><h3>Credit buckets</h3><span>Current period</span></div>
+              <div class="scrubber-controls">
+                <label>Scope type<select id="optimized-scope-type"><option value="enterprise">Enterprise</option><option value="organization">Organization</option><option value="costCenter">Cost center</option><option value="user">User</option></select></label>
+                <label>Scope<select id="optimized-scope"></select></label>
+              </div>
+              <div id="optimized-buckets" class="optimized-buckets"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-title"><h3>Current step</h3><span>Bucket attribution</span></div>
+              <p class="muted timeline-hint">Use the scenario timeline above the page to step through the month and watch thresholds and alerts being reached.</p>
+              <div id="optimized-step-detail" class="optimized-event-detail"></div>
+            </article>
+          </aside>
         </div>
       </section>
 

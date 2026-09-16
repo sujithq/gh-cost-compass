@@ -243,7 +243,8 @@ export function replayScenario(scenario) {
     }
 
     const result = {
-      eventId: event.id, date: event.date, userName: user?.name || "Unknown user", productName: product?.name || "Unknown product",
+      eventId: event.id, date: event.date, userId: event.userId || null, repositoryId: event.repositoryId || null, productId: event.productId || null,
+      userName: user?.name || "Unknown user", productName: product?.name || "Unknown product",
       quantity, includedQuantity, meteredQuantity, cost: billedCost, grossAiValue, poolBefore, poolAfter: blockingReason ? poolBefore : poolBefore + includedQuantity,
       status: blockingReason ? "blocked" : "accepted", reason: blockingReason || (isAi && billedCost === 0 ? "Usage accepted from the shared AI-credit pool" : "Usage accepted with metered charges"), affectedBudgets: [],
     };
@@ -272,6 +273,104 @@ export function replayScenario(scenario) {
   const meteredCost = results.filter((item) => item.status === "accepted" && item.date.startsWith(selectedPeriod)).reduce((sum, item) => sum + item.cost, 0);
 
   return { results, alerts, budgetStates, period: selectedPeriod, pool: { total: poolTotal, consumed, remaining: Math.max(0, poolTotal - consumed), percent: poolTotal ? consumed / poolTotal * 100 : 100, meteredCost } };
+}
+
+// Re-runs replayScenario as if only events up to and including eventId had happened yet, using the
+// same date-then-original-index ordering the engine uses internally. This lets the UI "scrub" through
+// history and see included-pool / ULB / metered-budget totals grow event by event instead of only ever
+// showing the final end-of-period totals.
+export function replayScenarioThroughEvent(scenario, eventId) {
+  if (!eventId) return replayScenario(scenario);
+  const ordered = scenario.events.map((event, index) => ({ event, index })).sort((a, b) => a.event.date.localeCompare(b.event.date) || a.index - b.index);
+  const cutoff = ordered.findIndex((item) => item.event.id === eventId);
+  if (cutoff === -1) return replayScenario(scenario);
+  const includedIds = new Set(ordered.slice(0, cutoff + 1).map((item) => item.event.id));
+  return replayScenario({ ...scenario, events: scenario.events.filter((event) => includedIds.has(event.id)) });
+}
+
+// --- Consumption attribution & scope-aware inspection helpers ---
+// A "scope" is { type: "enterprise" | "organization" | "costCenter" | "user", id }.
+
+export function listScopeEntities(scenario, type) {
+  switch (type) {
+    case "organization": return scenario.organizations;
+    case "costCenter": return scenario.costCenters;
+    case "user": return scenario.users;
+    default: return [scenario.enterprise];
+  }
+}
+
+export function usersInScope(scenario, scope) {
+  if (!scope || scope.type === "enterprise") return scenario.users;
+  switch (scope.type) {
+    case "organization": return scenario.users.filter((user) => user.organizationIds.includes(scope.id));
+    case "costCenter": return scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === scope.id);
+    case "user": return scenario.users.filter((user) => user.id === scope.id);
+    default: return [];
+  }
+}
+
+// Determines whether a usage event (or a replay result carrying userId/repositoryId) belongs under a scope node.
+export function eventInScope(scenario, event, scope) {
+  if (!scope || scope.type === "enterprise") return true;
+  const user = scenario.users.find((item) => item.id === event.userId);
+  if (!user) return false;
+  const repo = scenario.repositories.find((item) => item.id === event.repositoryId);
+  switch (scope.type) {
+    case "organization": return user.organizationIds.includes(scope.id) || repo?.organizationId === scope.id;
+    case "costCenter": return costCenterForUser(scenario, user)?.id === scope.id;
+    case "user": return user.id === scope.id;
+    default: return false;
+  }
+}
+
+// Determines whether a budget (or budgetState) is relevant to a scope, including broader ancestor budgets
+// (e.g. the enterprise metered budget still applies while inspecting an organization or user).
+export function budgetInScope(scenario, budget, scope) {
+  if (!scope || scope.type === "enterprise") return true;
+  if (budget.scopeType === "enterprise") return true;
+  if (budget.budgetKind === "user" && budget.userBudgetType === "universal") return true;
+  const scoped = usersInScope(scenario, scope);
+  switch (budget.scopeType) {
+    case "user": return scoped.some((user) => user.id === budget.scopeId);
+    case "costCenter":
+      if (scope.type === "costCenter") return budget.scopeId === scope.id;
+      return scoped.some((user) => costCenterForUser(scenario, user)?.id === budget.scopeId);
+    case "organization":
+      if (scope.type === "organization") return budget.scopeId === scope.id;
+      return scoped.some((user) => user.organizationIds.includes(budget.scopeId));
+    case "repository": {
+      const repo = scenario.repositories.find((item) => item.id === budget.scopeId);
+      if (!repo) return false;
+      if (scope.type === "organization") return repo.organizationId === scope.id;
+      return scoped.some((user) => user.organizationIds.includes(repo.organizationId));
+    }
+    default: return false;
+  }
+}
+
+// Describes every bucket (included-credit pool and/or budget controls) a single replayed usage event touched.
+export function bucketsForEvent(scenario, event, result) {
+  const buckets = [];
+  const product = scenario.products.find((item) => item.id === event.productId);
+  if (product?.billingMode === "aiCredits" && result.includedQuantity > 0) {
+    buckets.push({ kind: "included", label: "Included AI-credit pool", scopeLabel: "Shared enterprise pool", amount: result.includedQuantity });
+  }
+  for (const impact of result.affectedBudgets) {
+    const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
+    if (!budget) continue;
+    buckets.push({
+      kind: budget.budgetKind === "user" ? "ulb" : "metered",
+      label: budget.name,
+      scopeLabel: budget.budgetKind === "user" ? `${budget.userBudgetType} ULB` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`,
+      amount: impact.after - impact.before,
+      before: impact.before,
+      after: impact.after,
+      percent: impact.percent,
+    });
+  }
+  if (result.status === "blocked") buckets.push({ kind: "blocked", label: "Blocked", scopeLabel: result.reason, amount: 0 });
+  return buckets;
 }
 
 export function validateScenario(value) {

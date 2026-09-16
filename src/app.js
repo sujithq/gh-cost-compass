@@ -1,4 +1,4 @@
-import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
+import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -14,9 +14,28 @@ let latestEventId = null;
 let budgetHistoryTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
+let optimizedScope = { type: "enterprise", id: "" };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+
+const ICON_PATHS = {
+  hierarchy: '<rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/>',
+  // Silhouettes are deliberately distinct from one another: a tall tower for the enterprise, a
+  // pitched-roof office for an organization, a briefcase for a cost center, a person for a user.
+  enterprise: '<path d="M4 21V3h10v18M14 9h6v12M2 21h20M7 7h4M7 11h4M7 15h4M17 13v1M17 17v1"/>',
+  organization: '<path d="M3 21V7l9-4 9 4v14M7 21v-7h10v7M7 9h1M12 9h1M17 9h1"/>',
+  costCenter: '<path d="M3 7h18v14H3zM8 7V3h8v4M3 12h18M10 12v3h4v-3"/>',
+  user: '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 21v-3a8 6 0 0 1 16 0v3"/>',
+  team: '<path d="M9 7a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 20v-2a6 5 0 0 1 12 0v2M4 5a3 3 0 0 0 0 6M20 5a3 3 0 0 1 0 6M2 19v-3M22 19v-3"/>',
+  pool: '<path d="M3 6c0-5 18-5 18 0s-18 5-18 0M3 6v12c0 5 18 5 18 0V6M3 12c0 5 18 5 18 0"/>',
+  hardStop: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M9.5 12l1.7 1.8L15 10"/>',
+  alertOnly: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M12 8v4.2"/><circle cx="12" cy="15" r="0.9" fill="currentColor" stroke="none"/>',
+  repo: '<path d="M6.5 3H19v14H6.5A2.5 2.5 0 0 0 4 19.5v-14A2.5 2.5 0 0 1 6.5 3Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19v4H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M9 7h6"/>',
+};
+function icon(name, className = "") {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon${className ? ` ${className}` : ""}" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
+}
 
 function loadScenario() {
   try {
@@ -107,6 +126,37 @@ function statusClass(percent) {
   if (percent >= 90) return "danger";
   if (percent >= 75) return "warning";
   return "";
+}
+
+// Identifies a progress bar across re-renders so its previous width can be restored before the new
+// one is applied. Cards carry a stable data-history-id; anything else falls back to its ordinal
+// position within the panel, which is stable as long as the list order doesn't change.
+function progressBarKey(bar, index) {
+  const owner = bar.closest("[data-history-id]") || bar.closest("[data-bar-key]");
+  return owner?.dataset.historyId || owner?.dataset.barKey || `index:${index}`;
+}
+
+// Panels that rebuild their markup wholesale destroy and recreate their bar elements, so the
+// `transition: width` on `.progress > div` never has a previous value to animate from and the fill
+// appears to jump. This replaces the markup, immediately paints each bar at the width its
+// predecessor had, then flips it to the real target on the next frame so the transition runs.
+function setPanelHtmlWithBarTransitions(selector, html) {
+  const container = $(selector);
+  if (!container) return;
+  const previous = new Map();
+  [...container.querySelectorAll(".progress > div")].forEach((bar, index) => {
+    previous.set(progressBarKey(bar, index), bar.style.width);
+  });
+
+  container.innerHTML = html;
+
+  const pending = [...container.querySelectorAll(".progress > div")].map((bar, index) => ({ bar, target: bar.style.width, before: previous.get(progressBarKey(bar, index)) }))
+    .filter((item) => item.before !== undefined && item.before !== item.target);
+  if (!pending.length) return;
+  pending.forEach((item) => { item.bar.style.width = item.before; });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    pending.forEach((item) => { item.bar.style.width = item.target; });
+  }));
 }
 
 function safeSourceUrl(value) {
@@ -206,7 +256,7 @@ function renderScenarioStudio() {
     { stateId: "pool", displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
     ...currentReplay.budgetStates,
   ];
-  $("#scenario-outcome").innerHTML = `
+  setPanelHtmlWithBarTransitions("#scenario-outcome", `
     <section class="selected-step-preview">
       <div class="scenario-outcome-heading"><div><p class="eyebrow">SELECTED STEP PREVIEW</p><h3>${escapeHtml(selectedStep.title)}</h3></div><span class="scenario-status preview">Preview · Step ${selectedIndex + 1}</span></div>
       <p class="scenario-step-description">${escapeHtml(selectedStep.description)}</p>
@@ -231,8 +281,8 @@ function renderScenarioStudio() {
         ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
         ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
-      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
-    </section>`;
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}" data-bar-key="${escapeHtml(item.stateId)}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+    </section>`);
 }
 
 let scenarioTransitionBusy = false;
@@ -264,7 +314,9 @@ function render() {
   renderSummary(replay, currency);
   renderBudgets(replay, currency);
   renderScenarioStudio();
+  renderGlobalScenarioBar();
   renderHierarchy();
+  renderOptimizedExperience(replay, currency);
   renderActivity(replay, currency);
   renderSelectors();
   renderApplicableControls(replay, currency);
@@ -298,7 +350,7 @@ function renderBudgets(replay, currency) {
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
     return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
-  $("#budget-grid").innerHTML = poolCard + cards;
+  setPanelHtmlWithBarTransitions("#budget-grid", poolCard + cards);
 }
 
 function historyEntries(results, detailForResult, emptyMessage) {
@@ -365,12 +417,153 @@ function closeBudgetHistory() {
   budgetHistoryTrigger = null;
 }
 
-function renderHierarchy() {
-  $("#hierarchy").innerHTML = `<strong>◆ ${escapeHtml(scenario.enterprise.name)}</strong>` + scenario.organizations.map((org) => {
+// Every node states its own type, because an icon alone doesn't tell a first-time reader which
+// row is the enterprise, the organization, the cost center, the repository, or the user.
+const HIERARCHY_KINDS = {
+  enterprise: { label: "Enterprise", className: "enterprise" },
+  organization: { label: "Organization", className: "org" },
+  costCenter: { label: "Cost center", className: "cost-center" },
+  repo: { label: "Repository", className: "repo" },
+  user: { label: "User", className: "user" },
+};
+
+// Enterprise-grade scenarios are the target: many organizations and cost centers, and hundreds of
+// users. Everything below keeps the tree readable at that size — branches collapse, oversized leaf
+// lists page in on demand, and a filter narrows the tree instead of forcing a manual hunt.
+const HIERARCHY_LEAF_PAGE = 25;
+const HIERARCHY_AUTO_COLLAPSE_USERS = 40;
+const hierarchyExpansion = new Map();
+const hierarchyFilters = new Map();
+
+function hierarchyExpanded(key, fallback) {
+  return hierarchyExpansion.has(key) ? hierarchyExpansion.get(key) : fallback;
+}
+function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "") {
+  const meta = HIERARCHY_KINDS[kind];
+  return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small></div></div>`;
+}
+
+function hierarchyLeafHtml(nodeHtml) {
+  return `<div class="hierarchy-row leaf">${nodeHtml}</div>`;
+}
+
+// `childrenHtml` is a thunk so a collapsed branch never pays to build its subtree — the point of
+// collapsing at enterprise scale is to avoid generating thousands of nodes per render.
+function hierarchyBranchHtml(key, nodeHtml, open, summary, childrenHtml) {
+  return `<div class="hierarchy-branch"><div class="hierarchy-row"><button type="button" class="hierarchy-toggle" data-tree-toggle="${escapeHtml(key)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="sr-only">${open ? "Collapse" : "Expand"} ${escapeHtml(summary)}</span></button>${nodeHtml}</div>${open ? `<div class="hierarchy-children">${childrenHtml()}</div>` : ""}</div>`;
+}
+
+// Renders a long list of sibling leaves in pages so a cost center with 300 users doesn't emit 300
+// DOM nodes on every scrub tick.
+function hierarchyLeafListHtml(key, leaves) {
+  if (!leaves.length) return "";
+  if (leaves.length <= HIERARCHY_LEAF_PAGE) return leaves.join("");
+  const showAll = hierarchyExpanded(`${key}::all`, false);
+  const shown = showAll ? leaves : leaves.slice(0, HIERARCHY_LEAF_PAGE);
+  return shown.join("") + `<button type="button" class="hierarchy-more" data-tree-toggle="${escapeHtml(key)}::all">${showAll ? `Show fewer` : `Show all ${leaves.length}`}</button>`;
+}
+
+function hierarchyMatches(filter, ...values) {
+  if (!filter) return true;
+  return values.some((value) => String(value || "").toLowerCase().includes(filter));
+}
+
+// Builds the enterprise → organization → cost center → user/repository tree used by both the
+// dashboard and the optimized page, so the two can never present different structures.
+function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
+  const filter = (hierarchyFilters.get(hostId) || "").trim().toLowerCase();
+  const autoCollapse = scenario.users.length > HIERARCHY_AUTO_COLLAPSE_USERS;
+  // While filtering, matches are always revealed: a stored collapse from before the search would
+  // otherwise hide the very rows the user just searched for.
+  const branchOpen = (key, fallback) => (filter ? true : hierarchyExpanded(key, fallback));
+  const scopeAttributes = (type, id, name) => (scopeNodes ? `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"` : "");
+  const scopeClass = scopeNodes ? "scope-node" : "";
+  let matchCount = 0;
+
+  const branches = scenario.organizations.map((org) => {
+    const orgKey = `${hostId}:org:${org.id}`;
     const repos = scenario.repositories.filter((repo) => repo.organizationId === org.id);
     const users = scenario.users.filter((user) => user.organizationIds.includes(org.id));
-    return `<div class="tree-org"><strong>◉ ${escapeHtml(org.name)}</strong><small>${users.length} user${users.length === 1 ? "" : "s"}</small>${repos.map((repo) => `<div class="tree-repo">⌘ ${escapeHtml(repo.name)}</div>`).join("") || `<div class="tree-repo">No repositories</div>`}</div>`;
+    const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
+    const orgMatches = hierarchyMatches(filter, org.name);
+
+    const userLeafHtml = (user) => hierarchyLeafHtml(hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeAttributes("user", user.id, user.name), scopeClass));
+    const visibleUsers = (list) => list.filter((user) => orgMatches || hierarchyMatches(filter, user.name, costCenterForUser(scenario, user)?.name));
+
+    const costCenterHtml = costCenters.map((cc) => {
+      const ccKey = `${hostId}:cc:${cc.id}`;
+      const ccUsers = users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id);
+      const ccMatches = orgMatches || hierarchyMatches(filter, cc.name);
+      const shownUsers = ccMatches ? ccUsers : visibleUsers(ccUsers);
+      if (filter && !ccMatches && !shownUsers.length) return "";
+      matchCount += 1 + shownUsers.length;
+      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUsers.length} user${ccUsers.length === 1 ? "" : "s"} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass);
+      const open = branchOpen(ccKey, !autoCollapse);
+      return hierarchyBranchHtml(ccKey, node, open, `${cc.name} members`, () => hierarchyLeafListHtml(ccKey, shownUsers.map(userLeafHtml)) || `<div class="empty">No users assigned.</div>`);
+    }).join("");
+
+    const unassigned = visibleUsers(users.filter((user) => !costCenterForUser(scenario, user)));
+    const unassignedKey = `${hostId}:unassigned:${org.id}`;
+    const unassignedOpen = branchOpen(unassignedKey, !autoCollapse);
+    let unassignedHtml = "";
+    if (unassigned.length) {
+      matchCount += unassigned.length;
+      const node = `<div class="hierarchy-node cost-center muted-node"><span>${icon("costCenter")}</span><div><span class="hierarchy-kind">Cost center</span><strong>No cost center</strong><small>${unassigned.length} user${unassigned.length === 1 ? "" : "s"} not assigned</small></div></div>`;
+      unassignedHtml = hierarchyBranchHtml(unassignedKey, node, unassignedOpen, "unassigned users", () => hierarchyLeafListHtml(unassignedKey, unassigned.map(userLeafHtml)));
+    }
+
+    const visibleRepos = repos.filter((repo) => orgMatches || hierarchyMatches(filter, repo.name));
+    const repoKey = `${hostId}:repos:${org.id}`;
+    const repoOpen = branchOpen(repoKey, !autoCollapse);
+    let repoHtml = "";
+    if (visibleRepos.length) {
+      matchCount += visibleRepos.length;
+      const node = `<div class="hierarchy-node repo"><span>${icon("repo")}</span><div><span class="hierarchy-kind">Repositories</span><strong>${visibleRepos.length} repositor${visibleRepos.length === 1 ? "y" : "ies"}</strong><small>Usage here bills to ${escapeHtml(org.name)}</small></div></div>`;
+      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`)))));
+    }
+
+    const children = costCenterHtml + unassignedHtml + repoHtml;
+    if (filter && !orgMatches && !children) return "";
+    if (orgMatches) matchCount += 1;
+    const orgOpen = branchOpen(orgKey, true);
+    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass);
+    return hierarchyBranchHtml(orgKey, orgNode, orgOpen, org.name, () => children || `<div class="empty">No cost centers, repositories, or users yet.</div>`);
   }).join("");
+
+  const enterpriseKey = `${hostId}:enterprise`;
+  const enterpriseOpen = branchOpen(enterpriseKey, true);
+  const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass);
+  const body = branches || `<div class="empty">${filter ? "No organizations, cost centers, repositories, or users match this filter." : "No organizations configured yet."}</div>`;
+
+  const legend = `<div class="hierarchy-legend">${Object.entries(HIERARCHY_KINDS).map(([kind, meta]) => `<span class="${meta.className}">${icon(kind)}${meta.label}</span>`).join("")}</div>`;
+  const controls = `<div class="hierarchy-controls"><input type="search" class="hierarchy-filter" data-tree-filter="${escapeHtml(hostId)}" value="${escapeHtml(hierarchyFilters.get(hostId) || "")}" placeholder="Filter organizations, cost centers, repositories, users" aria-label="Filter the enterprise hierarchy"><button type="button" class="text-button" data-tree-expand="${escapeHtml(hostId)}">Expand all</button><button type="button" class="text-button" data-tree-collapse="${escapeHtml(hostId)}">Collapse all</button></div>${filter ? `<p class="hierarchy-hint">${matchCount} match${matchCount === 1 ? "" : "es"} for “${escapeHtml(filter)}”.</p>` : ""}`;
+
+  return legend + controls + hierarchyBranchHtml(enterpriseKey, enterpriseNode, enterpriseOpen, scenario.enterprise.name, () => body);
+}
+
+function renderHierarchy() {
+  $("#hierarchy").innerHTML = hierarchyTreeHtml("dashboard");
+}
+
+// Repaints both trees without a full app render, then restores keyboard focus to the control the
+// user just activated — otherwise collapsing a branch would drop focus back to the document body.
+function renderHierarchyTrees(focusKey = null) {
+  renderHierarchy();
+  if ($("#optimized-hierarchy")) $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
+  if (focusKey) document.querySelector(`[data-tree-toggle="${CSS.escape(focusKey)}"]`)?.focus();
+}
+
+// Expansion must be set from the scenario data rather than from rendered DOM: a collapsed branch
+// doesn't render its descendants, so "Expand all" would otherwise miss everything below the fold.
+function setHierarchyExpansionForHost(hostId, open) {
+  hierarchyExpansion.set(`${hostId}:enterprise`, open);
+  scenario.organizations.forEach((org) => {
+    hierarchyExpansion.set(`${hostId}:org:${org.id}`, open);
+    hierarchyExpansion.set(`${hostId}:repos:${org.id}`, open);
+    hierarchyExpansion.set(`${hostId}:unassigned:${org.id}`, open);
+  });
+  scenario.costCenters.forEach((cc) => hierarchyExpansion.set(`${hostId}:cc:${cc.id}`, open));
+  renderHierarchyTrees();
 }
 
 function renderActivity(replay, currency) {
@@ -515,6 +708,223 @@ function renderBudgetScopeOptions() {
   $("#budget-expiry-label").hidden = !(kind === "user" && type === "user");
 }
 
+function budgetIcon(budget) {
+  if (budget.stateId === "pool" || budget.budgetKind === "pool") return icon("pool");
+  if (budget.budgetKind === "user") return icon("hardStop");
+  if (budget.enforcement === "hard") return icon("hardStop");
+  return icon("alertOnly");
+}
+
+function scopeOptionsFor(type) {
+  if (type === "enterprise") return [scenario.enterprise];
+  if (type === "organization") return scenario.organizations;
+  if (type === "costCenter") return scenario.costCenters;
+  if (type === "user") return scenario.users;
+  return [];
+}
+
+// Delegates to the engine's userId/repository-aware scope match instead of a fragile name lookup,
+// so org membership picked up via a repository (not just a user's home org) is also honored.
+function eventMatchesOptimizedScope(result) {
+  if (!result) return true;
+  return eventInScope(scenario, result, optimizedScope);
+}
+
+function bucketIconFor(kind) {
+  return icon({ included: "pool", ulb: "hardStop", metered: "alertOnly", blocked: "alertOnly" }[kind] || "pool");
+}
+
+// Reuses the engine's bucketsForEvent so the event-level attribution shown here always matches
+// the same logic that drives the budget/pool state cards (single source of truth).
+function bucketImpactHtml(result) {
+  if (!result) return "";
+  const event = scenario.events.find((item) => item.id === result.eventId) || result;
+  const buckets = bucketsForEvent(scenario, event, result);
+  return buckets.map((bucket) => {
+    const value = bucket.kind === "included"
+      ? `${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}`
+      : bucket.kind === "blocked" ? "—" : `${money(bucket.before, "USD")} → ${money(bucket.after, "USD")}`;
+    return `<div class="bucket-impact bucket-impact-${bucket.kind}"><span>${bucketIconFor(bucket.kind)}</span><div><strong>${escapeHtml(bucket.label)}</strong><small>${escapeHtml(bucket.scopeLabel)}</small></div><b>${value}</b></div>`;
+  }).join("");
+}
+
+function daysInMonth(yearMonth) {
+  const [year, month] = yearMonth.split("-").map(Number);
+  return new Date(year, month, 0).getDate();
+}
+
+// Real scenario step dates in the built-in catalog are frequently identical (e.g. every usage
+// step landing on the same "2026-09-15" test date), which collapses the timeline onto a single
+// point. To actually show progress across the month, spread steps evenly across the days of the
+// scenario's starting month by step order, regardless of the step's real recorded date.
+function stepDisplayDate(definition, step, index, totalSteps) {
+  const anchor = (definition.startDate || scenario.simulationDate || "2026-09-01").slice(0, 7);
+  const total = daysInMonth(anchor);
+  const slot = totalSteps > 1 ? Math.round((index * (total - 1)) / (totalSteps - 1)) : 0;
+  const day = Math.min(total, Math.max(1, slot + 1));
+  return `${anchor}-${String(day).padStart(2, "0")}`;
+}
+
+function changeScenarioDefinition(id) {
+  scenarioRun = { definitionId: id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
+  latestEventId = null;
+  render();
+}
+
+function renderGlobalScenarioHeader(definition, definitions) {
+  const selector = $("#global-scenario-definition");
+  if (!selector) return;
+  if (!definition) {
+    selector.innerHTML = `<option>No scenarios available</option>`;
+    selector.disabled = true;
+    $("#global-scenario-title").textContent = "Scenario catalog unavailable";
+    $("#global-scenario-summary").textContent = scenarioCatalogError || "Import a valid custom scenario to continue.";
+    $("#global-scenario-tags").innerHTML = "";
+    return;
+  }
+  selector.disabled = false;
+  selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${builtInScenarioDefinitions.includes(item) ? "" : " · custom"}</option>`).join("");
+  $("#global-scenario-title").textContent = definition.title;
+  $("#global-scenario-summary").textContent = definition.summary;
+  $("#global-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+}
+
+function bucketRowHtml(item) {
+  return `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`;
+}
+
+function bucketGroupHtml(group) {
+  return `<section class="bucket-group" data-bucket-group="${escapeHtml(group.title)}"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map(bucketRowHtml).join("") || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`;
+}
+
+// Diffing keeps existing DOM nodes (and their in-flight CSS width transition) in place whenever the
+// same set of bucket rows is still shown and only their numbers changed — e.g. stepping the scenario
+// timeline forward. A full innerHTML replace on every update would tear down and recreate the bars,
+// which is why the fill used to visually "jump" instead of animating.
+function updateBucketPanel(groups) {
+  const container = $("#optimized-buckets");
+  if (!container) return;
+  const signature = groups.map((group) => `${group.title}:${group.items.map((item) => item.stateId).join(",")}`).join("|");
+  if (container.dataset.signature !== signature) {
+    container.dataset.signature = signature;
+    container.innerHTML = groups.map(bucketGroupHtml).join("");
+    return;
+  }
+  groups.forEach((group) => {
+    const section = [...container.children].find((child) => child.dataset.bucketGroup === group.title);
+    if (!section) return;
+    const note = section.querySelector("p");
+    if (note) note.textContent = group.note;
+    group.items.forEach((item) => {
+      const row = section.querySelector(`[data-history-id="${item.stateId}"]`);
+      if (!row) return;
+      const bar = row.querySelector(".progress > div");
+      const track = row.querySelector(".progress");
+      const percentEl = row.querySelector("b");
+      const smallEl = row.querySelector("small");
+      if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
+      if (track) track.className = `progress ${statusClass(item.percent)}`;
+      if (percentEl) percentEl.textContent = `${Math.round(item.percent)}%`;
+      if (smallEl) smallEl.textContent = item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`;
+    });
+  });
+}
+
+function renderOptimizedBuckets(replay) {
+  const scopeItems = scopeOptionsFor(optimizedScope.type);
+  const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
+  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
+  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
+  const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
+  const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
+  let poolNote = "Consumed before paid overage starts.";
+  if (optimizedScope.type !== "enterprise") {
+    const scopedUsers = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
+    const scopedContribution = usersInScope(scenario, optimizedScope).reduce((sum, user) => sum + userPoolContribution(user, scenario.simulationDate, scenario), 0);
+    const scopedConsumed = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
+    poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
+  }
+  updateBucketPanel([
+    { title: "Included credits", items: [pool], note: poolNote },
+    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.` },
+    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.` },
+  ]);
+}
+
+// Plots the guided scenario's steps along a horizontal date axis in the app header, so the same
+// scrubber drives every page (dashboard, simulate usage, optimized UI, timeline & alerts) instead
+// of living on a single subpage. Stepping it re-materializes the scenario via runScenarioToStep,
+// which is what lets every page reflect consumption growth at that point in the month.
+function renderGlobalTimeline(definition) {
+  const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
+  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index, definition.steps.length));
+  const times = dates.map((date) => new Date(`${date}T00:00:00`).getTime());
+  const min = Math.min(...times);
+  const max = Math.max(...times);
+  const span = Math.max(1, max - min);
+  $("#global-timeline").innerHTML = definition.steps.map((step, index) => {
+    // Inset the plotted range so the first/last markers (centered via translateX(-50%)) keep their
+    // date labels inside the track instead of overflowing the panel edges.
+    const position = 6 + ((times[index] - min) / span) * 88;
+    const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
+    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
+  }).join("");
+  $("#global-timeline-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}`;
+  $("#global-timeline-prev").disabled = !scenarioRun.started || activeIndex < 0;
+  $("#global-timeline-next").disabled = activeIndex >= definition.steps.length - 1;
+}
+
+function renderGlobalScenarioBar() {
+  const definition = selectedScenarioDefinition();
+  renderGlobalScenarioHeader(definition, scenarioDefinitions());
+  if (definition) {
+    renderGlobalTimeline(definition);
+    return;
+  }
+  $("#global-timeline").innerHTML = "";
+  $("#global-timeline-label").textContent = "";
+  $("#global-timeline-prev").disabled = true;
+  $("#global-timeline-next").disabled = true;
+}
+
+function renderOptimizedStepDetail(definition, replay) {
+  const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
+  const step = activeIndex >= 0 ? definition.steps[activeIndex] : null;
+  if (!step) {
+    $("#optimized-step-detail").innerHTML = `<div class="empty">Run the first scenario step to see consumption and threshold impact here.</div>`;
+    return;
+  }
+  const resultId = step.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
+  const result = resultId ? replay.results.find((item) => item.eventId === resultId) : null;
+  const inScope = !result || eventMatchesOptimizedScope(result);
+  const body = result
+    ? (inScope ? `<div class="bucket-impact-list">${bucketImpactHtml(result) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div>` : `<p class="muted">This step's usage event is outside the selected scope — pick a broader scope to see its bucket impact.</p>`)
+    : `<p class="muted">This step does not add a usage event; check the credit buckets above for any resulting change.</p>`;
+  $("#optimized-step-detail").innerHTML = `<div class="optimized-event-card ${result?.status || ""}"><div><span class="status-dot ${result?.status || ""}"></span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(stepDisplayDate(definition, step, activeIndex, definition.steps.length))} · ${escapeHtml(step.type)}</small></div><p>${escapeHtml(step.description)}</p>${body}</div>`;
+}
+
+function renderOptimizedExperience(replay, currency) {
+  const typeSelect = $("#optimized-scope-type");
+  if (!typeSelect) return;
+  typeSelect.value = optimizedScope.type;
+  const scopeItems = scopeOptionsFor(optimizedScope.type);
+  if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
+  setOptions("#optimized-scope", scopeItems, optimizedScope.id);
+
+  const definition = selectedScenarioDefinition();
+  renderOptimizedBuckets(replay);
+
+  $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
+
+  if (definition) {
+    renderOptimizedStepDetail(definition, replay);
+  } else {
+    $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
+  }
+}
+
+
+
 function renderTimeline(replay, currency) {
   const lifecycle = seatLifecycleEvents(scenario);
   const totalItems = scenario.events.length + lifecycle.length;
@@ -548,7 +958,8 @@ function renderResult(replay, currency) {
 function navigate(view) {
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === view));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
-  $("#page-title").textContent = ({ dashboard: "Dashboard", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
+  $("#global-timeline-bar").classList.toggle("hidden", view === "configuration");
+  $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Optimized UI", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
 }
 
 function addDays(value, days) {
@@ -564,7 +975,41 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
+$("#global-scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
+$("#optimized-scope-type").addEventListener("change", (event) => {
+  optimizedScope = { type: event.target.value, id: "" };
+  renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+});
+$("#optimized-scope").addEventListener("change", (event) => {
+  optimizedScope.id = event.target.value;
+  renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+});
+$("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
+$("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
 document.addEventListener("click", (event) => {
+  // Tree chrome is checked before scope selection so that clicking a disclosure arrow inside a
+  // clickable scope node only collapses the branch instead of also changing the inspected scope.
+  const treeToggle = event.target.closest("[data-tree-toggle]");
+  if (treeToggle) {
+    const key = treeToggle.dataset.treeToggle;
+    const open = treeToggle.hasAttribute("aria-expanded") ? treeToggle.getAttribute("aria-expanded") === "true" : hierarchyExpanded(key, false);
+    hierarchyExpansion.set(key, !open);
+    renderHierarchyTrees(key);
+    return;
+  }
+  const expandAll = event.target.closest("[data-tree-expand]");
+  const collapseAll = event.target.closest("[data-tree-collapse]");
+  if (expandAll || collapseAll) {
+    setHierarchyExpansionForHost((expandAll || collapseAll).dataset.treeExpand || (expandAll || collapseAll).dataset.treeCollapse, Boolean(expandAll));
+    return;
+  }
+  const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
+  if (scopeNode) {
+    optimizedScope = { type: scopeNode.dataset.scopeType, id: scopeNode.dataset.scopeId };
+    renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+    return;
+  }
+  const timelineStep = event.target.closest("[data-scenario-timeline-step]"); if (timelineStep) { runScenarioToStep(Number(timelineStep.dataset.scenarioTimelineStep), "Scenario advanced to the selected step"); return; }
   const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { scenarioRun.selectedStepIndex = Number(scenarioStep.dataset.scenarioStep); scenarioRun.runAllArmed = false; renderScenarioStudio(); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
   const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
@@ -581,19 +1026,31 @@ document.addEventListener("click", (event) => {
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
 });
 
+document.addEventListener("input", (event) => {
+  const filterInput = event.target.closest("[data-tree-filter]");
+  if (!filterInput) return;
+  const hostId = filterInput.dataset.treeFilter;
+  hierarchyFilters.set(hostId, filterInput.value);
+  const caret = filterInput.selectionStart;
+  renderHierarchyTrees();
+  // The tree host is rebuilt wholesale, so the live input is a new element; put the cursor back.
+  const restored = document.querySelector(`[data-tree-filter="${CSS.escape(hostId)}"]`);
+  if (restored) { restored.focus(); restored.setSelectionRange(caret, caret); }
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeBudgetHistory();
   if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-history-id]")) {
     event.preventDefault();
     openBudgetHistory(event.target.dataset.historyId, event.target);
   }
+  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-scope-type][data-scope-id]")) {
+    event.preventDefault();
+    event.target.click();
+  }
 });
 
-$("#scenario-definition").addEventListener("change", (event) => {
-  scenarioRun = { definitionId: event.target.value, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
-  latestEventId = null;
-  renderScenarioStudio();
-});
+$("#scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
 $("#scenario-reset").addEventListener("click", () => runScenarioToStep(-1, "Scenario reset to its baseline"));
 $("#scenario-previous").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#scenario-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
