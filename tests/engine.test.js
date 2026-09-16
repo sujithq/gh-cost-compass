@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, bucketsForEvent, createDefaultScenario, eventInScope, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, bucketsForEvent, createDefaultScenario, eventInScope, isSeatActiveForDate, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -287,6 +287,28 @@ test("eventInScope and budgetInScope correlate usage and budgets by scope, not b
   const buckets = bucketsForEvent(scenario, event, result);
   assert.ok(buckets.some((bucket) => bucket.kind === "included"));
   assert.ok(buckets.some((bucket) => bucket.kind === "ulb"));
+});
+
+test("replayScenarioThroughEvent lets the optimized UI's scrubber show consumption growing event by event", () => {
+  const scenario = createDefaultScenario();
+  scenario.simulationDate = "2026-09-30";
+  scenario.events = [usage("evt-a", "2026-09-05", 5), usage("evt-b", "2026-09-15", 7), usage("evt-c", "2026-09-25", 9)];
+  const full = replayScenario(scenario);
+
+  const throughFirst = replayScenarioThroughEvent(scenario, "evt-a");
+  const throughSecond = replayScenarioThroughEvent(scenario, "evt-b");
+  const throughLast = replayScenarioThroughEvent(scenario, "evt-c");
+
+  // Pool/ULB consumption should strictly grow as later events are included, proving the bucket
+  // panel is no longer frozen at the final totals regardless of scrubber position.
+  assert.ok(throughFirst.pool.consumed < throughSecond.pool.consumed);
+  assert.ok(throughSecond.pool.consumed < throughLast.pool.consumed);
+  assert.deepEqual(throughLast.pool, full.pool);
+  assert.deepEqual(throughLast.budgetStates, full.budgetStates);
+
+  // An unknown or missing event id falls back to the full replay rather than throwing.
+  assert.deepEqual(replayScenarioThroughEvent(scenario, "does-not-exist"), full);
+  assert.deepEqual(replayScenarioThroughEvent(scenario, null), full);
 });
 
 test("budget health scenario catalog stays aligned with the underlying progress math", async () => {

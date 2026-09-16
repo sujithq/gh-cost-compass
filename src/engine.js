@@ -275,6 +275,19 @@ export function replayScenario(scenario) {
   return { results, alerts, budgetStates, period: selectedPeriod, pool: { total: poolTotal, consumed, remaining: Math.max(0, poolTotal - consumed), percent: poolTotal ? consumed / poolTotal * 100 : 100, meteredCost } };
 }
 
+// Re-runs replayScenario as if only events up to and including eventId had happened yet, using the
+// same date-then-original-index ordering the engine uses internally. This lets the UI "scrub" through
+// history and see included-pool / ULB / metered-budget totals grow event by event instead of only ever
+// showing the final end-of-period totals.
+export function replayScenarioThroughEvent(scenario, eventId) {
+  if (!eventId) return replayScenario(scenario);
+  const ordered = scenario.events.map((event, index) => ({ event, index })).sort((a, b) => a.event.date.localeCompare(b.event.date) || a.index - b.index);
+  const cutoff = ordered.findIndex((item) => item.event.id === eventId);
+  if (cutoff === -1) return replayScenario(scenario);
+  const includedIds = new Set(ordered.slice(0, cutoff + 1).map((item) => item.event.id));
+  return replayScenario({ ...scenario, events: scenario.events.filter((event) => includedIds.has(event.id)) });
+}
+
 // --- Consumption attribution & scope-aware inspection helpers ---
 // A "scope" is { type: "enterprise" | "organization" | "costCenter" | "user", id }.
 

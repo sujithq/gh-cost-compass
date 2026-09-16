@@ -1,4 +1,4 @@
-import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, describeScope, eventInScope, isSeatActiveForDate, money, replayScenario, replayScenarioThroughEvent, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -580,22 +580,34 @@ function renderOptimizedExperience(replay, currency) {
   if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
   setOptions("#optimized-scope", scopeItems, optimizedScope.id);
 
+  // Resolve the scrubber position against the full (final) replay results first, so the scrubbed-to
+  // event can drive a truncated "as of this event" replay for the bucket panel below.
+  const scopedResults = replay.results.filter(eventMatchesOptimizedScope);
+  const scrubber = $("#optimized-scrubber");
+  scrubber.max = String(Math.max(0, scopedResults.length - 1));
+  scrubber.value = String(Math.min(Number(scrubber.value || 0), Math.max(0, scopedResults.length - 1)));
+  const position = Number(scrubber.value || 0);
+  const selected = scopedResults[position] || scopedResults.at(-1);
+  const atLatest = !selected || position >= scopedResults.length - 1;
+  const snapshot = atLatest ? replay : replayScenarioThroughEvent(scenario, selected.eventId);
+
   const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
-  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
-  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
-  const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
+  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: snapshot.pool.consumed, amount: snapshot.pool.total, remaining: snapshot.pool.remaining, percent: snapshot.pool.percent, budgetKind: "pool" };
+  const userBudgets = snapshot.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
+  const meteredBudgets = snapshot.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
   const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
-  let poolNote = "Consumed before paid overage starts.";
+  const snapshotNote = atLatest ? "" : ` Showing totals as of event ${position + 1} of ${scopedResults.length} — drag the scrubber to the end for current totals.`;
+  let poolNote = `Consumed before paid overage starts.${snapshotNote}`;
   if (optimizedScope.type !== "enterprise") {
     const scopedUsers = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
     const scopedContribution = usersInScope(scenario, optimizedScope).reduce((sum, user) => sum + userPoolContribution(user, scenario.simulationDate, scenario), 0);
-    const scopedConsumed = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
-    poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
+    const scopedConsumed = snapshot.results.filter((item) => item.status === "accepted" && item.date.startsWith(snapshot.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
+    poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.${snapshotNote}`;
   }
   $("#optimized-buckets").innerHTML = [
     { title: "Included credits", items: [pool], note: poolNote },
-    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.` },
-    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.` },
+    { title: "User-level budgets", items: userBudgets, note: `Hard stops based on total AI-credit value${scopeNote}.${snapshotNote}` },
+    { title: "Budget controls", items: meteredBudgets, note: `Track paid metered overage after the pool${scopeNote}.${snapshotNote}` },
   ].map((group) => `<section class="bucket-group"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map((item) => `<button type="button" class="bucket-row budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "pool" ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} credits` : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${item.enforcement === "hard" ? "hard stop" : "alert only"}`}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`).join("") || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`).join("");
 
   const scopeNode = (type, id) => `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""}`;
@@ -613,17 +625,12 @@ function renderOptimizedExperience(replay, currency) {
     return `<div class="hierarchy-branch"><div class="hierarchy-node org scope-node" ${scopeNode("organization", org.id)} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(org.name)} scope"><span>${icon("organization")}</span><div><strong>${escapeHtml(org.name)}</strong><small>${users.length} users · ${repos.length} repositories</small></div></div><div class="hierarchy-lane">${costCenterLanes}${unassignedHtml}</div></div>`;
   }).join("");
 
-  const scopedResults = replay.results.filter(eventMatchesOptimizedScope);
-  const scrubber = $("#optimized-scrubber");
-  scrubber.max = String(Math.max(0, scopedResults.length - 1));
-  scrubber.value = String(Math.min(Number(scrubber.value || 0), Math.max(0, scopedResults.length - 1)));
-  const position = Number(scrubber.value || 0);
-  const selected = scopedResults[position] || scopedResults.at(-1);
   $("#optimized-scrubber-prev").disabled = position <= 0;
   $("#optimized-scrubber-next").disabled = position >= scopedResults.length - 1;
   $("#optimized-event-count").textContent = scopedResults.length ? `Event ${position + 1} of ${scopedResults.length}` : "0 events";
   $("#optimized-event-detail").innerHTML = selected ? `<div class="optimized-event-card ${selected.status}"><div><span class="status-dot ${selected.status}"></span><strong>${escapeHtml(selected.userName)} · ${escapeHtml(selected.productName)}</strong><small>${selected.date} · ${selected.quantity.toLocaleString()} units · ${money(selected.cost, currency)} · ${selected.status}</small></div><p>${escapeHtml(selected.reason)}</p><div class="bucket-impact-list">${bucketImpactHtml(selected) || `<div class="empty compact-empty">No bucket counters changed.</div>`}</div></div>` : `<div class="empty">No usage events match this scope yet.</div>`;
 }
+
 
 function renderTimeline(replay, currency) {
   const lifecycle = seatLifecycleEvents(scenario);
