@@ -1,4 +1,4 @@
-import { DEFAULT_SCENARIO_SET_ID, budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeScope, eventInScope, isSeatActiveForDate, money, normalizeScenario, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -618,11 +618,18 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
     const costCenterHtml = costCenters.map((cc) => {
       const ccKey = `${hostId}:cc:${cc.id}`;
       const ccUsers = users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id);
+      const ccTotalUsers = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === cc.id).length;
       const ccMatches = orgMatches || hierarchyMatches(filter, cc.name);
       const shownUsers = ccMatches ? ccUsers : visibleUsers(ccUsers);
       if (filter && !ccMatches && !shownUsers.length) return "";
       matchCount += 1 + shownUsers.length;
-      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUsers.length} user${ccUsers.length === 1 ? "" : "s"} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass);
+      // A cost center can span organizations, so this branch only holds the members that also belong
+      // to this org. Selecting the node scopes to the whole cost center, so say so when they differ
+      // rather than showing a partial count that looks like the cost center's total size.
+      const ccUserText = ccTotalUsers === ccUsers.length
+        ? `${ccUsers.length} user${ccUsers.length === 1 ? "" : "s"}`
+        : `${ccUsers.length} of ${ccTotalUsers} users here`;
+      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUserText} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass);
       const open = branchOpen(ccKey, !autoCollapse);
       return hierarchyBranchHtml(ccKey, node, open, `${cc.name} members`, () => hierarchyLeafListHtml(ccKey, shownUsers.map(userLeafHtml)) || `<div class="empty">No users assigned.</div>`);
     }).join("");
@@ -750,20 +757,20 @@ function renderConfiguration() {
     return entityRow(item.name, `${members.length ? members.join(", ") : "No users"}${costCenters.length ? ` · assigned to ${costCenters.join(", ")}` : ""}`, "enterpriseTeam", item.id);
   }).join("") || `<div class="empty">No enterprise teams configured.</div>`;
   $("#cost-center-list").innerHTML = scenario.costCenters.map((item) => {
-    const assignedOrganizations = scenario.organizations.filter((org) => (item.organizationIds || []).includes(org.id)).map((org) => org.name);
-    const assignedRepositories = scenario.repositories.filter((repo) => (item.repositoryIds || []).includes(repo.id)).map((repo) => repo.name);
-    const assignedTeams = scenario.enterpriseTeams.filter((team) => (item.enterpriseTeamIds || []).includes(team.id)).map((team) => team.name);
-    const assignedUsers = scenario.users.filter((user) => (item.userIds || []).includes(user.id)).map((user) => user.name);
+    const config = describeCostCenterConfiguration(scenario, item);
+    const { settings } = config;
     const members = costCenterMembers.get(item.id) || 0;
     const pool = replay.costCenterPoolStates.find((state) => state.costCenterId === item.id);
-    const assignments = [
-      assignedUsers.length ? `users: ${assignedUsers.join(", ")}` : "",
-      assignedTeams.length ? `teams: ${assignedTeams.join(", ")}` : "",
-      assignedOrganizations.length ? `orgs: ${assignedOrganizations.join(", ")}` : "",
-      assignedRepositories.length ? `repos: ${assignedRepositories.join(", ")}` : "",
-    ].filter(Boolean).join(" · ");
-    const poolText = item.aiCreditPoolEnabled ? `AI credit pool enabled · ${pool?.consumed.toLocaleString() || 0}/${pool?.total.toLocaleString() || 0} credits · ${item.aiCreditPoolCapMode === "block" ? "block members at cap" : "paid overage allowed"}` : "AI credit pool not enabled";
-    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · Included usage controls for cost centers: ${escapeHtml(poolText)} · ${escapeHtml(assignments || "no resource assignment")} · ${item.excludeFromEnterpriseBudget ? "excluded from enterprise AI budget" : "counts against enterprise AI budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}">${item.aiCreditPoolEnabled ? "Disable pool" : "Enable pool"}</button><button class="text-button" data-toggle-pool-mode="${item.id}">${item.aiCreditPoolCapMode === "block" ? "Allow paid overage" : "Block members at cap"}</button><button class="text-button" data-toggle-costcenter="${item.id}">${item.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
+    const assignments = config.resources
+      .filter((resource) => resource.names.length)
+      .map((resource) => `${resource.label.toLowerCase()}: ${resource.names.length} selected`)
+      .join(" · ");
+    // GitHub derives the cap from the licenses attributed to the cost center, so surface both the
+    // amount and the license count that produced it rather than only an on/off state.
+    const capText = settings.includedUsageCapEnabled
+      ? `AI credit included usage cap on · ${(pool?.consumed || 0).toLocaleString()}/${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses · at cap: ${settings.atCapBehavior === "block" ? "block members" : "continue as paid overage"}`
+      : `AI credit included usage cap off · would cap at ${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses`;
+    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · Included usage controls for cost centers: ${escapeHtml(capText)} · ${escapeHtml(assignments || "no resource assignment")} · ${settings.excludeFromEnterpriseBudget ? "AI overage excluded from enterprise budget" : "AI overage counts against enterprise budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}" title="GitHub setting: AI credit included usage cap">${settings.includedUsageCapEnabled ? "Turn off included usage cap" : "Turn on included usage cap"}</button><button class="text-button" data-toggle-pool-mode="${item.id}" title="Behavior when the included usage cap is reached">${settings.atCapBehavior === "block" ? "At cap: continue as paid overage" : "At cap: block members"}</button><button class="text-button" data-toggle-costcenter="${item.id}" title="Whether this cost center's paid AI overage rolls up into the enterprise budget">${settings.excludeFromEnterpriseBudget ? "Include AI overage in enterprise budget" : "Exclude AI overage from enterprise budget"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
   }).join("");
   $("#user-list").innerHTML = scenario.users.map((item) => {
     const seatActive = isSeatActiveForDate(item, scenario.simulationDate);
@@ -982,6 +989,12 @@ function renderGlobalScenarioHeader(definition, definitions) {
 }
 
 function bucketRowDetail(item) {
+  // Aggregate rows stand in for many per-user budget states, so they report the spread across those
+  // users instead of a single budget's stop behavior.
+  if (item.aggregate) {
+    const breaching = item.breachingCount ? ` · ${item.breachingCount} over threshold` : "";
+    return `${item.userCount} users · highest ${Math.round(item.percent)}%${breaching} · ${money(item.spent, "USD")} of ${money(item.amount, "USD")} combined`;
+  }
   return item.budgetKind === "pool"
     ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} included credits`
     : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${budgetStopLabel(item)}`;
@@ -993,7 +1006,11 @@ function bucketRowHtml(item) {
   const labels = { "cost-center": "Cost center", enterprise: "Enterprise", user: "ULB", metered: "Metered" };
   const icons = { "cost-center": "costCenter", enterprise: "enterprise", user: "hardStop", metered: "alertOnly" };
   const label = labels[type];
-  return `<button type="button" class="bucket-row bucket-row-${type} budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}"><span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b></button>`;
+  const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${Math.round(item.percent)}%</b>`;
+  // Aggregate rows stand in for many per-user budget states, so there is no single state whose audit
+  // trail could be opened; render them as static rows rather than budget-history triggers.
+  if (item.aggregate) return `<div class="bucket-row bucket-row-${type} aggregate" data-history-id="${escapeHtml(item.stateId)}">${body}</div>`;
+  return `<button type="button" class="bucket-row bucket-row-${type} budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}">${body}</button>`;
 }
 
 function bucketGroupHtml(group) {
@@ -1028,9 +1045,61 @@ function updateBucketPanel(groups) {
       if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
       if (track) track.className = `progress ${statusClass(item.percent)}`;
       if (percentEl) percentEl.textContent = `${Math.round(item.percent)}%`;
-  if (smallEl) smallEl.textContent = bucketRowDetail(item) + (item.routeNote ? ` · ${item.routeNote}` : "");
+      if (smallEl) smallEl.textContent = bucketRowDetail(item) + (item.routeNote ? ` · ${item.routeNote}` : "");
     });
   });
+}
+
+// At any scope broader than a single user, per-user ULB states are collapsed into one row per budget
+// definition. The enterprise set materializes 170 states from a single universal ULB, so listing them
+// individually buries the handful of budgets an admin actually needs to look at.
+function aggregateUserBudgets(states) {
+  const groups = new Map();
+  for (const state of states) {
+    if (!groups.has(state.id)) groups.set(state.id, []);
+    groups.get(state.id).push(state);
+  }
+  return [...groups.values()].map((items) => {
+    if (items.length === 1) return items[0];
+    const first = items[0];
+    const spent = items.reduce((sum, item) => sum + item.spent, 0);
+    const amount = items.reduce((sum, item) => sum + item.amount, 0);
+    return {
+      ...first,
+      stateId: `aggregate:${first.id}`,
+      displayName: first.name,
+      aggregate: true,
+      userCount: items.length,
+      breachingCount: items.filter((item) => item.percent >= 100).length,
+      spent,
+      amount,
+      // The bar tracks the user closest to their hard stop, because that is the one that will block
+      // next — an average would hide a single user who is already at 100%.
+      percent: Math.max(...items.map((item) => item.percent)),
+    };
+  });
+}
+
+// Renders the selected hierarchy node's configuration next to its consumption, using GitHub's own
+// cost-center vocabulary ("Resources" / "AI credit included usage cap") so the simulator reads as an
+// analogue of the real admin experience.
+function scopeConfigurationHtml(config) {
+  if (!config) return `<div class="empty compact-empty">Select a node in the hierarchy to see its configuration.</div>`;
+  if (config.type === "costCenter") {
+    const { settings } = config;
+    const resources = config.resources.map((resource) => {
+      const summary = resource.names.length ? `${resource.names.length} selected` : "None selected";
+      const title = resource.names.length ? resource.names.slice(0, 12).join(", ") + (resource.names.length > 12 ? `, +${resource.names.length - 12} more` : "") : "";
+      return `<div class="config-fact" title="${escapeHtml(title)}"><span>${escapeHtml(resource.label)}</span><b>${escapeHtml(summary)}</b></div>`;
+    }).join("");
+    const capValue = `${settings.capCredits.toLocaleString()} credits`;
+    const capDetail = settings.includedUsageCapEnabled
+      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. At the cap, members are ${settings.atCapBehavior === "block" ? "<strong>blocked</strong>" : "allowed to continue as <strong>paid overage</strong>"}.`
+      : `Not enabled — this cost center draws from the enterprise shared pool instead. If enabled, the cap would be ${capValue} from ${settings.licenseCount} attributed licenses.`;
+    return `<div class="scope-config"><h5>Resources</h5><div class="config-fact-grid">${resources}</div><h5>Settings</h5><div class="config-fact"><span>AI credit included usage cap</span><b>${settings.includedUsageCapEnabled ? capValue : "Off"}</b></div><p class="muted">${capDetail}</p>${settings.excludeFromEnterpriseBudget ? `<p class="muted">Paid AI overage from this cost center is excluded from the enterprise budget.</p>` : ""}</div>`;
+  }
+  const facts = config.facts.map((fact) => `<div class="config-fact"><span>${escapeHtml(fact.label)}</span><b>${escapeHtml(fact.value)}</b></div>`).join("");
+  return `<div class="scope-config"><h5>Settings</h5><div class="config-fact-grid">${facts}</div></div>`;
 }
 
 function renderOptimizedBuckets(replay) {
@@ -1048,7 +1117,8 @@ function renderOptimizedBuckets(replay) {
     amount: item.total,
     routeNote: item.capMode === "block" ? "Blocks at cap." : item.remaining === 0 ? "At cap · next accepted usage uses paid overage." : "Included credits available before paid overage.",
   }));
-  const userBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
+  const scopedUserBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
+  const userBudgets = optimizedScope.type === "user" ? scopedUserBudgets : aggregateUserBudgets(scopedUserBudgets);
   const meteredBudgets = replay.budgetStates.filter((item) => item.budgetKind === "metered" && inScope(item));
   const scopeNote = optimizedScope.type === "enterprise" ? "" : ` for ${scopeLabels[optimizedScope.type]} · ${escapeHtml(scopeItems.find((item) => item.id === optimizedScope.id)?.name || "")}`;
   let poolNote = "Consumed before paid overage starts.";
@@ -1058,8 +1128,10 @@ function renderOptimizedBuckets(replay) {
     const scopedConsumed = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
     poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
   }
+  const configHost = $("#optimized-scope-config");
+  if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
-  { title: "Included credits", items: [pool, ...costCenterPools], note: poolNote },
+    { title: "Included credits", items: [pool, ...costCenterPools], note: poolNote },
     { title: "User-level budgets", items: userBudgets, note: `User-level budgets always stop usage based on total AI-credit value${scopeNote}.` },
     { title: "Budget controls", items: meteredBudgets, note: `Budgets and alerts track paid metered overage after included credits${scopeNote}.` },
   ]);
@@ -1241,14 +1313,14 @@ document.addEventListener("click", (event) => {
     const target = scenario.costCenters.find((item) => item.id === poolToggle.dataset.togglePool);
     if (target) {
       target.aiCreditPoolEnabled = !target.aiCreditPoolEnabled;
-      saveAndRender(target.aiCreditPoolEnabled ? "Cost center AI credit pool enabled" : "Cost center AI credit pool disabled");
+      saveAndRender(target.aiCreditPoolEnabled ? "AI credit included usage cap turned on" : "AI credit included usage cap turned off");
     }
   }
   const modeToggle = event.target.closest("[data-toggle-pool-mode]"); if (modeToggle) {
     const target = scenario.costCenters.find((item) => item.id === modeToggle.dataset.togglePoolMode);
     if (target) {
       target.aiCreditPoolCapMode = target.aiCreditPoolCapMode === "block" ? "allowOverage" : "block";
-      saveAndRender(target.aiCreditPoolCapMode === "block" ? "Cost center pool will block at cap" : "Cost center pool can continue into paid overage");
+      saveAndRender(target.aiCreditPoolCapMode === "block" ? "At the included usage cap, members are blocked" : "At the included usage cap, usage continues as paid overage");
     }
   }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);

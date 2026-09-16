@@ -14,6 +14,16 @@
 .scope-marker{display:inline-grid;place-items:center;width:20px;height:20px;flex:none;border-radius:5px}.scope-marker .icon{width:13px;height:13px}.scope-marker-pool,.scope-marker-enterprise{background:#eceafd;color:var(--accent)}.scope-marker-org{background:#e8f2ff;color:#2563a8}.scope-marker-cost-center{background:#fff1cf;color:#9a6910}.scope-marker-repo,.scope-marker-metered{background:#f0eefb;color:#5b4ddb}.scope-marker-user{background:#dff7ef;color:var(--green)}.scenario-delta-label,.impact-row-label,.budget-scope-cell{display:flex;align-items:center;gap:6px;min-width:0}.budget-scope-cell{font-size:12px}
 .icon{width:18px;height:18px;flex:none}.nav-item{display:flex;align-items:center;gap:9px}.nav-icon{width:16px;height:16px;opacity:.85}.hierarchy-node>span .icon,.bucket-icon .icon,.bucket-impact span .icon{width:18px;height:18px}
 
+.optimized-scope-config{margin-bottom:14px}
+.scope-config{padding:13px;border:1px solid #ddd9fb;border-radius:12px;background:#faf9ff}
+.scope-config h5{margin:0 0 7px;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.scope-config h5+*{margin-bottom:11px}
+.scope-config p.muted{margin:0;font-size:11px;line-height:1.5}
+.config-fact-grid{display:grid;gap:7px}
+.config-fact{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.config-fact span{font-size:11px;color:var(--muted);font-weight:700}
+.config-fact b{font-size:12px;white-space:nowrap}
+.bucket-row.aggregate{border:1px solid var(--line);border-radius:10px;cursor:default}
 .control-evaluation{margin-top:0.75rem;border-top:1px solid var(--line);padding-top:0.75rem;display:grid;gap:0.6rem}
 .control-evaluation h4{margin:0;color:var(--text);font-size:0.85rem}
 .control-check{border:1px solid var(--line);border-radius:0.75rem;padding:0.7rem;background:var(--bg)}
