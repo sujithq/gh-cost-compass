@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scenario.schema.json",
+  "title": "Copilot Budget Lab scenario definition",
+  "type": "object",
+  "required": ["version", "id", "title", "summary", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "sourceUrls": { "type": "array", "items": { "type": "string", "format": "uri", "pattern": "^https://" }, "uniqueItems": true },
+    "startDate": { "type": "string", "format": "date" },
+    "setup": { "type": "array", "items": { "$ref": "#/$defs/mutation" } },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "mutation": {
+      "type": "object",
+      "required": ["target", "changes"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "enum": ["enterprise", "budget", "user", "organization", "repository", "costCenter", "product"] },
+        "id": { "type": "string" },
+        "changes": { "type": "object", "minProperties": 1 }
+      }
+    },
+    "commonStep": {
+      "type": "object",
+      "required": ["id", "type", "title", "description", "expected"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "type": { "enum": ["usage", "advance-date", "configuration", "checkpoint"] },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "expected": { "type": "string", "minLength": 1 }
+      }
+    },
+    "step": {
+      "allOf": [
+        { "$ref": "#/$defs/commonStep" },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "type": { "const": "usage" },
+                "event": {
+                  "type": "object",
+                  "required": ["date", "userId", "productId", "quantity"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "date": { "type": "string", "format": "date" },
+                    "userId": { "type": "string" },
+                    "repositoryId": { "type": ["string", "null"] },
+                    "productId": { "type": "string" },
+                    "quantity": { "type": "number", "exclusiveMinimum": 0 }
+                  }
+                }
+              },
+              "required": ["event"]
+            },
+            { "properties": { "type": { "const": "advance-date" }, "date": { "type": "string", "format": "date" } }, "required": ["date"] },
+            { "properties": { "type": { "const": "configuration" }, "mutation": { "$ref": "#/$defs/mutation" } }, "required": ["mutation"] },
+            { "properties": { "type": { "const": "checkpoint" } } }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

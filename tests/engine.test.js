@@ -2,8 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
-import { BUILT_IN_SCENARIOS, materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
+import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
+import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
+
+async function fileFetch(url) {
+  try {
+    const content = await readFile(url, "utf8");
+    return { ok: true, status: 200, json: async () => JSON.parse(content) };
+  } catch {
+    return { ok: false, status: 404, json: async () => null };
+  }
+}
+
+const BUILT_IN_SCENARIOS = await loadScenarioCatalog(new URL("../scenarios/catalog.json", import.meta.url), fileFetch);
 
 function usage(id, date, quantity, overrides = {}) {
   return { id, date, quantity, userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", ...overrides };
@@ -276,6 +288,26 @@ test("guided scenarios are declarative, reversible, and produce their documented
   const blocked = replayScenario(materializeScenario(hardStop, 1));
   assert.equal(blocked.results.at(-1).status, "blocked");
   assert.match(blocked.results.at(-1).reason, /user-level hard stop/);
+});
+
+test("built-in scenarios are loaded from the external catalog", async () => {
+  const catalog = JSON.parse(await readFile(new URL("../scenarios/catalog.json", import.meta.url), "utf8"));
+  const runner = await readFile(new URL("../src/scenario-runner.js", import.meta.url), "utf8");
+  const schema = JSON.parse(await readFile(new URL("../scenarios/scenario.schema.json", import.meta.url), "utf8"));
+  assert.equal(catalog.version, 1);
+  assert.deepEqual(catalog.scenarios.map((item) => item.id), BUILT_IN_SCENARIOS.map((item) => item.id));
+  assert.equal(schema.properties.version.const, 1);
+  assert.doesNotMatch(runner, /Budget health progression|BUILT_IN_SCENARIOS/);
+  assert.ok(BUILT_IN_SCENARIOS.every((definition) => definition.$schema === "./scenario.schema.json"));
+});
+
+test("scenario catalog rejects mismatched definition ids", async () => {
+  const responses = new Map([
+    ["https://example.test/catalog.json", { version: 1, scenarios: [{ id: "catalog-id", file: "scenario.json" }] }],
+    ["https://example.test/scenario.json", { ...BUILT_IN_SCENARIOS[0], id: "different-id" }],
+  ]);
+  const fetcher = async (url) => ({ ok: responses.has(String(url)), status: responses.has(String(url)) ? 200 : 404, json: async () => responses.get(String(url)) });
+  await assert.rejects(loadScenarioCatalog(new URL("https://example.test/catalog.json"), fetcher), /does not match definition id/);
 });
 
 test("simulation page previews selected steps before explicit execution", async () => {

@@ -1,0 +1,69 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "pool-to-paid-overage",
+  "title": "Shared pool to paid overage",
+  "summary": "Consume included AI credits first, then show how paid usage flows into metered budgets.",
+  "tags": [
+    "shared pool",
+    "metered usage",
+    "cost center"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 200
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "pool-mostly-used",
+      "type": "usage",
+      "title": "Consume most included credits",
+      "description": "Alice consumes 5,000 of the 5,800 pooled credits.",
+      "expected": "No paid overage is created and 800 pooled credits remain.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 5000
+      }
+    },
+    {
+      "id": "pool-empty",
+      "type": "usage",
+      "title": "Exhaust the shared pool",
+      "description": "The remaining 800 included credits are consumed.",
+      "expected": "The pool reaches 100%, while metered cost remains $0.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 800
+      }
+    },
+    {
+      "id": "paid-overage",
+      "type": "usage",
+      "title": "Create paid overage",
+      "description": "A further 1,000 credits can no longer use the pool.",
+      "expected": "$10 of paid overage is attributed to the cost-center and enterprise budgets.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    }
+  ]
+}

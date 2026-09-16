@@ -17,7 +17,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Documentation-backed configuration help, source links, and live cost/access impact previews
 - Scenario import/export, reset, replay, and browser-local persistence
 - A preview-first Scenario Studio with non-destructive step selection, explicit execution controls, predicted and actual budget deltas, alerts, and health snapshots
-- Extensible declarative scenario definitions with browser-local JSON import/export
+- Extensible declarative scenario definitions loaded from `scenarios/catalog.json`, with JSON Schema support and browser-local import/export
 - A documented scenario catalog for budget health progression and the next-step 100% saturation case
 
 ## Run and test
@@ -55,7 +55,7 @@ Events are atomic: an event that would cross a hard stop is rejected in full. Gi
 
 The Simulation page includes a guided Scenario Studio. It keeps the current step, expected result, accepted or blocked outcome, budget deltas, alerts, and full health snapshot together so a scenario can be understood without switching to the Dashboard.
 
-Scenario definitions are declarative and support usage, date advancement, configuration changes, and explanatory checkpoints. Definitions can be imported and exported as JSON. See `docs/scenario-studio.md` for the schema and authoring guide.
+Scenario definitions are declarative and support usage, date advancement, configuration changes, and explanatory checkpoints. Built-ins are discovered through `scenarios/catalog.json`, with editor validation from `scenarios/scenario.schema.json`; definitions can also be imported and exported through the browser. See `docs/scenario-studio.md` for the authoring guide.
 
 The budget progression catalog remains documented in `docs/budget-health-scenarios.md`, with machine-verified data in `docs/budget-health-scenarios.json`. The automated tests also execute the built-in guided scenarios, including the case where one further step moves a budget from 90% to exactly `100%`.
 

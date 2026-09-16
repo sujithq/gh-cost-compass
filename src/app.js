@@ -1,12 +1,15 @@
 import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
-import { BUILT_IN_SCENARIOS, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
+import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
+import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const CUSTOM_SCENARIOS_KEY = "copilot-budget-lab-custom-scenarios-v1";
 let scenario = loadScenario();
+let builtInScenarioDefinitions = [];
 let customScenarioDefinitions = loadCustomScenarioDefinitions();
-let scenarioRun = { definitionId: BUILT_IN_SCENARIOS[0].id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
+let scenarioCatalogError = null;
+let scenarioRun = { definitionId: "", stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
 let latestEventId = null;
 let budgetHistoryTrigger = null;
 let seenAlertIds = null;
@@ -30,11 +33,12 @@ function loadCustomScenarioDefinitions() {
 }
 
 function scenarioDefinitions() {
-  return [...BUILT_IN_SCENARIOS, ...customScenarioDefinitions];
+  return [...builtInScenarioDefinitions, ...customScenarioDefinitions];
 }
 
 function selectedScenarioDefinition() {
-  return scenarioDefinitions().find((item) => item.id === scenarioRun.definitionId) || BUILT_IN_SCENARIOS[0];
+  const definitions = scenarioDefinitions();
+  return definitions.find((item) => item.id === scenarioRun.definitionId) || definitions[0] || null;
 }
 
 function saveAndRender(message, { toast = true } = {}) {
@@ -135,7 +139,22 @@ function renderScenarioStudio() {
   const definition = selectedScenarioDefinition();
   const definitions = scenarioDefinitions();
   const selector = $("#scenario-definition");
-  selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${BUILT_IN_SCENARIOS.includes(item) ? "" : " · custom"}</option>`).join("");
+  if (!definition) {
+    selector.innerHTML = `<option>No scenarios available</option>`;
+    selector.disabled = true;
+    $("#scenario-title").textContent = "Scenario catalog unavailable";
+    $("#scenario-summary").textContent = scenarioCatalogError || "Import a valid custom scenario to continue.";
+    $("#scenario-tags").innerHTML = "";
+    $("#scenario-sources").innerHTML = "";
+    $("#scenario-step-list").innerHTML = "";
+    $("#scenario-progress-label").textContent = "0 steps";
+    $("#scenario-outcome").innerHTML = `<div class="scenario-result blocked"><strong>Unable to load guided scenarios</strong><span>${escapeHtml(scenarioCatalogError || "No valid scenario definitions were found.")}</span></div>`;
+    ["#scenario-reset", "#scenario-previous", "#scenario-next", "#scenario-run-selected", "#scenario-run-all", "#export-scenario-definition"].forEach((id) => { $(id).disabled = true; });
+    return;
+  }
+  selector.disabled = false;
+  selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${builtInScenarioDefinitions.includes(item) ? "" : " · custom"}</option>`).join("");
+  ["#scenario-reset", "#export-scenario-definition"].forEach((id) => { $(id).disabled = false; });
   $("#scenario-title").textContent = definition.title;
   $("#scenario-summary").textContent = definition.summary;
   $("#scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
@@ -604,7 +623,7 @@ $("#import-scenario-definition").addEventListener("change", async (event) => {
     for (const definition of definitions) {
       const error = validateScenarioDefinition(definition);
       if (error) throw new Error(error);
-      if (BUILT_IN_SCENARIOS.some((item) => item.id === definition.id)) throw new Error(`The id ${definition.id} is reserved by a built-in scenario.`);
+      if (builtInScenarioDefinitions.some((item) => item.id === definition.id)) throw new Error(`The id ${definition.id} is reserved by a built-in scenario.`);
       materializeScenario(definition, -1);
       customScenarioDefinitions = customScenarioDefinitions.filter((item) => item.id !== definition.id);
       customScenarioDefinitions.push(definition);
@@ -677,5 +696,18 @@ $("#import-config").addEventListener("change", async (event) => { try { const im
 $("#reset-scenario").addEventListener("click", () => { scenario = createDefaultScenario(); latestEventId = null; $("#last-result").className = "result-placeholder"; $("#last-result").innerHTML = `<span>◎</span><h3>Ready to simulate</h3><p>Submit usage to see attribution, cost, alerts, and enforcement.</p>`; saveAndRender("Demo scenario reset"); });
 $("#clear-events").addEventListener("click", () => { scenario.events = []; latestEventId = null; saveAndRender("Usage history cleared"); });
 
+async function initializeScenarioCatalog() {
+  try {
+    builtInScenarioDefinitions = await loadScenarioCatalog();
+    const definitions = scenarioDefinitions();
+    if (!definitions.some((item) => item.id === scenarioRun.definitionId)) scenarioRun.definitionId = definitions[0]?.id || "";
+  } catch (error) {
+    scenarioCatalogError = error.message;
+    scenarioRun.definitionId = customScenarioDefinitions[0]?.id || "";
+  }
+  render();
+  if (scenarioCatalogError) showToast("Built-in scenarios could not be loaded", { tone: "danger", detail: scenarioCatalogError });
+}
+
 $("#budget-effective").value = scenario.simulationDate;
-render();
+initializeScenarioCatalog();

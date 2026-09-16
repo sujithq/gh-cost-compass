@@ -1,0 +1,55 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "hard-stop-boundary",
+  "title": "User hard-stop boundary",
+  "summary": "Reach a user-level budget exactly, then demonstrate atomic rejection of the next event.",
+  "tags": [
+    "hard stop",
+    "blocked usage",
+    "atomic events"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 10
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "reach-limit",
+      "type": "usage",
+      "title": "Reach the exact limit",
+      "description": "Alice consumes 1,000 AI credits, worth $10 for ULB accounting.",
+      "expected": "The event is accepted and the ULB reaches exactly 100%.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "blocked-after-limit",
+      "type": "usage",
+      "title": "Attempt the next event",
+      "description": "Alice attempts to consume one additional AI credit.",
+      "expected": "The complete event is rejected by the user-level hard stop and no counter changes.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1
+      }
+    }
+  ]
+}

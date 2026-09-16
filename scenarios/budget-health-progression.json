@@ -1,0 +1,90 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "budget-health-progression",
+  "title": "Budget health progression",
+  "summary": "Move Alice's individual budget through healthy, warning, high-risk, and 100% states.",
+  "tags": [
+    "budget health",
+    "alerts",
+    "user-level budget"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 50
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "progress-40",
+      "type": "usage",
+      "title": "Reach 40%",
+      "description": "Alice consumes 2,000 AI credits from the shared pool.",
+      "expected": "The individual ULB reaches $20 of $50 (40%) without an alert.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 2000
+      }
+    },
+    {
+      "id": "progress-80",
+      "type": "usage",
+      "title": "Cross the warning threshold",
+      "description": "Another 2,000 credits raise total user consumption to $40.",
+      "expected": "The ULB reaches 80% and its 75% alert fires.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 2000
+      }
+    },
+    {
+      "id": "progress-90",
+      "type": "usage",
+      "title": "Reach the high-risk state",
+      "description": "A 500-credit event raises the budget to 90%.",
+      "expected": "The 90% alert fires and only $5 of headroom remains.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 500
+      }
+    },
+    {
+      "id": "before-100",
+      "type": "checkpoint",
+      "title": "Inspect before 100%",
+      "description": "Pause with the budget at 90% before applying the final usage event.",
+      "expected": "The inline outcome shows that the next 500-credit step will reach exactly 100%."
+    },
+    {
+      "id": "progress-100",
+      "type": "usage",
+      "title": "Reach 100%",
+      "description": "The final 500 credits consume the remaining $5 of user budget.",
+      "expected": "The event is accepted at the exact limit and the 100% alert fires.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 500
+      }
+    }
+  ]
+}

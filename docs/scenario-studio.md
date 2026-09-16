@@ -71,4 +71,6 @@ Every step requires a unique `id`, `title`, `description`, and `expected` outcom
 
 ## Adding scenarios
 
-Built-in definitions live in `src/scenario-runner.js`. Custom definitions can be imported through the Scenario Studio and remain in local browser storage. Tests execute the built-in catalog to verify that definitions remain valid, navigation can be reconstructed, and documented boundary outcomes still occur.
+Built-in definitions are standalone files under `scenarios/`. Add a scenario by creating a JSON file that references `scenario.schema.json`, then add its `id` and filename to `scenarios/catalog.json`. Catalog order controls dropdown order. The application loads and validates every catalog entry at startup; a missing file, duplicate ID, mismatched ID, invalid filename, or invalid definition produces a visible load error.
+
+`src/scenario-runner.js` now contains only validation and execution logic. `src/scenario-catalog.js` handles catalog loading. Custom definitions can still be imported through the Scenario Studio and remain in local browser storage. Tests discover and execute every catalog entry to verify that definitions remain valid, navigation can be reconstructed, and documented boundary outcomes still occur.
