@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
+import { createDefaultScenario, defaultScenarioSetOptions, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -43,6 +43,30 @@ test("default scenario provides an enterprise-grade synthetic tenant", () => {
   assert.equal(validateScenario(scenario), null);
   assert.equal(new Set(scenario.users.map((user) => user.id)).size, scenario.users.length);
   assert.equal(replayScenario(scenario).results.length, 2);
+});
+
+test("default scenario sets can load the compact demo tenant", () => {
+  assert.ok(defaultScenarioSetOptions.some((item) => item.id === "enterprise"));
+  assert.ok(defaultScenarioSetOptions.some((item) => item.id === "compact"));
+  const scenario = createDefaultScenario("compact");
+  assert.equal(scenario.organizations.length, 2);
+  assert.equal(scenario.costCenters.length, 2);
+  assert.equal(scenario.users.length, 2);
+  assert.equal(validateScenario(scenario), null);
+  assert.equal(replayScenario(scenario).pool.total, 5800);
+});
+
+test("guided scenario materialization can use a selected default set", () => {
+  const definition = {
+    version: 1,
+    id: "selected-default-smoke",
+    title: "Selected default smoke",
+    summary: "Verifies scenario replay can use a non-enterprise default set.",
+    steps: [{ id: "use-ai", type: "usage", title: "Use AI", description: "Alice uses credits.", expected: "Usage is accepted.", event: usage("unused", "2026-09-15", 100) }],
+  };
+  const compact = materializeScenario(definition, 0, { defaultSetId: "compact" });
+  assert.equal(compact.users.length, 2);
+  assert.equal(replayScenario(compact).pool.total, 5800);
 });
 
 test("scenario validation rejects broken enterprise data references", () => {
@@ -242,6 +266,7 @@ test("future events remain scheduled until the clock advances", () => {
 test("configuration help exposes impact regions and official GitHub citations", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   for (const id of ["enterprise-impact", "cost-center-impact", "user-impact", "budget-impact"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /id="default-scenario-set"/);
   assert.match(html, /docs\.github\.com\/en\/copilot\/concepts\/billing-and-usage\/organizations-and-enterprises\/billing/);
   assert.match(html, /docs\.github\.com\/en\/billing\/reference\/cost-center-allocation/);
   assert.match(html, /docs\.github\.com\/en\/billing\/how-tos\/set-up-budgets/);

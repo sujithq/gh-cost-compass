@@ -41,10 +41,10 @@ export function validateScenarioDefinition(definition) {
   return null;
 }
 
-export function materializeScenario(definition, stepIndex = -1) {
+export function materializeScenario(definition, stepIndex = -1, { defaultSetId } = {}) {
   const error = validateScenarioDefinition(definition);
   if (error) throw new Error(error);
-  const scenario = createDefaultScenario();
+  const scenario = createDefaultScenario(defaultSetId);
   scenario.events = [];
   scenario.simulationDate = definition.startDate || scenario.simulationDate;
   for (const mutation of definition.setup || []) applyMutation(scenario, mutation);

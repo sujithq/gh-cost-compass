@@ -1,10 +1,12 @@
-import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
+const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
 const CUSTOM_SCENARIOS_KEY = "copilot-budget-lab-custom-scenarios-v1";
+let defaultScenarioSetId = loadDefaultScenarioSetId();
 let scenario = loadScenario();
 let builtInScenarioDefinitions = [];
 let customScenarioDefinitions = loadCustomScenarioDefinitions();
@@ -26,8 +28,13 @@ const groupBy = (items, keyFor) => items.reduce((groups, item) => {
 function loadScenario() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return validateScenario(saved) ? createDefaultScenario() : saved;
-  } catch { return createDefaultScenario(); }
+    return validateScenario(saved) ? createDefaultScenario(defaultScenarioSetId) : saved;
+  } catch { return createDefaultScenario(defaultScenarioSetId); }
+}
+
+function loadDefaultScenarioSetId() {
+  const saved = localStorage.getItem(DEFAULT_SET_STORAGE_KEY);
+  return defaultScenarioSetOptions.some((item) => item.id === saved) ? saved : DEFAULT_SCENARIO_SET_ID;
 }
 
 function loadCustomScenarioDefinitions() {
@@ -44,6 +51,10 @@ function scenarioDefinitions() {
 function selectedScenarioDefinition() {
   const definitions = scenarioDefinitions();
   return definitions.find((item) => item.id === scenarioRun.definitionId) || definitions[0] || null;
+}
+
+function materializeScenarioForDefaultSet(definition, stepIndex) {
+  return materializeScenario(definition, stepIndex, { defaultSetId: defaultScenarioSetId });
 }
 
 function saveAndRender(message, { toast = true } = {}) {
@@ -183,8 +194,8 @@ function renderScenarioStudio() {
   $("#scenario-run-all").disabled = !hasRemaining;
   $("#scenario-run-all").textContent = scenarioRun.runAllArmed ? `Confirm run all (${definition.steps.length - activeIndex - 1})` : "Run all";
 
-  const currentScenario = scenarioRun.started ? materializeScenario(definition, activeIndex) : materializeScenario(definition, -1);
-  const beforeScenario = materializeScenario(definition, Math.max(-1, activeIndex - 1));
+  const currentScenario = scenarioRun.started ? materializeScenarioForDefaultSet(definition, activeIndex) : materializeScenarioForDefaultSet(definition, -1);
+  const beforeScenario = materializeScenarioForDefaultSet(definition, Math.max(-1, activeIndex - 1));
   const currentReplay = replayScenario(currentScenario);
   const beforeReplay = replayScenario(beforeScenario);
   const currentStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
@@ -196,8 +207,8 @@ function renderScenarioStudio() {
 
   const selectedStep = definition.steps[selectedIndex];
   const previewBeforeIndex = selectedIndex > activeIndex ? activeIndex : Math.max(-1, selectedIndex - 1);
-  const previewBefore = replayScenario(materializeScenario(definition, previewBeforeIndex));
-  const previewAfter = replayScenario(materializeScenario(definition, selectedIndex));
+  const previewBefore = replayScenario(materializeScenarioForDefaultSet(definition, previewBeforeIndex));
+  const previewAfter = replayScenario(materializeScenarioForDefaultSet(definition, selectedIndex));
   const previewChanges = budgetChanges(previewBefore, previewAfter);
   const previewPoolDelta = previewAfter.pool.consumed - previewBefore.pool.consumed;
   const previewResultId = selectedStep.type === "usage" ? `scenario-${definition.id}-${selectedStep.id}` : null;
@@ -249,9 +260,9 @@ function runScenarioToStep(stepIndex, message) {
   try {
     const definition = selectedScenarioDefinition();
     const boundedIndex = Math.max(-1, Math.min(stepIndex, definition.steps.length - 1));
-    const before = replayScenario(materializeScenario(definition, Math.max(-1, boundedIndex - 1)));
+    const before = replayScenario(materializeScenarioForDefaultSet(definition, Math.max(-1, boundedIndex - 1)));
     seenAlertIds = new Set(before.alerts.map((alert) => alert.id));
-    scenario = materializeScenario(definition, boundedIndex);
+    scenario = materializeScenarioForDefaultSet(definition, boundedIndex);
     scenarioRun = { definitionId: definition.id, stepIndex: boundedIndex, selectedStepIndex: Math.min(boundedIndex + 1, definition.steps.length - 1), started: true, runAllArmed: false };
     const step = boundedIndex >= 0 ? definition.steps[boundedIndex] : null;
     latestEventId = step?.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
@@ -424,6 +435,7 @@ function renderConfiguration() {
   $("#enterprise-currency").value = scenario.enterprise.currency;
   $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
   $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
+  $("#default-scenario-set").innerHTML = defaultScenarioSetOptions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === defaultScenarioSetId ? "selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.summary)}</option>`).join("");
   const reposByOrg = groupBy(scenario.repositories, (repo) => repo.organizationId);
   const costCenterMembers = new Map();
   for (const user of scenario.users) {
@@ -646,7 +658,7 @@ $("#import-scenario-definition").addEventListener("change", async (event) => {
       const error = validateScenarioDefinition(definition);
       if (error) throw new Error(error);
       if (builtInScenarioDefinitions.some((item) => item.id === definition.id)) throw new Error(`The id ${definition.id} is reserved by a built-in scenario.`);
-      materializeScenario(definition, -1);
+      materializeScenarioForDefaultSet(definition, -1);
       customScenarioDefinitions = customScenarioDefinitions.filter((item) => item.id !== definition.id);
       customScenarioDefinitions.push(definition);
     }
@@ -715,7 +727,15 @@ function deleteEntity(type, id) {
 
 $("#export-config").addEventListener("click", () => { const blob = new Blob([JSON.stringify(scenario, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `copilot-budget-scenario-${scenario.simulationDate}.json`; link.click(); URL.revokeObjectURL(link.href); showToast("Scenario exported"); });
 $("#import-config").addEventListener("change", async (event) => { try { const imported = JSON.parse(await event.target.files[0].text()); const error = validateScenario(imported); if (error) throw new Error(error); scenario = imported; latestEventId = null; saveAndRender("Scenario imported"); } catch (error) { showToast(`Import failed: ${error.message}`); } finally { event.target.value = ""; } });
-$("#reset-scenario").addEventListener("click", () => { scenario = createDefaultScenario(); latestEventId = null; $("#last-result").className = "result-placeholder"; $("#last-result").innerHTML = `<span>◎</span><h3>Ready to simulate</h3><p>Submit usage to see attribution, cost, alerts, and enforcement.</p>`; saveAndRender("Demo scenario reset"); });
+$("#default-scenario-set").addEventListener("change", (event) => {
+  defaultScenarioSetId = event.target.value;
+  localStorage.setItem(DEFAULT_SET_STORAGE_KEY, defaultScenarioSetId);
+  scenarioRun.started = false;
+  scenario = createDefaultScenario(defaultScenarioSetId);
+  latestEventId = null;
+  saveAndRender("Default scenario set loaded");
+});
+$("#reset-scenario").addEventListener("click", () => { scenario = createDefaultScenario(defaultScenarioSetId); latestEventId = null; $("#last-result").className = "result-placeholder"; $("#last-result").innerHTML = `<span>◎</span><h3>Ready to simulate</h3><p>Submit usage to see attribution, cost, alerts, and enforcement.</p>`; saveAndRender("Default scenario reset"); });
 $("#clear-events").addEventListener("click", () => { scenario.events = []; latestEventId = null; saveAndRender("Usage history cleared"); });
 
 async function initializeScenarioCatalog() {

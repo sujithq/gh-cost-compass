@@ -22,9 +22,9 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 
 ## Default enterprise dataset
 
-Resetting the simulator now loads a deterministic synthetic enterprise tenant instead of a tiny two-user sample. The default contains 10 organizations, 20 cost centers, 20 repositories, and 200 licensed users across software engineering, data science, project management, security, SRE, analyst, and design personas. A small group of users intentionally has no direct cost-center assignment, so budget attribution can demonstrate the enterprise and organization fallback behavior.
+Resetting the simulator loads the default set selected in Configuration. Default sets live outside the engine in `src/default-scenario-sets.js`, so the simulation logic is separate from seed data. The enterprise set contains 10 organizations, 20 cost centers, 20 repositories, and 200 licensed users across software engineering, data science, project management, security, SRE, analyst, and design personas. A compact two-user set remains available for focused demos and tests.
 
-The generated data keeps stable IDs such as `user-alice`, `user-bob`, `org-product`, `repo-portal`, `cc-ai`, and `cc-core` so guided scenarios and tests remain reviewable. Runtime imports are validated for duplicate IDs and broken references before replacing the active scenario.
+The generated data keeps stable IDs such as `user-alice`, `user-bob`, `org-product`, `repo-portal`, `cc-ai`, and `cc-core` so guided scenarios and tests remain reviewable. A small group of enterprise users intentionally has no direct cost-center assignment, so budget attribution can demonstrate the enterprise and organization fallback behavior. Runtime imports are validated for duplicate IDs and broken references before replacing the active scenario.
 
 ## Run and test
 
