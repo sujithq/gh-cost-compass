@@ -13,6 +13,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Clear split between included AI credits and paid overage
 - Dated usage simulation, live progress, attribution details, alerts, and audit timeline
 - Clickable budget and shared-pool cards with an accessible history dialog showing the current-period events that drove their state
+- Toast notifications when a budget threshold alert fires or an event is blocked, with severity colouring, GitHub's alert-delivery caveat, and a shortcut into the budget history
 - Documentation-backed configuration help, source links, and live cost/access impact previews
 - Scenario import/export, reset, replay, and browser-local persistence
 
@@ -36,6 +37,7 @@ Open <http://localhost:4173>.
 - Enterprise, organization, and cost-center spending budgets measure **only paid overage after the shared pool is exhausted**.
 - Disabling the AI credits paid-usage policy blocks usage when the pool is exhausted regardless of metered-budget headroom.
 - Budgets count usage only from their creation/effective date onward. Standard alerts use 75%, 90%, and 100% thresholds.
+- Alerts are raised once per threshold crossing per budget per month. GitHub delivers metered budget alerts in the UI and by email, and states that user-level budget alert delivery is not guaranteed; the simulator repeats that caveat in the alert toast and timeline.
 - Organization attribution for AI credits uses the organization granting the user's Copilot license. A cost-center budget takes precedence over the organization budget.
 - Cost-center AI overage counts against the enterprise budget by default; cost-center exclusion can give the team independent spending authority.
 - Seat additions can be dated in the simulator. GitHub documentation says additional seats are billed on a prorated basis for the remainder of the cycle, and included AI credits may also be prorated. The documented-aligned default prorates both from the assignment date through month end, so a seat added on the 15th of a 30-day month receives 16 days of charge and credits.

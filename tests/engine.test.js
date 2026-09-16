@@ -201,6 +201,27 @@ test("configuration help exposes impact regions and official GitHub citations", 
   assert.match(html, /docs\.github\.com\/en\/billing\/how-tos\/set-up-budgets/);
 });
 
+test("threshold alerts carry the state key needed to open budget history", () => {
+  const scenario = createDefaultScenario();
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.budgets.find((item) => item.id === "metered-ai-team").thresholds = [75, 90, 100];
+  scenario.events = [usage("pool", "2026-09-15", 5800), usage("over", "2026-09-15", 2400)];
+  const replay = replayScenario(scenario);
+  const alert = replay.alerts.find((item) => item.budgetId === "metered-ai-team");
+  assert.equal(alert.stateKey, "metered-ai-team:2026-09");
+  assert.ok(replay.budgetStates.some((item) => item.stateId === alert.stateKey));
+  assert.equal(replay.alerts.filter((item) => item.id === alert.id).length, 1);
+});
+
+test("user-level alerts keep GitHub's delivery caveat for the toast detail line", () => {
+  const scenario = createDefaultScenario();
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 20;
+  scenario.events = [usage("one", "2026-09-15", 1900)];
+  const replay = replayScenario(scenario);
+  const alert = replay.alerts.find((item) => item.budgetId === "ulb-alice");
+  assert.match(alert.reliability, /not guaranteed by GitHub/);
+});
+
 test("dashboard includes an accessible budget history dialog", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
@@ -208,6 +229,15 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(html, /role="dialog" aria-modal="true"/);
   assert.match(app, /data-history-id="pool"/);
   assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
+});
+
+test("alert notifications render as a dismissible toast stack", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="toast-stack"[^>]*aria-live="polite"/);
+  assert.doesNotMatch(html, /id="toast"/);
+  assert.match(app, /function announceSimulationFeedback/);
+  assert.match(app, /data-dismiss-toast="true"/);
 });
 
 test("rejects legacy scenario imports", () => {

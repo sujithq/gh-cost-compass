@@ -4,6 +4,8 @@ const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 let scenario = loadScenario();
 let latestEventId = null;
 let budgetHistoryTrigger = null;
+let seenAlertIds = null;
+let lastBlockedToastId = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -17,16 +19,57 @@ function loadScenario() {
 
 function saveAndRender(message) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(scenario));
-  render();
   if (message) showToast(message);
+  render();
 }
 
-function showToast(message) {
-  const toast = $("#toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => toast.classList.remove("show"), 2400);
+const MAX_VISIBLE_TOASTS = 4;
+const TOAST_ICONS = { info: "✓", warning: "!", danger: "×" };
+
+function dismissToast(toast) {
+  if (!toast || toast.dataset.dismissing === "true") return;
+  toast.dataset.dismissing = "true";
+  clearTimeout(Number(toast.dataset.timer));
+  toast.classList.remove("show");
+  setTimeout(() => toast.remove(), 200);
+}
+
+function scheduleToastDismissal(toast, duration) {
+  clearTimeout(Number(toast.dataset.timer));
+  toast.dataset.timer = String(setTimeout(() => dismissToast(toast), duration));
+}
+
+function showToast(message, options = {}) {
+  const { tone = "info", detail = "", historyId = null, duration = tone === "info" ? 2400 : 7000 } = options;
+  const stack = $("#toast-stack");
+  const toast = document.createElement("div");
+  toast.className = `toast ${tone}`;
+  toast.innerHTML = `<span class="toast-icon">${TOAST_ICONS[tone]}</span><div class="toast-body"><strong>${escapeHtml(message)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}${historyId ? `<button type="button" class="toast-action" data-history-id="${escapeHtml(historyId)}">View history</button>` : ""}</div><button type="button" class="toast-close" data-dismiss-toast="true" aria-label="Dismiss notification">×</button>`;
+  toast.addEventListener("mouseenter", () => clearTimeout(Number(toast.dataset.timer)));
+  toast.addEventListener("mouseleave", () => scheduleToastDismissal(toast, 2000));
+  toast.addEventListener("focusin", () => clearTimeout(Number(toast.dataset.timer)));
+  toast.addEventListener("focusout", () => scheduleToastDismissal(toast, 2000));
+  stack.append(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  scheduleToastDismissal(toast, duration);
+  while (stack.children.length > MAX_VISIBLE_TOASTS) dismissToast(stack.firstElementChild);
+}
+
+function announceSimulationFeedback(replay) {
+  const currentIds = new Set(replay.alerts.map((alert) => alert.id));
+  const freshAlerts = seenAlertIds === null ? [] : replay.alerts.filter((alert) => !seenAlertIds.has(alert.id));
+  seenAlertIds = currentIds;
+  for (const alert of freshAlerts) {
+    const state = replay.budgetStates.find((item) => item.stateId === alert.stateKey);
+    const detail = [state ? `${money(state.spent, "USD")} of ${money(state.amount, "USD")}` : null, alert.date, alert.reliability].filter(Boolean).join(" · ");
+    showToast(alert.message, { tone: alert.threshold >= 90 ? "danger" : "warning", detail, historyId: alert.stateKey });
+  }
+  const blocked = latestEventId ? replay.results.find((item) => item.eventId === latestEventId && item.status === "blocked") : null;
+  if (blocked && lastBlockedToastId !== blocked.eventId) {
+    lastBlockedToastId = blocked.eventId;
+    showToast("Usage blocked", { tone: "danger", detail: blocked.reason });
+  }
+  if (!blocked) lastBlockedToastId = null;
 }
 
 function setOptions(selector, items, selected, emptyLabel) {
@@ -58,6 +101,7 @@ function render() {
   renderImpactPreviews();
   renderTimeline(replay, currency);
   if (latestEventId) renderResult(replay, currency);
+  announceSimulationFeedback(replay);
 }
 
 function renderSummary(replay, currency) {
@@ -146,7 +190,7 @@ function closeBudgetHistory() {
   if (modal.classList.contains("hidden")) return;
   modal.classList.add("hidden");
   modal.setAttribute("aria-hidden", "true");
-  budgetHistoryTrigger?.focus();
+  budgetHistoryTrigger?.isConnected && budgetHistoryTrigger.focus();
   budgetHistoryTrigger = null;
 }
 
@@ -350,7 +394,8 @@ function addMonth(value) {
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
 document.addEventListener("click", (event) => {
-  const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
+  const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
+  const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
   const closeModal = event.target.closest("[data-close-modal]"); if (closeModal) { closeBudgetHistory(); return; }
   const go = event.target.closest("[data-go]"); if (go) navigate(go.dataset.go);
   const quick = event.target.closest("[data-quantity]"); if (quick) $("#usage-quantity").value = quick.dataset.quantity;
