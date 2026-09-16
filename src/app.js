@@ -54,6 +54,7 @@ function render() {
   renderSelectors();
   renderApplicableControls(replay, currency);
   renderConfiguration();
+  renderImpactPreviews();
   renderTimeline(replay, currency);
   if (latestEventId) renderResult(replay, currency);
 }
@@ -146,6 +147,64 @@ function renderConfiguration() {
     return entityRow(item.name, `${item.licensePlan === "enterprise" ? "3,900" : "1,900"} included credits · ${assignment} · ${seatText} · ${money(charge, scenario.enterprise.currency)} this cycle`, "user", item.id);
   }).join("");
   $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Control / scope</span><span>Amount</span><span>Effective</span><span>Enforcement</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span>${item.budgetKind === "user" ? `${item.userBudgetType} ULB` : "Metered"} · ${escapeHtml(describeScope(scenario, item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${item.enforcement}">${item.enforcement === "hard" ? "Hard stop" : "Alert only"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
+}
+
+function setImpact(selector, tone, title, text) {
+  const element = $(selector);
+  if (!element) return;
+  element.className = `impact-preview${tone ? ` ${tone}` : ""}`;
+  element.innerHTML = `<strong>${escapeHtml(title)}</strong>${escapeHtml(text)}`;
+}
+
+function renderImpactPreviews() {
+  const paidUsage = $("#paid-ai-usage").checked;
+  const fullCredits = $("#seat-credit-policy").value === "full";
+  if (!paidUsage) {
+    setImpact("#enterprise-impact", "danger", "Usage-blocking impact", `AI-credit-consuming features stop when the shared pool is exhausted.${fullCredits ? " The full-credit option is also a hypothetical simulator policy." : ""}`);
+  } else if (fullCredits) {
+    setImpact("#enterprise-impact", "warning", "Higher simulated pool", "Paid overage remains available, and mid-cycle seats receive a hypothetical full monthly credit contribution.");
+  } else {
+    setImpact("#enterprise-impact", "", "Documented-aligned behavior", "Paid overage can continue after pool exhaustion, subject to applicable budgets; mid-cycle seat credits are prorated.");
+  }
+
+  const organizationId = $("#cost-center-org").value;
+  const costCenterSubject = organizationId ? `Users attributed through ${$("#cost-center-org").selectedOptions[0]?.textContent}` : "Directly assigned users";
+  if ($("#cost-center-excluded").checked) {
+    setImpact("#cost-center-impact", "warning", "Independent spending authority", `${costCenterSubject} will not consume enterprise metered-budget headroom and must be governed by this cost center's own budget.`);
+  } else {
+    setImpact("#cost-center-impact", "", "Enterprise roll-up retained", `${costCenterSubject} will also count toward the enterprise metered budget.`);
+  }
+
+  const seatEnd = $("#user-license-end").value;
+  const revoke = $("#user-license-end-mode").value === "revoke";
+  if (!seatEnd) {
+    setImpact("#user-impact", "", "No scheduled seat removal", "The seat continues contributing credits and license cost until an end date is configured.");
+  } else if (revoke) {
+    setImpact("#user-impact", "danger", "Immediate access loss", `Copilot access stops on ${seatEnd}; there is no current-cycle refund, and the pool contribution remains until reset.`);
+  } else {
+    setImpact("#user-impact", "warning", "End-of-cycle access", `The seat is unassigned on ${seatEnd}, but access and billing continue through the current cycle with no refund.`);
+  }
+
+  const budgetKind = $("#budget-kind").value;
+  const amountInput = $("#budget-amount").value.trim();
+  const amount = Number(amountInput || 0);
+  const enforcement = budgetKind === "user" ? "hard" : $("#budget-enforcement").value;
+  const product = scenario.products.find((item) => item.id === $("#budget-product").value);
+  const zeroAiBudget = amount === 0 && product?.billingMode === "aiCredits";
+  const effectiveDate = $("#budget-effective").value || scenario.simulationDate;
+  if (!amountInput) {
+    setImpact("#budget-impact", "", "Impact preview", "Enter a monthly amount to see whether this budget only alerts or can block usage.");
+  } else if (amount === 0 && (budgetKind === "user" || enforcement === "hard" || zeroAiBudget)) {
+    setImpact("#budget-impact", "danger", "Immediate blocking risk", `A $0 ${budgetKind === "user" ? "user-level" : product?.billingMode === "aiCredits" ? "AI-credit" : "hard"} budget blocks applicable usage from ${effectiveDate}.`);
+  } else if (amount === 0) {
+    setImpact("#budget-impact", "", "Zero-dollar alert threshold", `The budget alerts immediately from ${effectiveDate}, but alert-only enforcement does not stop additional spend.`);
+  } else if (budgetKind === "user") {
+    setImpact("#budget-impact", "danger", "Per-user hard stop", `The most specific applicable ULB blocks that user after $${amount.toFixed(2)} of total AI-credit consumption. Usage before ${effectiveDate} is not counted.`);
+  } else if (enforcement === "hard") {
+    setImpact("#budget-impact", "warning", "Paid usage can be blocked", `Applicable metered usage stops after $${amount.toFixed(2)} of paid overage from ${effectiveDate}. Overlapping hard budgets can block sooner.`);
+  } else {
+    setImpact("#budget-impact", "", "Alert-only spending", `Alerts track $${amount.toFixed(2)} of paid overage from ${effectiveDate}, but spend can continue beyond the amount.`);
+  }
 }
 
 function entityRow(name, detail, type, id) {
@@ -261,6 +320,10 @@ $("#user-form").addEventListener("submit", (event) => { event.preventDefault(); 
 $("#budget-kind").addEventListener("change", renderBudgetScopeOptions);
 $("#budget-product").addEventListener("change", renderBudgetScopeOptions);
 $("#budget-scope-type").addEventListener("change", renderBudgetScopeOptions);
+["#enterprise-form", "#cost-center-form", "#user-form", "#budget-form"].forEach((selector) => {
+  $(selector).addEventListener("input", renderImpactPreviews);
+  $(selector).addEventListener("change", renderImpactPreviews);
+});
 $("#budget-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const thresholds = $("#budget-thresholds").value.split(",").map(Number).filter((value) => value > 0).sort((a, b) => a - b);

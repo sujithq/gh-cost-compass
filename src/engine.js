@@ -238,7 +238,7 @@ export function replayScenario(scenario) {
     if (!blockingReason && userBudget && stateFor(states, userBudgetKey).spent + grossAiValue > Number(userBudget.amount)) blockingReason = `${userBudget.name} user-level hard stop would be exceeded`;
     if (!blockingReason && isAi && meteredQuantity > 0 && !scenario.enterprise.paidAiUsage) blockingReason = "AI credits paid usage policy is disabled and the shared pool is exhausted";
     if (!blockingReason) {
-      const blocker = meteredBudgets.find((budget) => budget.enforcement === "hard" && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
+      const blocker = meteredBudgets.find((budget) => (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
       if (blocker) blockingReason = `${blocker.name} metered-spend hard stop would be exceeded`;
     }
 

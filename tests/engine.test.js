@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
 
 function usage(id, date, quantity, overrides = {}) {
@@ -102,6 +103,17 @@ test("metered hard budget blocks overage but not included consumption", () => {
   assert.match(replay.results[0].reason, /metered-spend hard stop/);
 });
 
+test("zero-dollar AI-credit budget blocks metered usage even when configured alert-only", () => {
+  const scenario = createDefaultScenario();
+  scenario.users.find((item) => item.id === "user-alice").costCenterId = null;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.budgets.find((item) => item.id === "metered-product-org").amount = 0;
+  scenario.events = [usage("over", "2026-09-15", 6000)];
+  const replay = replayScenario(scenario);
+  assert.equal(replay.results[0].status, "blocked");
+  assert.match(replay.results[0].reason, /metered-spend hard stop/);
+});
+
 test("a mid-month budget ignores usage before its effective date", () => {
   const scenario = createDefaultScenario();
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
@@ -179,6 +191,14 @@ test("future events remain scheduled until the clock advances", () => {
   assert.equal(replayScenario(scenario).results.length, 0);
   scenario.simulationDate = "2026-10-02";
   assert.equal(replayScenario(scenario).results.length, 1);
+});
+
+test("configuration help exposes impact regions and official GitHub citations", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  for (const id of ["enterprise-impact", "cost-center-impact", "user-impact", "budget-impact"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /docs\.github\.com\/en\/copilot\/concepts\/billing-and-usage\/organizations-and-enterprises\/billing/);
+  assert.match(html, /docs\.github\.com\/en\/billing\/reference\/cost-center-allocation/);
+  assert.match(html, /docs\.github\.com\/en\/billing\/how-tos\/set-up-budgets/);
 });
 
 test("rejects legacy scenario imports", () => {
