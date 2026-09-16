@@ -54,9 +54,13 @@ export function createDefaultScenario() {
       { id: "repo-portal", name: "customer-portal", organizationId: "org-product" },
       { id: "repo-tools", name: "developer-tools", organizationId: "org-platform" },
     ],
+    enterpriseTeams: [
+      { id: "team-ai", name: "AI Platform Team", userIds: ["user-alice"] },
+      { id: "team-core", name: "Core Engineering Team", userIds: ["user-bob"] },
+    ],
     costCenters: [
-      { id: "cc-ai", name: "AI Innovation", organizationIds: [], excludeFromEnterpriseBudget: false },
-      { id: "cc-core", name: "Core Engineering", organizationIds: [], excludeFromEnterpriseBudget: false },
+      { id: "cc-ai", name: "AI Innovation", organizationIds: [], repositoryIds: [], userIds: [], enterpriseTeamIds: [], aiCreditPoolEnabled: false, aiCreditPoolCapMode: "allowOverage", excludeFromEnterpriseBudget: false },
+      { id: "cc-core", name: "Core Engineering", organizationIds: [], repositoryIds: [], userIds: [], enterpriseTeamIds: [], aiCreditPoolEnabled: false, aiCreditPoolCapMode: "allowOverage", excludeFromEnterpriseBudget: false },
     ],
     users: [
       { id: "user-alice", name: "Alice", organizationIds: ["org-product"], licenseOrganizationId: "org-product", costCenterId: "cc-ai", licensePlan: "enterprise", licenseStartsAt: "2026-09-01", licenseEndsAt: null, licenseEndMode: null },
@@ -79,19 +83,55 @@ export function createDefaultScenario() {
   };
 }
 
+export function normalizeScenario(scenario) {
+  if (!scenario || typeof scenario !== "object") return scenario;
+  scenario.enterpriseTeams ||= [];
+  for (const team of scenario.enterpriseTeams) team.userIds ||= [];
+  for (const costCenter of scenario.costCenters || []) {
+    costCenter.organizationIds ||= [];
+    costCenter.repositoryIds ||= [];
+    costCenter.userIds ||= [];
+    costCenter.enterpriseTeamIds ||= [];
+    costCenter.aiCreditPoolEnabled = Boolean(costCenter.aiCreditPoolEnabled);
+    costCenter.aiCreditPoolCapMode = costCenter.aiCreditPoolCapMode === "block" ? "block" : "allowOverage";
+    costCenter.excludeFromEnterpriseBudget = Boolean(costCenter.excludeFromEnterpriseBudget);
+  }
+  return scenario;
+}
+
+function eventScenario(scenario, event) {
+  return normalizeScenario(event.scenarioSnapshot ? structuredClone(event.scenarioSnapshot) : scenario);
+}
+
 function isActive(budget, date) {
   return date >= budget.effectiveFrom && (!budget.expiresAt || date <= budget.expiresAt);
 }
 
 export function costCenterForUser(scenario, user) {
-  return scenario.costCenters.find((item) => item.id === user?.costCenterId)
-    || scenario.costCenters.find((item) => (item.organizationIds || []).includes(user?.licenseOrganizationId));
+  normalizeScenario(scenario);
+  if (!user) return undefined;
+  const direct = scenario.costCenters.find((item) => item.id === user.costCenterId)
+    || scenario.costCenters.find((item) => item.userIds.includes(user.id));
+  if (direct) return direct;
+  const teamIds = new Set(scenario.enterpriseTeams.filter((team) => team.userIds.includes(user.id)).map((team) => team.id));
+  const teamCostCenter = scenario.costCenters.find((item) => item.enterpriseTeamIds.some((teamId) => teamIds.has(teamId)));
+  if (teamCostCenter) return teamCostCenter;
+  return scenario.costCenters.find((item) => item.organizationIds.includes(user.licenseOrganizationId));
+}
+
+function costCenterForEvent(scenario, event, product) {
+  const user = scenario.users.find((item) => item.id === event.userId);
+  if (product?.billingMode === "metered") {
+    const repositoryCostCenter = scenario.costCenters.find((item) => item.repositoryIds.includes(event.repositoryId));
+    if (repositoryCostCenter) return repositoryCostCenter;
+  }
+  return costCenterForUser(scenario, user);
 }
 
 function matchesScope(budget, event, scenario, product) {
   const user = scenario.users.find((item) => item.id === event.userId);
   const repo = scenario.repositories.find((item) => item.id === event.repositoryId);
-  const costCenter = costCenterForUser(scenario, user);
+  const costCenter = costCenterForEvent(scenario, event, product);
   if (!user || !isActive(budget, event.date) || budget.productId !== product?.id) return false;
   switch (budget.scopeType) {
     case "enterprise": {
@@ -152,8 +192,21 @@ export function userPoolContribution(user, date, scenario = null) {
   return totalCredits * (remainingDays / totalDays);
 }
 
-function includedPoolFor(scenario, atDate = scenario.simulationDate) {
-  return scenario.users.reduce((total, user) => total + userPoolContribution(user, atDate, scenario), 0);
+function includedPoolFor(scenario, atDate = scenario.simulationDate, { excludeCostCenterPools = false } = {}) {
+  normalizeScenario(scenario);
+  return scenario.users.reduce((total, user) => {
+    const costCenter = costCenterForUser(scenario, user);
+    if (excludeCostCenterPools && costCenter?.aiCreditPoolEnabled) return total;
+    return total + userPoolContribution(user, atDate, scenario);
+  }, 0);
+}
+
+export function costCenterIncludedPoolFor(scenario, costCenterId, atDate = scenario.simulationDate) {
+  normalizeScenario(scenario);
+  return scenario.users.reduce((total, user) => {
+    const costCenter = costCenterForUser(scenario, user);
+    return costCenter?.id === costCenterId ? total + userPoolContribution(user, atDate, scenario) : total;
+  }, 0);
 }
 
 function nextMonthStart(date) {
@@ -211,32 +264,39 @@ export function describeScope(scenario, budget) {
 }
 
 export function replayScenario(scenario) {
+  normalizeScenario(scenario);
   const states = new Map();
   const pools = new Map();
+  const costCenterPools = new Map();
   const results = [];
   const alerts = [];
   const orderedEvents = scenario.events.map((event, index) => ({ ...event, _order: index })).filter((event) => event.date <= scenario.simulationDate).sort((a, b) => a.date.localeCompare(b.date) || a._order - b._order);
 
   for (const event of orderedEvents) {
-    const product = scenario.products.find((item) => item.id === event.productId);
-    const user = scenario.users.find((item) => item.id === event.userId);
+    const effectiveScenario = eventScenario(scenario, event);
+    const product = effectiveScenario.products.find((item) => item.id === event.productId);
+    const user = effectiveScenario.users.find((item) => item.id === event.userId);
     const quantity = Number(event.quantity);
     const period = monthKey(event.date);
-    const poolBefore = pools.get(period) || 0;
-    const poolTotal = includedPoolFor(scenario, event.date);
     const isAi = product?.billingMode === "aiCredits";
+    const eventCostCenter = costCenterForEvent(effectiveScenario, event, product);
+    const costCenterPoolEnabled = Boolean(isAi && eventCostCenter?.aiCreditPoolEnabled);
+    const poolStateKey = costCenterPoolEnabled ? `${eventCostCenter.id}:${period}` : `enterprise:${period}`;
+    const poolBefore = costCenterPoolEnabled ? (costCenterPools.get(poolStateKey) || 0) : (pools.get(period) || 0);
+    const poolTotal = costCenterPoolEnabled ? costCenterIncludedPoolFor(effectiveScenario, eventCostCenter.id, event.date) : includedPoolFor(effectiveScenario, event.date, { excludeCostCenterPools: true });
     const userAccessBlocked = user && !isSeatActiveForDate(user, event.date);
     let blockingReason = userAccessBlocked ? `${user.name} does not have an active Copilot seat on ${event.date}` : null;
     const includedQuantity = isAi ? Math.min(quantity, Math.max(0, poolTotal - poolBefore)) : 0;
     const meteredQuantity = isAi ? quantity - includedQuantity : quantity;
     const billedCost = meteredQuantity * Number(product?.unitPrice || 0);
     const grossAiValue = isAi ? quantity * AI_CREDIT_PRICE : 0;
-    const userBudget = isAi && user ? selectUserBudget(scenario, user, event.date) : null;
+    const userBudget = isAi && user ? selectUserBudget(effectiveScenario, user, event.date) : null;
     const userBudgetKey = userBudget ? `${userBudget.id}:${user.id}:${period}` : null;
-    const meteredBudgets = scenario.budgets.filter((budget) => budget.budgetKind === "metered" && matchesScope(budget, event, scenario, product));
+    const meteredBudgets = effectiveScenario.budgets.filter((budget) => budget.budgetKind === "metered" && matchesScope(budget, event, effectiveScenario, product));
 
     if (!blockingReason && userBudget && stateFor(states, userBudgetKey).spent + grossAiValue > Number(userBudget.amount)) blockingReason = `${userBudget.name} user-level hard stop would be exceeded`;
-    if (!blockingReason && isAi && meteredQuantity > 0 && !scenario.enterprise.paidAiUsage) blockingReason = "AI credits paid usage policy is disabled and the shared pool is exhausted";
+    if (!blockingReason && costCenterPoolEnabled && meteredQuantity > 0 && eventCostCenter.aiCreditPoolCapMode === "block") blockingReason = `${eventCostCenter.name} AI credit pool cap would be exceeded`;
+    if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = "AI credits paid usage policy is disabled and the shared pool is exhausted";
     if (!blockingReason) {
       const blocker = meteredBudgets.find((budget) => (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
       if (blocker) blockingReason = `${blocker.name} metered-spend hard stop would be exceeded`;
@@ -244,12 +304,14 @@ export function replayScenario(scenario) {
 
     const result = {
       eventId: event.id, date: event.date, userName: user?.name || "Unknown user", productName: product?.name || "Unknown product",
-      quantity, includedQuantity, meteredQuantity, cost: billedCost, grossAiValue, poolBefore, poolAfter: blockingReason ? poolBefore : poolBefore + includedQuantity,
-      status: blockingReason ? "blocked" : "accepted", reason: blockingReason || (isAi && billedCost === 0 ? "Usage accepted from the shared AI-credit pool" : "Usage accepted with metered charges"), affectedBudgets: [],
+      quantity, includedQuantity, meteredQuantity, cost: billedCost, grossAiValue, poolBefore, poolAfter: blockingReason ? poolBefore : poolBefore + includedQuantity, poolTotal,
+      poolStateKey, poolName: costCenterPoolEnabled ? `${eventCostCenter.name} included AI-credit pool` : "Enterprise shared included AI-credit pool", poolType: costCenterPoolEnabled ? "costCenter" : "enterprise",
+      status: blockingReason ? "blocked" : "accepted", reason: blockingReason || (isAi && billedCost === 0 ? "Usage accepted from included AI credits" : "Usage accepted with metered charges"), affectedBudgets: [],
     };
 
     if (!blockingReason) {
-      if (isAi) pools.set(period, poolBefore + includedQuantity);
+      if (isAi && costCenterPoolEnabled) costCenterPools.set(poolStateKey, poolBefore + includedQuantity);
+      else if (isAi) pools.set(period, poolBefore + includedQuantity);
       if (userBudget) updateBudget(states, alerts, result, userBudget, userBudgetKey, grossAiValue, event, user.id);
       for (const budget of meteredBudgets) updateBudget(states, alerts, result, budget, `${budget.id}:${period}`, billedCost, event);
     }
@@ -267,16 +329,42 @@ export function replayScenario(scenario) {
     const amount = Number(budget.amount);
     return { ...budget, stateId: key, userId: user?.id, displayName: user ? `${budget.name} — ${user.name}` : budget.name, spent: state.spent, remaining: Math.max(0, amount - state.spent), percent: amount ? state.spent / amount * 100 : 100, triggered: state.triggered };
   });
-  const poolTotal = includedPoolFor(scenario, scenario.simulationDate);
+  const poolTotal = includedPoolFor(scenario, scenario.simulationDate, { excludeCostCenterPools: true });
   const consumed = pools.get(selectedPeriod) || 0;
   const meteredCost = results.filter((item) => item.status === "accepted" && item.date.startsWith(selectedPeriod)).reduce((sum, item) => sum + item.cost, 0);
+  const historicalCostCenterPools = new Map(results.filter((item) => item.status === "accepted" && item.date.startsWith(selectedPeriod) && item.poolType === "costCenter").map((item) => [item.poolStateKey, item]));
+  const costCenterPoolKeys = new Map(scenario.costCenters.filter((item) => item.aiCreditPoolEnabled).map((costCenter) => [`${costCenter.id}:${selectedPeriod}`, { costCenter }]));
+  for (const [stateId, result] of historicalCostCenterPools) {
+    const costCenterId = stateId.split(":")[0];
+    if (!costCenterPoolKeys.has(stateId)) costCenterPoolKeys.set(stateId, { costCenter: scenario.costCenters.find((item) => item.id === costCenterId), result });
+  }
+  const costCenterPoolStates = [...costCenterPoolKeys].map(([stateId, { costCenter, result }]) => {
+    const costCenterId = costCenter?.id || stateId.split(":")[0];
+    const enabled = Boolean(costCenter?.aiCreditPoolEnabled);
+    const total = enabled && costCenter ? costCenterIncludedPoolFor(scenario, costCenter.id, scenario.simulationDate) : Number(result?.poolTotal || 0);
+    const consumed = costCenterPools.get(stateId) || 0;
+    return {
+      id: costCenterId,
+      stateId,
+      costCenterId,
+      displayName: result?.poolName || `${costCenter?.name || costCenterId} included AI-credit pool`,
+      capMode: costCenter?.aiCreditPoolCapMode || "allowOverage",
+      enabled,
+      total,
+      consumed,
+      remaining: Math.max(0, total - consumed),
+      percent: total ? consumed / total * 100 : 100,
+      thresholds: [75, 90, 100],
+    };
+  });
 
-  return { results, alerts, budgetStates, period: selectedPeriod, pool: { total: poolTotal, consumed, remaining: Math.max(0, poolTotal - consumed), percent: poolTotal ? consumed / poolTotal * 100 : 100, meteredCost } };
+  return { results, alerts, budgetStates, costCenterPoolStates, period: selectedPeriod, pool: { stateId: `enterprise:${selectedPeriod}`, total: poolTotal, consumed, remaining: Math.max(0, poolTotal - consumed), percent: poolTotal ? consumed / poolTotal * 100 : 100, meteredCost } };
 }
 
 export function validateScenario(value) {
-  const requiredArrays = ["organizations", "repositories", "costCenters", "users", "products", "budgets", "events"];
   if (!value || typeof value !== "object" || value.version !== 2 || !value.enterprise || !value.simulationDate) return "This file is not a version 2 AI-credit scenario.";
+  normalizeScenario(value);
+  const requiredArrays = ["organizations", "repositories", "costCenters", "users", "products", "budgets", "events", "enterpriseTeams"];
   const missing = requiredArrays.find((key) => !Array.isArray(value[key]));
   return missing ? `Missing ${missing} array.` : null;
 }

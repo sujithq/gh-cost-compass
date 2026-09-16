@@ -6,6 +6,7 @@ const COLLECTIONS = {
   organization: "organizations",
   repository: "repositories",
   costCenter: "costCenters",
+  enterpriseTeam: "enterpriseTeams",
   product: "products",
 };
 
@@ -51,7 +52,7 @@ export function materializeScenario(definition, stepIndex = -1) {
   for (let index = 0; index <= Math.min(stepIndex, definition.steps.length - 1); index += 1) {
     const step = definition.steps[index];
     if (step.type === "usage") {
-      scenario.events.push({ ...clone(step.event), id: `scenario-${definition.id}-${step.id}` });
+      scenario.events.push({ ...clone(step.event), id: `scenario-${definition.id}-${step.id}`, scenarioSnapshot: clone({ ...scenario, events: [] }) });
       if (step.event.date > scenario.simulationDate) scenario.simulationDate = step.event.date;
     } else if (step.type === "advance-date") {
       scenario.simulationDate = step.date;

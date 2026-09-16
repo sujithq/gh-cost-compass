@@ -1,0 +1,63 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "cost-center-pool-blocks",
+  "title": "Cost center pool blocks usage",
+  "summary": "Enable a cost center AI credit pool and show usage stopping when the included pool cap is reached.",
+  "tags": [
+    "cost center",
+    "included pool",
+    "hard stop"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 200
+      }
+    },
+    {
+      "target": "costCenter",
+      "id": "cc-ai",
+      "changes": {
+        "aiCreditPoolEnabled": true,
+        "aiCreditPoolCapMode": "block"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "near-cap",
+      "type": "usage",
+      "title": "Consume most cost center credits",
+      "description": "Alice consumes 3,800 of the AI Innovation cost center's 3,900 included credits.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 100 credits.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 3800
+      }
+    },
+    {
+      "id": "cap-blocks",
+      "type": "usage",
+      "title": "Try to exceed the pool cap",
+      "description": "Alice tries to consume 200 more AI credits after only 100 remain in the cost center pool.",
+      "expected": "The simulator blocks the event because this cost center is configured to block at the included-pool cap.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 200
+      }
+    }
+  ]
+}

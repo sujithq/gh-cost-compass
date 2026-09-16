@@ -1,4 +1,4 @@
-import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, validateScenario } from "./engine.js";
+import { costCenterForUser, createDefaultScenario, createId, describeScope, isSeatActiveForDate, money, normalizeScenario, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, validateScenario } from "./engine.js";
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -21,7 +21,7 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => 
 function loadScenario() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return validateScenario(saved) ? createDefaultScenario() : saved;
+    return validateScenario(saved) ? createDefaultScenario() : normalizeScenario(saved);
   } catch { return createDefaultScenario(); }
 }
 
@@ -121,6 +121,17 @@ function budgetChanges(before, after) {
   return after.budgetStates.map((item) => ({ ...item, before: previous.get(item.stateId)?.spent || 0, delta: item.spent - (previous.get(item.stateId)?.spent || 0) })).filter((item) => Math.abs(item.delta) > 0.000001);
 }
 
+function poolChanges(before, after) {
+  const previous = new Map([
+    [before.pool.stateId, { displayName: "Shared AI-credit pool", consumed: before.pool.consumed }],
+    ...before.costCenterPoolStates.map((item) => [item.stateId, item]),
+  ]);
+  return [
+    { ...after.pool, displayName: "Shared AI-credit pool", consumed: after.pool.consumed },
+    ...after.costCenterPoolStates,
+  ].map((item) => ({ ...item, before: previous.get(item.stateId)?.consumed || 0, delta: item.consumed - (previous.get(item.stateId)?.consumed || 0) })).filter((item) => Math.abs(item.delta) > 0.000001);
+}
+
 function scenarioResultHtml(result) {
   if (!result) return `<div class="scenario-result neutral"><strong>No usage event in this step</strong><span>The scenario state is unchanged; use the explanation and preview below.</span></div>`;
   return `<div class="scenario-result ${result.status}"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><strong>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</strong><span>${escapeHtml(result.reason)}</span><small>${Number(result.quantity).toLocaleString()} ${escapeHtml(result.productName)} · ${money(result.cost, "USD")}</small></div></div>`;
@@ -185,7 +196,7 @@ function renderScenarioStudio() {
   const resultId = currentStep?.type === "usage" ? `scenario-${definition.id}-${currentStep.id}` : null;
   const result = resultId ? currentReplay.results.find((item) => item.eventId === resultId) : null;
   const changes = currentStep ? budgetChanges(beforeReplay, currentReplay) : [];
-  const poolDelta = currentReplay.pool.consumed - beforeReplay.pool.consumed;
+  const changedPools = currentStep ? poolChanges(beforeReplay, currentReplay) : [];
   const newAlerts = currentReplay.alerts.filter((alert) => !beforeReplay.alerts.some((previous) => previous.id === alert.id));
 
   const selectedStep = definition.steps[selectedIndex];
@@ -193,17 +204,19 @@ function renderScenarioStudio() {
   const previewBefore = replayScenario(materializeScenario(definition, previewBeforeIndex));
   const previewAfter = replayScenario(materializeScenario(definition, selectedIndex));
   const previewChanges = budgetChanges(previewBefore, previewAfter);
-  const previewPoolDelta = previewAfter.pool.consumed - previewBefore.pool.consumed;
   const previewResultId = selectedStep.type === "usage" ? `scenario-${definition.id}-${selectedStep.id}` : null;
   const previewResult = previewResultId ? previewAfter.results.find((item) => item.eventId === previewResultId) : null;
   const previewAlerts = previewAfter.alerts.filter((alert) => !previewBefore.alerts.some((previous) => previous.id === alert.id));
+  const previewPoolChanges = poolChanges(previewBefore, previewAfter);
   const intervening = Math.max(0, selectedIndex - activeIndex - 1);
   const remaining = definition.steps.slice(activeIndex + 1);
   const runAllPreview = scenarioRun.runAllArmed ? `<div class="run-all-preview"><strong>Run all remaining steps?</strong><span>${remaining.length} steps: ${remaining.filter((step) => step.type === "usage").length} usage events, ${remaining.filter((step) => step.type === "configuration").length} configuration changes, ${remaining.filter((step) => step.type === "advance-date").length} date changes, and ${remaining.filter((step) => step.type === "checkpoint").length} checkpoints.</span><small>Review this summary, then select “Confirm run all” to execute.</small></div>` : "";
 
   const changedIds = new Set(changes.map((item) => item.stateId));
+  for (const pool of changedPools) changedIds.add(pool.stateId);
   const health = [
-    { stateId: "pool", displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
+    { stateId: currentReplay.pool.stateId, displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
+    ...currentReplay.costCenterPoolStates.map((pool) => ({ stateId: pool.stateId, displayName: pool.displayName, spent: pool.consumed, amount: pool.total, percent: pool.percent, unit: "credits" })),
     ...currentReplay.budgetStates,
   ];
   $("#scenario-outcome").innerHTML = `
@@ -214,9 +227,9 @@ function renderScenarioStudio() {
       <div class="expected-outcome"><strong>Expected outcome</strong><span>${escapeHtml(selectedStep.expected)}</span></div>
       ${intervening ? `<p class="scenario-jump-note">Running this selected step also applies ${intervening} preceding pending step${intervening === 1 ? "" : "s"} in order.</p>` : ""}
       <div class="scenario-deltas preview-deltas"><h4>Predicted changes</h4>
-        ${previewPoolDelta ? `<div class="scenario-delta"><span>Shared pool consumed</span><strong>${previewBefore.pool.consumed.toLocaleString()} → ${previewAfter.pool.consumed.toLocaleString()}</strong></div>` : ""}
+        ${previewPoolChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
         ${previewChanges.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${Math.round(item.percent)}%)</strong></div>`).join("")}
-        ${!previewPoolDelta && !previewChanges.length ? `<p class="muted">This step is not expected to change counters.</p>` : ""}
+        ${!previewPoolChanges.length && !previewChanges.length ? `<p class="muted">This step is not expected to change counters.</p>` : ""}
         ${previewResult ? `<div class="scenario-predicted-result ${previewResult.status}"><strong>Predicted: ${previewResult.status}</strong><span>${escapeHtml(previewResult.reason)}</span></div>` : ""}
         ${previewAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Expected alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
@@ -226,12 +239,12 @@ function renderScenarioStudio() {
       <div class="scenario-outcome-heading"><div><p class="eyebrow">ACTUAL OUTCOME</p><h3>${escapeHtml(currentStep?.title || "Scenario baseline")}</h3></div><span class="scenario-status ${currentStep ? "active" : ""}">${currentStep ? `Applied · Step ${activeIndex + 1}` : "No steps applied"}</span></div>
       ${scenarioResultHtml(result)}
       <div class="scenario-deltas"><h4>Changes in the last applied step</h4>
-        ${poolDelta ? `<div class="scenario-delta"><span>Shared pool consumed</span><strong>${beforeReplay.pool.consumed.toLocaleString()} → ${currentReplay.pool.consumed.toLocaleString()} (${poolDelta > 0 ? "+" : ""}${poolDelta.toLocaleString()})</strong></div>` : ""}
+        ${changedPools.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)} consumed</span><strong>${Number(item.before).toLocaleString()} → ${Number(item.consumed).toLocaleString()} (${item.delta > 0 ? "+" : ""}${Number(item.delta).toLocaleString()})</strong></div>`).join("")}
         ${changes.map((item) => `<div class="scenario-delta"><span>${escapeHtml(item.displayName)}</span><strong>${money(item.before, "USD")} → ${money(item.spent, "USD")} (${item.delta > 0 ? "+" : ""}${money(item.delta, "USD")})</strong></div>`).join("")}
-        ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
+        ${!changedPools.length && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
         ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
-      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
     </section>`;
 }
 
@@ -280,25 +293,28 @@ function renderSummary(replay, currency) {
   const blocked = replay.results.filter((item) => item.status === "blocked" && item.date.startsWith(replay.period)).length;
   const seatCharge = scenario.users.reduce((sum, user) => sum + seatChargeForPeriod(user, scenario.simulationDate), 0);
   const policyLabel = scenario.enterprise.seatCreditPolicy === "full" ? "Full seat credits (hypothetical)" : "Prorated seat credits";
+  const costCenterPoolCount = replay.costCenterPoolStates.length;
   $("#summary-cards").innerHTML = [
     ["Shared AI-credit pool", `${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}`, `${Math.round(replay.pool.percent)}% of included credits consumed`],
+    ["Cost center AI pools", costCenterPoolCount, costCenterPoolCount ? "Included credits partitioned by cost center" : "No cost center pools enabled"],
     ["Seat charge this cycle", money(seatCharge, currency), `${scenario.users.filter((user) => user.licenseStartsAt || user.licenseEndsAt).length} seats with dated lifecycle`],
     ["Paid AI overage", money(replay.pool.meteredCost, "USD"), scenario.enterprise.paidAiUsage ? "Paid usage policy enabled" : "Paid usage policy disabled"],
-    ["Seat credit policy", policyLabel, "Add behavior for mid-cycle seats"],
     ["Alerts triggered", replay.alerts.filter((item) => item.date.startsWith(replay.period)).length, "Standard thresholds: 75%, 90%, 100%"],
     ["Blocked events", blocked, blocked ? "One or more controls stopped usage" : "No usage blocked"],
+    ["Seat credit policy", policyLabel, "Add behavior for mid-cycle seats"],
   ].map(([label, value, note]) => `<article class="summary-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join("");
 }
 
 function renderBudgets(replay, currency) {
   const poolCard = `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3>Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${Math.round(replay.pool.percent)}%</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>`;
+  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(pool.displayName)}</h3><p>Cost center included pool · ${pool.capMode === "block" ? "Blocks at cap" : "Continues into paid overage"} · simulator health</p></div><span class="percent">${Math.round(pool.percent)}%</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div></article>`).join("");
   const cards = replay.budgetStates.map((budget) => {
     const isUlb = budget.budgetKind === "user";
     const scope = isUlb ? `Per user · ${budget.userBudgetType} ULB` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
     return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3>${escapeHtml(budget.displayName)}</h3><p>${escapeHtml(scope)} · ${basis} · ${budget.enforcement === "hard" ? "Hard stop" : "Alert only"}</p></div><span class="percent">${Math.round(budget.percent)}%</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
-  $("#budget-grid").innerHTML = poolCard + cards;
+  $("#budget-grid").innerHTML = poolCard + costCenterPoolCards + cards;
 }
 
 function historyEntries(results, detailForResult, emptyMessage) {
@@ -317,7 +333,7 @@ function openBudgetHistory(historyId, trigger) {
   let alertHtml = "<li>The shared pool does not emit budget alerts.</li>";
 
   if (historyId === "pool") {
-    const contributors = currentPeriodResults.filter((item) => item.status === "accepted" && item.includedQuantity > 0);
+    const contributors = currentPeriodResults.filter((item) => item.status === "accepted" && item.poolType === "enterprise" && item.includedQuantity > 0);
     title = "Shared included AI-credit pool history";
     summary = [
       ["Consumed", `${replay.pool.consumed.toLocaleString()} credits`],
@@ -326,6 +342,18 @@ function openBudgetHistory(historyId, trigger) {
       ["Percent", `${Math.round(replay.pool.percent)}%`],
     ];
     entries = historyEntries(contributors, (result) => `Drew ${result.includedQuantity.toLocaleString()} credits from the shared pool`, "No usage events have consumed this period's shared pool.");
+  } else if (replay.costCenterPoolStates.some((item) => item.stateId === historyId)) {
+    const poolState = replay.costCenterPoolStates.find((item) => item.stateId === historyId);
+    const contributors = currentPeriodResults.filter((item) => item.status === "accepted" && item.poolStateKey === historyId && item.includedQuantity > 0);
+    title = `${poolState.displayName} history`;
+    summary = [
+      ["Consumed", `${poolState.consumed.toLocaleString()} credits`],
+      ["Capacity", `${poolState.total.toLocaleString()} credits`],
+      ["Remaining", `${poolState.remaining.toLocaleString()} credits`],
+      ["Mode", poolState.capMode === "block" ? "Block at cap" : "Continue to overage"],
+    ];
+    entries = historyEntries(contributors, (result) => `Drew ${result.includedQuantity.toLocaleString()} credits from this cost center pool`, "No usage events have consumed this cost center pool.");
+    alertHtml = "<li>Included-pool health is simulator guidance; budget alerts remain tied to budget controls.</li>";
   } else {
     const budgetState = replay.budgetStates.find((item) => item.stateId === historyId);
     if (!budgetState) return;
@@ -385,6 +413,9 @@ function renderSelectors() {
   setOptions("#repository-org", scenario.organizations, $("#repository-org").value);
   setOptions("#user-org", scenario.organizations, $("#user-org").value);
   setOptions("#cost-center-org", scenario.organizations, $("#cost-center-org").value, "No organization assignment");
+  setOptions("#cost-center-repository", scenario.repositories, $("#cost-center-repository").value, "No repository assignment");
+  setOptions("#cost-center-team", scenario.enterpriseTeams, $("#cost-center-team").value, "No team assignment");
+  setOptions("#enterprise-team-users", scenario.users, $("#enterprise-team-users").value);
   setOptions("#user-cost-center", scenario.costCenters, $("#user-cost-center").value, "Use organization assignment");
   setOptions("#budget-product", scenario.products, $("#budget-product").value || "ai-credits");
   const usageProduct = scenario.products.find((item) => item.id === $("#usage-product").value);
@@ -400,21 +431,42 @@ function renderApplicableControls(replay, currency) {
   const probeResult = replayScenario(copy).results.find((item) => item.eventId === "probe");
   const ids = new Set(probeResult?.affectedBudgets.map((item) => item.budgetId) || []);
   const budgets = replay.budgetStates.filter((item) => ids.has(item.id));
-  $("#applicable-controls").innerHTML = budgets.length ? budgets.map((item) => `<div class="impact-row"><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "user" ? "Total credits · always hard stop" : "Paid overage only"} · effective ${item.effectiveFrom}</small></div><strong>${money(item.spent, "USD")} / ${money(item.amount, "USD")}</strong></div>`).join("") : `<div class="empty">No budget applies on this date.</div>`;
+  const user = scenario.users.find((item) => item.id === userId);
+  const costCenter = costCenterForUser(scenario, user);
+  const pool = costCenter?.aiCreditPoolEnabled ? replay.costCenterPoolStates.find((item) => item.costCenterId === costCenter.id) : null;
+  const poolHtml = pool ? `<div class="impact-row"><div><strong>${escapeHtml(pool.displayName)}</strong><small>Included credits · ${pool.capMode === "block" ? "blocks at cap" : "continues into paid overage"}</small></div><strong>${pool.consumed.toLocaleString()} / ${pool.total.toLocaleString()}</strong></div>` : "";
+  const budgetHtml = budgets.map((item) => `<div class="impact-row"><div><strong>${escapeHtml(item.displayName)}</strong><small>${item.budgetKind === "user" ? "Total credits · always hard stop" : "Paid overage only"} · effective ${item.effectiveFrom}</small></div><strong>${money(item.spent, "USD")} / ${money(item.amount, "USD")}</strong></div>`).join("");
+  $("#applicable-controls").innerHTML = poolHtml || budgetHtml ? poolHtml + budgetHtml : `<div class="empty">No budget applies on this date.</div>`;
 }
 
 function renderConfiguration() {
+  const replay = replayScenario(scenario);
   $("#enterprise-name").value = scenario.enterprise.name;
   $("#enterprise-currency").value = scenario.enterprise.currency;
   $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
   $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
   $("#product-list").innerHTML = scenario.products.map((item) => entityRow(item.name, item.billingMode === "aiCredits" ? "Fixed: 1 credit = $0.01" : `${money(item.unitPrice, scenario.enterprise.currency)} / ${item.unit}`, "product", item.id)).join("");
   $("#organization-list").innerHTML = scenario.organizations.map((item) => entityRow(item.name, `${scenario.repositories.filter((repo) => repo.organizationId === item.id).length} repositories`, "organization", item.id)).join("");
+  $("#enterprise-team-list").innerHTML = scenario.enterpriseTeams.map((item) => {
+    const members = scenario.users.filter((user) => item.userIds.includes(user.id)).map((user) => user.name);
+    const costCenters = scenario.costCenters.filter((costCenter) => costCenter.enterpriseTeamIds.includes(item.id)).map((costCenter) => costCenter.name);
+    return entityRow(item.name, `${members.length ? members.join(", ") : "No users"}${costCenters.length ? ` · assigned to ${costCenters.join(", ")}` : ""}`, "enterpriseTeam", item.id);
+  }).join("") || `<div class="empty">No enterprise teams configured.</div>`;
   $("#cost-center-list").innerHTML = scenario.costCenters.map((item) => {
     const assignedOrganizations = scenario.organizations.filter((org) => (item.organizationIds || []).includes(org.id)).map((org) => org.name);
+    const assignedRepositories = scenario.repositories.filter((repo) => (item.repositoryIds || []).includes(repo.id)).map((repo) => repo.name);
+    const assignedTeams = scenario.enterpriseTeams.filter((team) => (item.enterpriseTeamIds || []).includes(team.id)).map((team) => team.name);
+    const assignedUsers = scenario.users.filter((user) => (item.userIds || []).includes(user.id)).map((user) => user.name);
     const members = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === item.id).length;
-    const assignment = assignedOrganizations.length ? ` · organizations: ${assignedOrganizations.join(", ")}` : "";
-    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users${escapeHtml(assignment)} · ${item.excludeFromEnterpriseBudget ? "excluded from enterprise AI budget" : "counts against enterprise AI budget"}</small></div><div><button class="text-button" data-toggle-costcenter="${item.id}">${item.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
+    const pool = replay.costCenterPoolStates.find((state) => state.costCenterId === item.id);
+    const assignments = [
+      assignedUsers.length ? `users: ${assignedUsers.join(", ")}` : "",
+      assignedTeams.length ? `teams: ${assignedTeams.join(", ")}` : "",
+      assignedOrganizations.length ? `orgs: ${assignedOrganizations.join(", ")}` : "",
+      assignedRepositories.length ? `repos: ${assignedRepositories.join(", ")}` : "",
+    ].filter(Boolean).join(" · ");
+    const poolText = item.aiCreditPoolEnabled ? `AI pool ${pool?.consumed.toLocaleString() || 0}/${pool?.total.toLocaleString() || 0} credits · ${item.aiCreditPoolCapMode === "block" ? "blocks at cap" : "overage allowed"}` : "AI pool disabled";
+    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · ${escapeHtml(poolText)} · ${escapeHtml(assignments || "no resource assignment")} · ${item.excludeFromEnterpriseBudget ? "excluded from enterprise AI budget" : "counts against enterprise AI budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}">${item.aiCreditPoolEnabled ? "Disable pool" : "Enable pool"}</button><button class="text-button" data-toggle-pool-mode="${item.id}">${item.aiCreditPoolCapMode === "block" ? "Allow overage" : "Block at cap"}</button><button class="text-button" data-toggle-costcenter="${item.id}">${item.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
   }).join("");
   $("#user-list").innerHTML = scenario.users.map((item) => {
     const seatActive = isSeatActiveForDate(item, scenario.simulationDate);
@@ -448,9 +500,20 @@ function renderImpactPreviews() {
   }
 
   const organizationId = $("#cost-center-org").value;
-  const costCenterSubject = organizationId ? `Users attributed through ${$("#cost-center-org").selectedOptions[0]?.textContent}` : "Directly assigned users";
+  const teamId = $("#cost-center-team").value;
+  const repositoryId = $("#cost-center-repository").value;
+  const selectedTeam = scenario.enterpriseTeams.find((team) => team.id === teamId);
+  const selectedTeamCredits = selectedTeam ? selectedTeam.userIds.reduce((sum, userId) => {
+    const user = scenario.users.find((item) => item.id === userId);
+    return user ? sum + userPoolContribution(user, scenario.simulationDate, scenario) : sum;
+  }, 0) : 0;
+  const costCenterSubject = teamId ? `members of ${$("#cost-center-team").selectedOptions[0]?.textContent}` : organizationId ? `users attributed through ${$("#cost-center-org").selectedOptions[0]?.textContent}` : repositoryId ? `usage from ${$("#cost-center-repository").selectedOptions[0]?.textContent}` : "directly assigned users";
   if ($("#cost-center-excluded").checked) {
     setImpact("#cost-center-impact", "warning", "Independent spending authority", `${costCenterSubject} will not consume enterprise metered-budget headroom and must be governed by this cost center's own budget.`);
+  } else if ($("#cost-center-ai-pool").checked && repositoryId && !teamId && !organizationId) {
+    setImpact("#cost-center-impact", "warning", "Repository is metered-attribution only", "Repository resources can model metered product attribution, but Copilot included-pool capacity should be modeled with users, enterprise teams, or license-organization attribution.");
+  } else if ($("#cost-center-ai-pool").checked) {
+    setImpact("#cost-center-impact", "", "Included pool control", `${costCenterSubject} will use a cost-center included AI credit pool${selectedTeamCredits ? ` of about ${selectedTeamCredits.toLocaleString()} credits for the selected team` : ""}; paid-overage roll-up remains enabled.`);
   } else {
     setImpact("#cost-center-impact", "", "Enterprise roll-up retained", `${costCenterSubject} will also count toward the enterprise metered budget.`);
   }
@@ -540,7 +603,7 @@ function renderResult(replay, currency) {
     const budget = scenario.budgets.find((item) => item.id === impact.budgetId);
     return `<div class="impact-row"><div><strong>${escapeHtml(budget?.name)}${impact.userId ? ` · ${escapeHtml(result.userName)}` : ""}</strong><small>${escapeHtml(impact.basis)} · ${money(impact.before, "USD")} → ${money(impact.after, "USD")}</small></div><strong>${Math.round(impact.percent)}%</strong></div>`;
   }).join("");
-  const split = result.productName === "Copilot AI credits" ? `<div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed pool draw" : "Shared pool"}</strong><small>${result.includedQuantity.toLocaleString()} ${result.status === "blocked" ? "credits would have come from the pool" : "included credits consumed"}</small></div><strong>${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}</strong></div><div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed paid overage" : "Paid overage"}</strong><small>${result.meteredQuantity.toLocaleString()} metered credits</small></div><strong>${money(result.cost, "USD")}</strong></div>` : "";
+  const split = result.productName === "Copilot AI credits" ? `<div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed pool draw" : escapeHtml(result.poolName)}</strong><small>${result.includedQuantity.toLocaleString()} ${result.status === "blocked" ? "credits would have come from the included pool" : "included credits consumed"}</small></div><strong>${result.poolBefore.toLocaleString()} → ${result.poolAfter.toLocaleString()}</strong></div><div class="impact-row"><div><strong>${result.status === "blocked" ? "Proposed paid overage" : "Paid overage"}</strong><small>${result.meteredQuantity.toLocaleString()} metered credits</small></div><strong>${money(result.cost, "USD")}</strong></div>` : "";
   $("#last-result").className = "result-placeholder result-box";
   $("#last-result").innerHTML = `<div class="result-header"><span class="result-icon ${result.status}">${result.status === "accepted" ? "✓" : "×"}</span><div><h3>${result.status === "accepted" ? "Usage accepted" : "Usage blocked"}</h3><p>${escapeHtml(result.reason)}</p></div></div><div class="result-cost">${result.quantity.toLocaleString()} ${escapeHtml(result.productName)}</div><p class="muted">Billed cost: ${money(result.cost, "USD")} · ${result.date}</p>${split}${impacts || `<div class="impact-row"><small>No budget counters changed.</small></div>`}`;
 }
@@ -576,6 +639,20 @@ document.addEventListener("click", (event) => {
     if (target) {
       target.excludeFromEnterpriseBudget = !target.excludeFromEnterpriseBudget;
       saveAndRender(target.excludeFromEnterpriseBudget ? "Cost center excluded from enterprise AI budget" : "Cost center included in enterprise AI budget");
+    }
+  }
+  const poolToggle = event.target.closest("[data-toggle-pool]"); if (poolToggle) {
+    const target = scenario.costCenters.find((item) => item.id === poolToggle.dataset.togglePool);
+    if (target) {
+      target.aiCreditPoolEnabled = !target.aiCreditPoolEnabled;
+      saveAndRender(target.aiCreditPoolEnabled ? "Cost center AI credit pool enabled" : "Cost center AI credit pool disabled");
+    }
+  }
+  const modeToggle = event.target.closest("[data-toggle-pool-mode]"); if (modeToggle) {
+    const target = scenario.costCenters.find((item) => item.id === modeToggle.dataset.togglePoolMode);
+    if (target) {
+      target.aiCreditPoolCapMode = target.aiCreditPoolCapMode === "block" ? "allowOverage" : "block";
+      saveAndRender(target.aiCreditPoolCapMode === "block" ? "Cost center pool will block at cap" : "Cost center pool can continue into paid overage");
     }
   }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
@@ -656,7 +733,8 @@ $("#enterprise-form").addEventListener("submit", (event) => { event.preventDefau
 $("#product-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.products.push({ id: createId("product"), name: $("#product-name").value.trim(), unit: "unit", unitPrice: Number($("#product-price").value), billingMode: "metered" }); event.target.reset(); saveAndRender("Product added"); });
 $("#organization-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.organizations.push({ id: createId("org"), name: $("#organization-name").value.trim() }); event.target.reset(); saveAndRender("Organization added"); });
 $("#repository-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.repositories.push({ id: createId("repo"), name: $("#repository-name").value.trim(), organizationId: $("#repository-org").value }); event.target.reset(); saveAndRender("Repository added"); });
-$("#cost-center-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#cost-center-org").value; scenario.costCenters.push({ id: createId("cc"), name: $("#cost-center-name").value.trim(), organizationIds: organizationId ? [organizationId] : [], excludeFromEnterpriseBudget: $("#cost-center-excluded").checked }); event.target.reset(); saveAndRender("Cost center added"); });
+$("#enterprise-team-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterpriseTeams.push({ id: createId("team"), name: $("#enterprise-team-name").value.trim(), userIds: [...$("#enterprise-team-users").selectedOptions].map((option) => option.value) }); event.target.reset(); saveAndRender("Enterprise team added"); });
+$("#cost-center-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#cost-center-org").value; const repositoryId = $("#cost-center-repository").value; const teamId = $("#cost-center-team").value; scenario.costCenters.push({ id: createId("cc"), name: $("#cost-center-name").value.trim(), organizationIds: organizationId ? [organizationId] : [], repositoryIds: repositoryId ? [repositoryId] : [], userIds: [], enterpriseTeamIds: teamId ? [teamId] : [], aiCreditPoolEnabled: $("#cost-center-ai-pool").checked, aiCreditPoolCapMode: $("#cost-center-pool-mode").value, excludeFromEnterpriseBudget: $("#cost-center-excluded").checked }); event.target.reset(); saveAndRender("Cost center added"); });
 $("#user-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#user-org").value; scenario.users.push({ id: createId("user"), name: $("#user-name").value.trim(), organizationIds: [organizationId], licenseOrganizationId: organizationId, costCenterId: $("#user-cost-center").value || null, licensePlan: $("#user-license-plan").value, licenseStartsAt: $("#user-license-start").value || null, licenseEndsAt: $("#user-license-end").value || null, licenseEndMode: $("#user-license-end").value ? $("#user-license-end-mode").value : null }); event.target.reset(); saveAndRender("User added"); });
 $("#budget-kind").addEventListener("change", renderBudgetScopeOptions);
 $("#budget-product").addEventListener("change", renderBudgetScopeOptions);
@@ -682,9 +760,9 @@ $("#budget-form").addEventListener("submit", (event) => {
 });
 
 function deleteEntity(type, id) {
-  const key = ({ product: "products", organization: "organizations", costCenter: "costCenters", user: "users", budget: "budgets" })[type];
+  const key = ({ product: "products", organization: "organizations", costCenter: "costCenters", user: "users", budget: "budgets", enterpriseTeam: "enterpriseTeams" })[type];
   if (!key) return;
-  const referenced = type === "organization" && (scenario.repositories.some((item) => item.organizationId === id) || scenario.users.some((item) => item.organizationIds.includes(id)) || scenario.costCenters.some((item) => (item.organizationIds || []).includes(id))) || type === "costCenter" && scenario.users.some((item) => item.costCenterId === id) || type === "user" && scenario.events.some((item) => item.userId === id) || type === "product" && (scenario.events.some((item) => item.productId === id) || scenario.budgets.some((item) => item.productId === id));
+  const referenced = type === "organization" && (scenario.repositories.some((item) => item.organizationId === id) || scenario.users.some((item) => item.organizationIds.includes(id)) || scenario.costCenters.some((item) => item.organizationIds.includes(id))) || type === "costCenter" && scenario.users.some((item) => item.costCenterId === id) || type === "enterpriseTeam" && scenario.costCenters.some((item) => item.enterpriseTeamIds.includes(id)) || type === "user" && (scenario.events.some((item) => item.userId === id) || scenario.enterpriseTeams.some((item) => item.userIds.includes(id))) || type === "product" && (scenario.events.some((item) => item.productId === id) || scenario.budgets.some((item) => item.productId === id));
   if (referenced) return showToast("Cannot delete an item that is still referenced");
   scenario[key] = scenario[key].filter((item) => item.id !== id);
   if (type !== "budget") scenario.budgets = scenario.budgets.filter((item) => !(item.scopeType === type && item.scopeId === id));

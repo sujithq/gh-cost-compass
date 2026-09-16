@@ -1,0 +1,63 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "cost-center-pool-to-overage",
+  "title": "Cost center pool to paid overage",
+  "summary": "Enable a cost center AI credit pool and show excess usage rolling into metered budgets when overage is allowed.",
+  "tags": [
+    "cost center",
+    "included pool",
+    "metered usage"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 200
+      }
+    },
+    {
+      "target": "costCenter",
+      "id": "cc-ai",
+      "changes": {
+        "aiCreditPoolEnabled": true,
+        "aiCreditPoolCapMode": "allowOverage"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "pool-used",
+      "type": "usage",
+      "title": "Use the cost center pool",
+      "description": "Alice consumes all 3,900 included credits available to the AI Innovation cost center.",
+      "expected": "The cost center included pool reaches 100%, while paid overage remains $0.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 3900
+      }
+    },
+    {
+      "id": "overage-budget-alert",
+      "type": "usage",
+      "title": "Roll into paid overage",
+      "description": "Alice consumes 2,400 more AI credits after the cost center included pool is exhausted.",
+      "expected": "$24 of paid overage is attributed to the cost-center and enterprise metered budgets, and the cost-center budget crosses its 75% threshold.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 2400
+      }
+    }
+  ]
+}

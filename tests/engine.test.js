@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
+import { costCenterIncludedPoolFor, createDefaultScenario, isSeatActiveForDate, replayScenario, seatChargeForPeriod, userPoolContribution, validateScenario } from "../src/engine.js";
 import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -95,6 +95,55 @@ test("organization cost-center assignment provides fallback attribution", () => 
   const replay = replayScenario(scenario);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 2);
   assert.equal(replay.budgetStates.find((item) => item.id === "metered-product-org").spent, 0);
+});
+
+test("enterprise team assignment can attribute users to a cost center", () => {
+  const scenario = createDefaultScenario();
+  scenario.users.find((item) => item.id === "user-alice").costCenterId = null;
+  scenario.costCenters.find((item) => item.id === "cc-ai").enterpriseTeamIds = ["team-ai"];
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("over", "2026-09-15", 6000)];
+  const replay = replayScenario(scenario);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 2);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-product-org").spent, 0);
+});
+
+test("enabled cost-center AI credit pools partition included credits from the enterprise pool", () => {
+  const scenario = createDefaultScenario();
+  scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled = true;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("pool", "2026-09-15", 1000)];
+  const replay = replayScenario(scenario);
+  assert.equal(costCenterIncludedPoolFor(scenario, "cc-ai", "2026-09-15"), 3900);
+  assert.equal(replay.pool.total, 1900);
+  assert.equal(replay.pool.consumed, 0);
+  assert.equal(replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").consumed, 1000);
+  assert.equal(replay.results[0].poolType, "costCenter");
+});
+
+test("cost-center AI credit pool can block at its included cap", () => {
+  const scenario = createDefaultScenario();
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "block" });
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("near-cap", "2026-09-15", 3800), usage("blocked", "2026-09-15", 200)];
+  const replay = replayScenario(scenario);
+  assert.equal(replay.results[0].status, "accepted");
+  assert.equal(replay.results[1].status, "blocked");
+  assert.match(replay.results[1].reason, /AI credit pool cap/);
+  assert.equal(replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").consumed, 3800);
+});
+
+test("cost-center AI credit pool can roll over into paid metered budgets", () => {
+  const scenario = createDefaultScenario();
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" });
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("pool", "2026-09-15", 3900), usage("overage", "2026-09-15", 2400)];
+  const replay = replayScenario(scenario);
+  assert.equal(replay.results[1].status, "accepted");
+  assert.equal(replay.results[1].includedQuantity, 0);
+  assert.equal(replay.results[1].meteredQuantity, 2400);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 24);
+  assert.ok(replay.alerts.some((item) => item.budgetId === "metered-ai-team" && item.threshold === 75));
 });
 
 test("paid usage policy blocks overage regardless of budget headroom", () => {
@@ -210,8 +259,10 @@ test("future events remain scheduled until the clock advances", () => {
 test("configuration help exposes impact regions and official GitHub citations", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   for (const id of ["enterprise-impact", "cost-center-impact", "user-impact", "budget-impact"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["enterprise-team-form", "enterprise-team-users", "cost-center-ai-pool", "cost-center-pool-mode", "cost-center-team", "cost-center-repository"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /docs\.github\.com\/en\/copilot\/concepts\/billing-and-usage\/organizations-and-enterprises\/billing/);
   assert.match(html, /docs\.github\.com\/en\/billing\/reference\/cost-center-allocation/);
+  assert.match(html, /included-usage-controls-for-cost-centers/);
   assert.match(html, /docs\.github\.com\/en\/billing\/how-tos\/set-up-budgets/);
 });
 
@@ -288,6 +339,90 @@ test("guided scenarios are declarative, reversible, and produce their documented
   const blocked = replayScenario(materializeScenario(hardStop, 1));
   assert.equal(blocked.results.at(-1).status, "blocked");
   assert.match(blocked.results.at(-1).reason, /user-level hard stop/);
+
+  const poolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-blocks");
+  const blockedAtPool = replayScenario(materializeScenario(poolBlocks, 1));
+  assert.equal(blockedAtPool.results.at(-1).status, "blocked");
+  assert.match(blockedAtPool.results.at(-1).reason, /AI credit pool cap/);
+
+  const poolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-to-overage");
+  const overage = replayScenario(materializeScenario(poolOverage, 1));
+  assert.equal(overage.results.at(-1).status, "accepted");
+  assert.equal(overage.results.at(-1).meteredQuantity, 2400);
+  assert.ok(overage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
+});
+
+test("guided configuration steps do not retroactively change earlier usage attribution", () => {
+  const definition = {
+    version: 1,
+    id: "late-pool-enable",
+    title: "Late pool enablement",
+    summary: "Configuration changes apply from their scenario step onward.",
+    steps: [
+      {
+        id: "before-pool",
+        type: "usage",
+        title: "Use shared pool",
+        description: "Alice consumes credits before the cost center pool is enabled.",
+        expected: "The event consumes enterprise shared included credits.",
+        event: { date: "2026-09-15", userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", quantity: 1000 },
+      },
+      {
+        id: "enable-pool",
+        type: "configuration",
+        title: "Enable cost center pool",
+        description: "The cost center pool is enabled after the first usage event.",
+        expected: "Earlier usage remains attributed to the enterprise shared pool.",
+        mutation: { target: "costCenter", id: "cc-ai", changes: { aiCreditPoolEnabled: true } },
+      },
+      {
+        id: "after-pool",
+        type: "usage",
+        title: "Use cost center pool",
+        description: "Alice consumes credits after the cost center pool is enabled.",
+        expected: "The event consumes the cost center included pool.",
+        event: { date: "2026-09-15", userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", quantity: 1000 },
+      },
+    ],
+  };
+  const replay = replayScenario(materializeScenario(definition, 2));
+  assert.equal(replay.results[0].poolType, "enterprise");
+  assert.equal(replay.results[1].poolType, "costCenter");
+  assert.equal(replay.pool.consumed, 1000);
+  assert.equal(replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").consumed, 1000);
+});
+
+test("guided scenarios preserve historical cost-center pool consumption after disabling the pool", () => {
+  const definition = {
+    version: 1,
+    id: "pool-disable-history",
+    title: "Pool disable history",
+    summary: "Disabling a pool does not erase usage that already consumed it.",
+    setup: [{ target: "costCenter", id: "cc-ai", changes: { aiCreditPoolEnabled: true } }],
+    steps: [
+      {
+        id: "consume-pool",
+        type: "usage",
+        title: "Consume pool",
+        description: "Alice consumes cost center included credits.",
+        expected: "The cost center pool records the consumption.",
+        event: { date: "2026-09-15", userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", quantity: 1000 },
+      },
+      {
+        id: "disable-pool",
+        type: "configuration",
+        title: "Disable pool",
+        description: "The pool is disabled after consumption.",
+        expected: "History still shows the consumed cost center pool credits.",
+        mutation: { target: "costCenter", id: "cc-ai", changes: { aiCreditPoolEnabled: false } },
+      },
+    ],
+  };
+  const replay = replayScenario(materializeScenario(definition, 1));
+  const pool = replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai");
+  assert.equal(pool.consumed, 1000);
+  assert.equal(pool.enabled, false);
+  assert.equal(replay.pool.consumed, 0);
 });
 
 test("built-in scenarios are loaded from the external catalog", async () => {
