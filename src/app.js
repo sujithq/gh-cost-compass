@@ -126,6 +126,21 @@ function statusClass(percent) {
   return "";
 }
 
+function scenarioHealthSortRank(item) {
+  if (item.stateId === "pool") return 0;
+  if (item.budgetKind === "user") return 3;
+  if (item.scopeType === "enterprise") return 0;
+  if (item.budgetKind === "metered" && item.scopeType === "organization") return 1;
+  if (item.budgetKind === "metered" && item.scopeType === "costCenter") return 2;
+  return 4;
+}
+
+function sortScenarioHealth(items) {
+  return [...items].sort((left, right) => scenarioHealthSortRank(left) - scenarioHealthSortRank(right)
+    || right.percent - left.percent
+    || left.displayName.localeCompare(right.displayName));
+}
+
 function safeSourceUrl(value) {
   try {
     const url = new URL(value);
@@ -223,6 +238,7 @@ function renderScenarioStudio() {
     { stateId: "pool", displayName: "Shared AI-credit pool", spent: currentReplay.pool.consumed, amount: currentReplay.pool.total, percent: currentReplay.pool.percent, unit: "credits" },
     ...currentReplay.budgetStates,
   ];
+  const sortedHealth = sortScenarioHealth(health);
   $("#scenario-outcome").innerHTML = `
     <section class="selected-step-preview">
       <div class="scenario-outcome-heading"><div><p class="eyebrow">SELECTED STEP PREVIEW</p><h3>${escapeHtml(selectedStep.title)}</h3></div><span class="scenario-status preview">Preview · Step ${selectedIndex + 1}</span></div>
@@ -248,7 +264,7 @@ function renderScenarioStudio() {
         ${!poolDelta && !changes.length ? `<p class="muted">No counters changed in the last applied step.</p>` : ""}
         ${newAlerts.map((alert) => `<div class="scenario-inline-alert"><strong>Alert: ${escapeHtml(alert.message)}</strong><span>${escapeHtml(alert.reliability)}</span></div>`).join("")}
       </div>
-      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>After applied steps</span></div>${health.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
+      <div class="scenario-health"><div class="panel-title"><h4>Current budget health</h4><span>Enterprise → org → cost center → user · highest percentage first</span></div>${sortedHealth.map((item) => `<div class="scenario-health-row ${item.stateId === "pool" ? (poolDelta ? "changed" : "") : changedIds.has(item.stateId) ? "changed" : ""}"><div><strong>${escapeHtml(item.displayName)}</strong><small>${Number(item.spent).toLocaleString()} of ${Number(item.amount).toLocaleString()} ${item.unit || "USD"}</small></div><div class="scenario-health-meter"><span>${Math.round(item.percent)}%</span><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div></div>`).join("")}</div>
     </section>`;
 }
 
