@@ -2,6 +2,7 @@
   "$schema": "./scenario.schema.json",
   "version": 1,
   "id": "cost-center-pool-to-overage",
+  "defaultSetId": "compact",
   "title": "Cost center pool to paid overage",
   "summary": "Enable a cost center AI credit pool and show excess usage rolling into metered budgets when overage is allowed.",
   "tags": [

@@ -1,4 +1,4 @@
-import { createDefaultScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, createDefaultScenario, defaultScenarioSetOptions } from "./engine.js";
 
 const COLLECTIONS = {
   budget: "budgets",
@@ -12,6 +12,14 @@ const COLLECTIONS = {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+const DEFAULT_SCENARIO_SET_IDS = new Set(defaultScenarioSetOptions.map((item) => item.id));
+
+export function resolveScenarioDefaultSetId(definition, selectedDefaultSetId = DEFAULT_SCENARIO_SET_ID) {
+  const authoredDefaultSetId = definition.defaultSetId;
+  if (authoredDefaultSetId) return authoredDefaultSetId;
+  return selectedDefaultSetId || DEFAULT_SCENARIO_SET_ID;
 }
 
 function applyMutation(scenario, mutation) {
@@ -28,6 +36,7 @@ function applyMutation(scenario, mutation) {
 export function validateScenarioDefinition(definition) {
   if (!definition || definition.version !== 1) return "Scenario definition must use version 1.";
   if (!definition.id || !definition.title || !definition.summary) return "Scenario definition requires id, title, and summary.";
+  if (definition.defaultSetId && !DEFAULT_SCENARIO_SET_IDS.has(definition.defaultSetId)) return `Scenario default set not found: ${definition.defaultSetId}.`;
   if (!Array.isArray(definition.steps) || definition.steps.length === 0) return "Scenario definition requires at least one step.";
   const ids = new Set();
   for (const step of definition.steps) {
@@ -45,7 +54,8 @@ export function validateScenarioDefinition(definition) {
 export function materializeScenario(definition, stepIndex = -1, { defaultSetId } = {}) {
   const error = validateScenarioDefinition(definition);
   if (error) throw new Error(error);
-  const scenario = createDefaultScenario(defaultSetId);
+  const resolvedDefaultSetId = resolveScenarioDefaultSetId(definition, defaultSetId);
+  const scenario = createDefaultScenario(resolvedDefaultSetId);
   scenario.events = [];
   scenario.simulationDate = definition.startDate || scenario.simulationDate;
   for (const mutation of definition.setup || []) applyMutation(scenario, mutation);
