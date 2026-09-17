@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELI5: Same cost center, two configured endings</title>
+<script>
+(function () {
+  try {
+    var qp = new URLSearchParams(location.search).get("theme");
+    var stored = localStorage.getItem("eli5-theme");
+    var theme = qp || stored || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {}
+})();
+</script>
+<style>
+/* Palette: GitHub Primer color primitives (light + dark), switched via [data-theme].
+   Layout tokens (spacing / radius / shadow / type) kept from the eli5 skill scaffold. */
+:root {
+  --brand:       #1a7f37;
+  --brand-hover: #116329;
+  --brand-press: #0f5323;
+  --brand-link:  #1a7f37;
+  --brand-100:   #4ac26b;
+  --brand-150:   #aceebb;
+  --brand-160:   #dafbe1;
+  --bg-brand-rest:  #dafbe1;
+  --bg-brand-hover: #aceebb;
+  --success-fg:  #1a7f37;
+  --success-bg:  #dafbe1;
+  --warning-fg:  #9a6700;
+  --warning-bg:  #fff8c5;
+  --danger-fg:   #cf222e;
+  --danger-bg:   #ffebe9;
+  --info-fg:     #0969da;
+  --info-bg:     #ddf4ff;
+  --fg-1:        #1f2328;
+  --fg-2:        #59636e;
+  --fg-3:        #6e7781;
+  --fg-4:        #7d8590;
+  --fg-on-brand: #ffffff;
+  --bg-canvas:   #ffffff;
+  --bg-canvas-2: #f6f8fa;
+  --bg-canvas-3: #eaeef2;
+  --bg-canvas-4: #eef1f4;
+  --bg-hover:    #f3f4f6;
+  --bg-press:    #e7ebef;
+  --stroke-1:    #d0d7de;
+  --stroke-2:    #d8dee4;
+  --stroke-3:    #eaeef2;
+  --stroke-accessible: #57606a;
+  --shadow-2:  0 1px 0 rgba(31,35,40,0.04);
+  --shadow-4:  0 1px 0 rgba(31,35,40,0.04), 0 3px 6px rgba(140,149,159,0.15);
+  --shadow-8:  0 3px 6px rgba(140,149,159,0.2);
+  --shadow-16: 0 8px 24px rgba(140,149,159,0.2);
+  --r-sm:   3px;
+  --r-md:   6px;
+  --r-lg:   8px;
+  --r-xl:   12px;
+  --r-pill: 9999px;
+  --sp-xs:  4px;
+  --sp-s:   8px;
+  --sp-m:   12px;
+  --sp-l:   16px;
+  --sp-xl:  20px;
+  --sp-xxl: 24px;
+  --sp-3xl: 32px;
+  --f-text:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-numeric: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-code:    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --brand:       #3fb950;
+  --brand-hover: #2ea043;
+  --brand-press: #56d364;
+  --brand-link:  #56d364;
+  --brand-100:   #56d364;
+  --brand-150:   #2ea043;
+  --brand-160:   #0f2e17;
+  --bg-brand-rest:  #0f2e17;
+  --bg-brand-hover: #1b4721;
+  --success-fg:  #3fb950;
+  --success-bg:  #113123;
+  --warning-fg:  #d29922;
+  --warning-bg:  #3b2a06;
+  --danger-fg:   #f85149;
+  --danger-bg:   #3c1618;
+  --info-fg:     #4493f8;
+  --info-bg:     #10243e;
+  --fg-1:        #e6edf3;
+  --fg-2:        #9198a1;
+  --fg-3:        #7d8590;
+  --fg-4:        #6e7681;
+  --fg-on-brand: #04220b;
+  --bg-canvas:   #010409;
+  --bg-canvas-2: #0d1117;
+  --bg-canvas-3: #161b22;
+  --bg-canvas-4: #21262d;
+  --bg-hover:    #161b22;
+  --bg-press:    #21262d;
+  --stroke-1:    #30363d;
+  --stroke-2:    #2ea043;
+  --stroke-3:    #21262d;
+  --stroke-accessible: #9198a1;
+  --shadow-2:  0 0 0 1px rgba(46,160,67,0.3);
+  --shadow-4:  0 0 0 1px rgba(46,160,67,0.4), 0 4px 12px rgba(1,4,9,0.6);
+  --shadow-8:  0 0 0 1px rgba(46,160,67,0.5), 0 6px 16px rgba(1,4,9,0.7);
+  --shadow-16: 0 0 0 1px rgba(46,160,67,0.55), 0 10px 28px rgba(1,4,9,0.75);
+  color-scheme: dark;
+}
+body { transition: background-color 0.15s ease, color 0.15s ease; }
+.theme-toggle {
+  position: fixed; top: var(--sp-l); right: var(--sp-l); z-index: 10;
+  width: 40px; height: 40px; border-radius: var(--r-pill);
+  border: 1px solid var(--stroke-1); background: var(--bg-canvas-2); color: var(--fg-1);
+  font-size: 18px; line-height: 1; cursor: pointer; box-shadow: var(--shadow-2);
+}
+.theme-toggle:hover { background: var(--bg-hover); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-canvas); color: var(--fg-1); font-family: var(--f-text); padding: var(--sp-3xl) var(--sp-l) 80px; }
+.wrap { max-width: 880px; margin: 0 auto; }
+header { text-align: center; margin-bottom: var(--sp-xxl); }
+.eyebrow { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); margin: 0 0 var(--sp-s); }
+h1 { font-family: var(--f-display); font-size: 40px; line-height: 52px; font-weight: 600; margin: 0 0 var(--sp-s); }
+.sub { color: var(--fg-3); font-size: 16px; margin: 0 0 var(--sp-s); }
+.sourcechip { display: inline-block; font-family: var(--f-code); font-size: 12px; color: var(--fg-3); background: var(--bg-canvas-3); border-radius: var(--r-pill); padding: 4px 12px; margin: 2px 4px; }
+.panel { background: var(--bg-canvas-2); border: 1px solid var(--stroke-2); border-radius: var(--r-md); box-shadow: var(--shadow-4); padding: var(--sp-xl); margin-bottom: var(--sp-xxl); }
+.panel-head { display: flex; align-items: baseline; gap: var(--sp-m); margin-bottom: var(--sp-m); }
+.num {
+  font-family: var(--f-numeric); font-size: 18px; font-weight: 700;
+  width: 40px; height: 40px; min-width: 40px; border-radius: 50%;
+  background: var(--brand); color: var(--fg-on-brand);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.title3 { font-size: 24px; line-height: 32px; font-weight: 600; margin: 0; }
+.diagram { width: 100%; height: auto; display: block; }
+.caption { font-size: 12px; line-height: 16px; color: var(--fg-3); margin: var(--sp-m) 0 0; border-top: 1px dashed var(--stroke-2); padding-top: var(--sp-s); }
+code { font-family: var(--f-code); font-size: 13px; color: var(--fg-3); }
+.final { background: var(--bg-brand-rest); border: 1px solid var(--brand-150); border-radius: var(--r-md); padding: var(--sp-xxl); text-align: center; }
+.final p { font-family: var(--f-display); font-size: 24px; line-height: 32px; font-weight: 600; margin: 0 0 var(--sp-m); }
+</style>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">&#9789;</button>
+<script>
+(function () {
+  var btn = document.getElementById("theme-toggle");
+  if (window.self !== window.top) btn.hidden = true;
+  function apply(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("eli5-theme", theme); } catch (e) {}
+  }
+  btn.addEventListener("click", function () {
+    apply(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+  window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "eli5-theme") apply(event.data.theme);
+  });
+})();
+</script>
+<div class="wrap">
+<header>
+  <p class="eyebrow">One level deeper &middot; two forked scenarios, one setup</p>
+  <h1>Flip one setting and the same 3,900 credits end very differently</h1>
+  <p class="sub">The AI Innovation cost center, run twice, with only <code>aiCreditPoolCapMode</code> changed.</p>
+  <span class="sourcechip">scenarios/cost-center-pool-blocks.json</span>
+  <span class="sourcechip">scenarios/cost-center-pool-to-overage.json</span>
+</header>
+
+<!-- Panel 0: analogy -->
+<div class="panel">
+  <div class="panel-head"><span class="num">0</span><h2 class="title3">Same team card, two different registers behind the counter</h2></div>
+  <svg class="diagram" viewBox="0 0 800 180" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="55" width="220" height="80" rx="8" fill="var(--brand-150)" stroke="var(--brand)"/>
+    <text x="150" y="90" text-anchor="middle" font-size="12" fill="var(--fg-1)">AI Innovation</text>
+    <text x="150" y="110" text-anchor="middle" font-size="12" fill="var(--fg-1)">cost-center card</text>
+    <text x="150" y="128" text-anchor="middle" font-size="12" fill="var(--fg-3)">3,900 credits</text>
+    <line x1="270" y1="95" x2="340" y2="60" stroke="var(--stroke-1)" marker-end="url(#arrE)"/>
+    <line x1="270" y1="95" x2="340" y2="130" stroke="var(--stroke-1)" marker-end="url(#arrE)"/>
+    <rect x="350" y="25" width="180" height="70" rx="6" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+    <text x="440" y="55" text-anchor="middle" font-size="11" fill="var(--danger-fg)">register 1: "block"</text>
+    <text x="440" y="75" text-anchor="middle" font-size="10" fill="var(--fg-3)">declines the swipe</text>
+    <rect x="350" y="105" width="180" height="70" rx="6" fill="var(--warning-bg)" stroke="var(--warning-fg)"/>
+    <text x="440" y="135" text-anchor="middle" font-size="11" fill="var(--warning-fg)">register 2: "allowOverage"</text>
+    <text x="440" y="155" text-anchor="middle" font-size="10" fill="var(--fg-3)">runs it as a paid tab</text>
+    <defs><marker id="arrE" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">One admin toggle, <code>aiCreditPoolCapMode</code>, decides which register is behind the counter.</p>
+</div>
+
+<!-- Panel 1: shared starting point -->
+<div class="panel">
+  <div class="panel-head"><span class="num">1</span><h2 class="title3">Both stories start identically: 3,800 of 3,900 used</h2></div>
+  <svg class="diagram" viewBox="0 0 800 130" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="40" width="600" height="40" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="60" y="40" width="585" height="40" fill="var(--brand-150)"/>
+    <text x="360" y="65" text-anchor="middle" font-size="13" fill="var(--fg-1)">3,800 / 3,900 used &middot; 97%, 100 credits left</text>
+  </svg>
+  <p class="caption">Alice is the only member of the AI Innovation cost center, so this pool is entirely her own enterprise-seat allotment.</p>
+</div>
+
+<!-- Panel 2: block branch -->
+<div class="panel">
+  <div class="panel-head"><span class="num">2</span><h2 class="title3">Branch A &mdash; <code>"block"</code>: 200 more credits get refused, all of them</h2></div>
+  <svg class="diagram" viewBox="0 0 800 170" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="40" width="200" height="90" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="140" y="70" text-anchor="middle" font-size="11" fill="var(--fg-1)">Alice tries to use</text>
+    <text x="140" y="92" text-anchor="middle" font-size="14" fill="var(--fg-1)" font-weight="700">200 credits</text>
+    <text x="140" y="112" text-anchor="middle" font-size="10" fill="var(--fg-3)">only 100 remain</text>
+    <line x1="240" y1="85" x2="310" y2="85" stroke="var(--stroke-1)" marker-end="url(#arrF)"/>
+    <rect x="320" y="30" width="200" height="110" rx="8" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+    <text x="420" y="60" text-anchor="middle" font-size="12" fill="var(--danger-fg)" font-weight="700">event fully blocked</text>
+    <text x="420" y="82" text-anchor="middle" font-size="10" fill="var(--fg-3)">not even 100 credits</text>
+    <text x="420" y="98" text-anchor="middle" font-size="10" fill="var(--fg-3)">are partially spent</text>
+    <text x="420" y="118" text-anchor="middle" font-size="10" fill="var(--fg-3)">pool stays at 3,800 (97%)</text>
+    <line x1="530" y1="85" x2="600" y2="85" stroke="var(--stroke-1)" marker-end="url(#arrF)"/>
+    <rect x="610" y="55" width="160" height="60" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <text x="690" y="80" text-anchor="middle" font-size="10" fill="var(--fg-1)">Alice's ULB</text>
+    <text x="690" y="98" text-anchor="middle" font-size="10" fill="var(--fg-3)">untouched, $0 added</text>
+    <defs><marker id="arrF" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">Events are atomic: a 200-credit request that would cross the 100-credit cap is rejected in full, not trimmed to fit.</p>
+</div>
+
+<!-- Panel 3: overage branch -->
+<div class="panel">
+  <div class="panel-head"><span class="num">3</span><h2 class="title3">Branch B &mdash; <code>"allowOverage"</code>: the pool fills, then the tab opens</h2></div>
+  <svg class="diagram" viewBox="0 0 800 190" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="20" width="300" height="35" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="40" y="20" width="300" height="35" fill="var(--brand-150)"/>
+    <text x="190" y="43" text-anchor="middle" font-size="11" fill="var(--fg-1)">+100 &rarr; pool 3,900 / 3,900 &middot; 100%, $0 overage</text>
+    <line x1="190" y1="55" x2="190" y2="90" stroke="var(--stroke-1)" marker-end="url(#arrG)"/>
+    <rect x="40" y="95" width="300" height="45" rx="6" fill="var(--warning-bg)" stroke="var(--warning-fg)"/>
+    <text x="190" y="115" text-anchor="middle" font-size="11" fill="var(--warning-fg)">+2,400 more credits</text>
+    <text x="190" y="132" text-anchor="middle" font-size="11" fill="var(--warning-fg)" font-weight="700">= $24.00 paid overage</text>
+    <line x1="340" y1="115" x2="410" y2="115" stroke="var(--stroke-1)" marker-end="url(#arrG)"/>
+    <rect x="420" y="80" width="200" height="80" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="520" y="105" text-anchor="middle" font-size="10" fill="var(--fg-1)">cc-ai metered budget</text>
+    <text x="520" y="123" text-anchor="middle" font-size="11" fill="var(--fg-3)">$24 of $30 cap</text>
+    <text x="520" y="143" text-anchor="middle" font-size="12" fill="var(--warning-fg)" font-weight="700">80% &mdash; crosses 75% alert</text>
+    <line x1="620" y1="120" x2="690" y2="120" stroke="var(--stroke-1)" marker-end="url(#arrG)"/>
+    <rect x="700" y="95" width="70" height="50" rx="4" fill="var(--warning-bg)" stroke="var(--warning-fg)"/>
+    <text x="735" y="125" text-anchor="middle" font-size="10" fill="var(--warning-fg)">alert fires</text>
+    <defs><marker id="arrG" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">2,400 credits &times; $0.01 = $24.00, which is 80% of the cost center's own $30 metered-overage cap &mdash; crossing its 75% threshold alert.</p>
+</div>
+
+<!-- Panel 4: side by side -->
+<div class="panel">
+  <div class="panel-head"><span class="num">4</span><h2 class="title3">Side by side: identical request, opposite books</h2></div>
+  <svg class="diagram" viewBox="0 0 800 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="20" width="330" height="110" rx="8" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+    <text x="205" y="45" text-anchor="middle" font-size="12" fill="var(--danger-fg)" font-weight="700">block mode</text>
+    <text x="205" y="68" text-anchor="middle" font-size="11" fill="var(--fg-1)">pool: 3,800 / 3,900 (97%)</text>
+    <text x="205" y="88" text-anchor="middle" font-size="11" fill="var(--fg-1)">overage: $0</text>
+    <text x="205" y="108" text-anchor="middle" font-size="11" fill="var(--fg-1)">Alice's request: refused</text>
+    <rect x="430" y="20" width="330" height="110" rx="8" fill="var(--warning-bg)" stroke="var(--warning-fg)"/>
+    <text x="595" y="45" text-anchor="middle" font-size="12" fill="var(--warning-fg)" font-weight="700">allowOverage mode</text>
+    <text x="595" y="68" text-anchor="middle" font-size="11" fill="var(--fg-1)">pool: 3,900 / 3,900 (100%)</text>
+    <text x="595" y="88" text-anchor="middle" font-size="11" fill="var(--fg-1)">overage: $24.00</text>
+    <text x="595" y="108" text-anchor="middle" font-size="11" fill="var(--fg-1)">Alice's request: honored</text>
+  </svg>
+  <p class="caption">Nothing about Alice's request changed &mdash; only the cost center's own included-pool cap policy decided the outcome.</p>
+</div>
+
+<div class="final">
+  <p>The pool cap doesn't ask "how much is left?" &mdash; it asks "block, or bill?" and that answer is set once, per cost center.</p>
+  <p class="gotcha">Gotcha: in overage mode the cost-center's own metered budget can still hard-stop later swipes once it's exhausted &mdash; the pool cap and the metered budget are two separate valves, not one.</p>
+</div>
+
+</div>
+</body>
+</html>

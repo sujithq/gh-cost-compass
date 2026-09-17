@@ -149,7 +149,7 @@ function resolveStaticPath(root, requestUrl) {
     const path = resolve(root, requested);
     const childPath = relative(root, path);
     if (!childPath || childPath.startsWith(`..${sep}`) || childPath === "..") throw new Error("Invalid path.");
-    if (!/^(index\.html|styles\.css|src[\\/]|scenarios[\\/])/.test(childPath)) throw new Error("Path is not public.");
+    if (!/^(index\.html|styles\.css|src[\\/]|scenarios[\\/]|docs[\\/])/.test(childPath)) throw new Error("Path is not public.");
     return path;
 }
 

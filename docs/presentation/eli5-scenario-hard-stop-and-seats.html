@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELI5: The exact edge of a hard stop, and a seat added mid-month</title>
+<script>
+(function () {
+  try {
+    var qp = new URLSearchParams(location.search).get("theme");
+    var stored = localStorage.getItem("eli5-theme");
+    var theme = qp || stored || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {}
+})();
+</script>
+<style>
+/* Palette: GitHub Primer color primitives (light + dark), switched via [data-theme].
+   Layout tokens (spacing / radius / shadow / type) kept from the eli5 skill scaffold. */
+:root {
+  --brand:       #1a7f37;
+  --brand-hover: #116329;
+  --brand-press: #0f5323;
+  --brand-link:  #1a7f37;
+  --brand-100:   #4ac26b;
+  --brand-150:   #aceebb;
+  --brand-160:   #dafbe1;
+  --bg-brand-rest:  #dafbe1;
+  --bg-brand-hover: #aceebb;
+  --success-fg:  #1a7f37;
+  --success-bg:  #dafbe1;
+  --warning-fg:  #9a6700;
+  --warning-bg:  #fff8c5;
+  --danger-fg:   #cf222e;
+  --danger-bg:   #ffebe9;
+  --info-fg:     #0969da;
+  --info-bg:     #ddf4ff;
+  --fg-1:        #1f2328;
+  --fg-2:        #59636e;
+  --fg-3:        #6e7781;
+  --fg-4:        #7d8590;
+  --fg-on-brand: #ffffff;
+  --bg-canvas:   #ffffff;
+  --bg-canvas-2: #f6f8fa;
+  --bg-canvas-3: #eaeef2;
+  --bg-canvas-4: #eef1f4;
+  --bg-hover:    #f3f4f6;
+  --bg-press:    #e7ebef;
+  --stroke-1:    #d0d7de;
+  --stroke-2:    #d8dee4;
+  --stroke-3:    #eaeef2;
+  --stroke-accessible: #57606a;
+  --shadow-2:  0 1px 0 rgba(31,35,40,0.04);
+  --shadow-4:  0 1px 0 rgba(31,35,40,0.04), 0 3px 6px rgba(140,149,159,0.15);
+  --shadow-8:  0 3px 6px rgba(140,149,159,0.2);
+  --shadow-16: 0 8px 24px rgba(140,149,159,0.2);
+  --r-sm:   3px;
+  --r-md:   6px;
+  --r-lg:   8px;
+  --r-xl:   12px;
+  --r-pill: 9999px;
+  --sp-xs:  4px;
+  --sp-s:   8px;
+  --sp-m:   12px;
+  --sp-l:   16px;
+  --sp-xl:  20px;
+  --sp-xxl: 24px;
+  --sp-3xl: 32px;
+  --f-text:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-numeric: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-code:    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --brand:       #3fb950;
+  --brand-hover: #2ea043;
+  --brand-press: #56d364;
+  --brand-link:  #56d364;
+  --brand-100:   #56d364;
+  --brand-150:   #2ea043;
+  --brand-160:   #0f2e17;
+  --bg-brand-rest:  #0f2e17;
+  --bg-brand-hover: #1b4721;
+  --success-fg:  #3fb950;
+  --success-bg:  #113123;
+  --warning-fg:  #d29922;
+  --warning-bg:  #3b2a06;
+  --danger-fg:   #f85149;
+  --danger-bg:   #3c1618;
+  --info-fg:     #4493f8;
+  --info-bg:     #10243e;
+  --fg-1:        #e6edf3;
+  --fg-2:        #9198a1;
+  --fg-3:        #7d8590;
+  --fg-4:        #6e7681;
+  --fg-on-brand: #04220b;
+  --bg-canvas:   #010409;
+  --bg-canvas-2: #0d1117;
+  --bg-canvas-3: #161b22;
+  --bg-canvas-4: #21262d;
+  --bg-hover:    #161b22;
+  --bg-press:    #21262d;
+  --stroke-1:    #30363d;
+  --stroke-2:    #2ea043;
+  --stroke-3:    #21262d;
+  --stroke-accessible: #9198a1;
+  --shadow-2:  0 0 0 1px rgba(46,160,67,0.3);
+  --shadow-4:  0 0 0 1px rgba(46,160,67,0.4), 0 4px 12px rgba(1,4,9,0.6);
+  --shadow-8:  0 0 0 1px rgba(46,160,67,0.5), 0 6px 16px rgba(1,4,9,0.7);
+  --shadow-16: 0 0 0 1px rgba(46,160,67,0.55), 0 10px 28px rgba(1,4,9,0.75);
+  color-scheme: dark;
+}
+body { transition: background-color 0.15s ease, color 0.15s ease; }
+.theme-toggle {
+  position: fixed; top: var(--sp-l); right: var(--sp-l); z-index: 10;
+  width: 40px; height: 40px; border-radius: var(--r-pill);
+  border: 1px solid var(--stroke-1); background: var(--bg-canvas-2); color: var(--fg-1);
+  font-size: 18px; line-height: 1; cursor: pointer; box-shadow: var(--shadow-2);
+}
+.theme-toggle:hover { background: var(--bg-hover); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-canvas); color: var(--fg-1); font-family: var(--f-text); padding: var(--sp-3xl) var(--sp-l) 80px; }
+.wrap { max-width: 880px; margin: 0 auto; }
+header { text-align: center; margin-bottom: var(--sp-xxl); }
+.eyebrow { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); margin: 0 0 var(--sp-s); }
+h1 { font-family: var(--f-display); font-size: 40px; line-height: 52px; font-weight: 600; margin: 0 0 var(--sp-s); }
+.sub { color: var(--fg-3); font-size: 16px; margin: 0 0 var(--sp-s); }
+.sourcechip { display: inline-block; font-family: var(--f-code); font-size: 12px; color: var(--fg-3); background: var(--bg-canvas-3); border-radius: var(--r-pill); padding: 4px 12px; margin: 2px 4px; }
+.panel { background: var(--bg-canvas-2); border: 1px solid var(--stroke-2); border-radius: var(--r-md); box-shadow: var(--shadow-4); padding: var(--sp-xl); margin-bottom: var(--sp-xxl); }
+.panel-head { display: flex; align-items: baseline; gap: var(--sp-m); margin-bottom: var(--sp-m); }
+.num {
+  font-family: var(--f-numeric); font-size: 18px; font-weight: 700;
+  width: 40px; height: 40px; min-width: 40px; border-radius: 50%;
+  background: var(--brand); color: var(--fg-on-brand);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.title3 { font-size: 24px; line-height: 32px; font-weight: 600; margin: 0; }
+.diagram { width: 100%; height: auto; display: block; }
+.caption { font-size: 12px; line-height: 16px; color: var(--fg-3); margin: var(--sp-m) 0 0; border-top: 1px dashed var(--stroke-2); padding-top: var(--sp-s); }
+code { font-family: var(--f-code); font-size: 13px; color: var(--fg-3); }
+.final { background: var(--bg-brand-rest); border: 1px solid var(--brand-150); border-radius: var(--r-md); padding: var(--sp-xxl); text-align: center; }
+.final p { font-family: var(--f-display); font-size: 24px; line-height: 32px; font-weight: 600; margin: 0 0 var(--sp-m); }
+</style>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">&#9789;</button>
+<script>
+(function () {
+  var btn = document.getElementById("theme-toggle");
+  if (window.self !== window.top) btn.hidden = true;
+  function apply(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("eli5-theme", theme); } catch (e) {}
+  }
+  btn.addEventListener("click", function () {
+    apply(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+  window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "eli5-theme") apply(event.data.theme);
+  });
+})();
+</script>
+<div class="wrap">
+<header>
+  <p class="eyebrow">One level deeper &middot; exact boundaries in engine.js</p>
+  <h1>What happens at exactly 100%, and on the 15th of the month</h1>
+  <p class="sub">Two edge cases the engine has to get precisely right: the atomic hard stop, and a seat added mid-cycle.</p>
+  <span class="sourcechip">scenarios/hard-stop-boundary.json</span>
+  <span class="sourcechip">src/engine.js &middot; seatChargeForPeriod()</span>
+</header>
+
+<!-- Panel 0: analogy -->
+<div class="panel">
+  <div class="panel-head"><span class="num">0</span><h2 class="title3">A hard stop is a door that locks at exactly 100%, not before or after</h2></div>
+  <svg class="diagram" viewBox="0 0 800 170" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="40" width="500" height="40" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="60" y="40" width="500" height="40" fill="var(--success-bg)"/>
+    <text x="310" y="65" text-anchor="middle" font-size="13" fill="var(--fg-1)">door open &middot; 0% &rarr; 100%</text>
+    <rect x="590" y="20" width="150" height="80" rx="6" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+    <text x="665" y="55" text-anchor="middle" font-size="12" fill="var(--danger-fg)" font-weight="700">door locked</text>
+    <text x="665" y="75" text-anchor="middle" font-size="10" fill="var(--fg-3)">the instant it hits 100%</text>
+  </svg>
+  <p class="caption">Reaching the limit is fine; a single credit past it is refused entirely, never partially let through.</p>
+</div>
+
+<!-- Panel 1: the exact-limit event -->
+<div class="panel">
+  <div class="panel-head"><span class="num">1</span><h2 class="title3">Alice's $10 ULB, hit to the penny</h2></div>
+  <svg class="diagram" viewBox="0 0 800 160" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="35" width="220" height="90" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="150" y="60" text-anchor="middle" font-size="11" fill="var(--fg-1)">1,000 AI credits</text>
+    <text x="150" y="80" text-anchor="middle" font-size="14" fill="var(--fg-1)" font-weight="700">= $10.00</text>
+    <text x="150" y="100" text-anchor="middle" font-size="10" fill="var(--fg-3)">ULB amount: $10</text>
+    <line x1="260" y1="80" x2="330" y2="80" stroke="var(--stroke-1)" marker-end="url(#arrH)"/>
+    <rect x="340" y="40" width="200" height="80" rx="6" fill="var(--success-bg)" stroke="var(--success-fg)"/>
+    <text x="440" y="70" text-anchor="middle" font-size="12" fill="var(--success-fg)" font-weight="700">accepted</text>
+    <text x="440" y="92" text-anchor="middle" font-size="10" fill="var(--fg-3)">ULB now exactly 100%</text>
+    <line x1="540" y1="80" x2="610" y2="80" stroke="var(--stroke-1)" marker-end="url(#arrH)"/>
+    <rect x="620" y="40" width="150" height="80" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <text x="695" y="70" text-anchor="middle" font-size="10" fill="var(--fg-1)">remaining</text>
+    <text x="695" y="92" text-anchor="middle" font-size="14" fill="var(--fg-1)" font-weight="700">$0.00</text>
+    <defs><marker id="arrH" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">The event that lands exactly on the cap is fully accepted &mdash; 100% is a valid, allowed state, not a violation.</p>
+</div>
+
+<!-- Panel 2: the next event -->
+<div class="panel">
+  <div class="panel-head"><span class="num">2</span><h2 class="title3">One more credit ($0.01) is refused in full, not trimmed to $0</h2></div>
+  <svg class="diagram" viewBox="0 0 800 160" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="35" width="220" height="90" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="150" y="60" text-anchor="middle" font-size="11" fill="var(--fg-1)">1 AI credit</text>
+    <text x="150" y="80" text-anchor="middle" font-size="14" fill="var(--fg-1)" font-weight="700">= $0.01</text>
+    <text x="150" y="100" text-anchor="middle" font-size="10" fill="var(--fg-3)">headroom: $0.00</text>
+    <line x1="260" y1="80" x2="330" y2="80" stroke="var(--stroke-1)" marker-end="url(#arrI)"/>
+    <rect x="340" y="40" width="200" height="80" rx="6" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+    <text x="440" y="70" text-anchor="middle" font-size="12" fill="var(--danger-fg)" font-weight="700">rejected, whole event</text>
+    <text x="440" y="92" text-anchor="middle" font-size="10" fill="var(--fg-3)">no counter changes at all</text>
+  </svg>
+  <p class="caption">This is what "atomic" means in practice: the engine never charges $0.00 worth and lets the rest through &mdash; the full request is one unit.</p>
+</div>
+
+<!-- Panel 3: seat proration setup -->
+<div class="panel">
+  <div class="panel-head"><span class="num">3</span><h2 class="title3">A seat added on day 15 doesn't cost a full month</h2></div>
+  <svg class="diagram" viewBox="0 0 800 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="55" width="700" height="40" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="40" y="55" width="303" height="40" fill="var(--stroke-2)"/>
+    <rect x="343" y="55" width="397" height="40" fill="var(--brand-150)"/>
+    <line x1="343" y1="45" x2="343" y2="105" stroke="var(--brand)" stroke-dasharray="3,3"/>
+    <text x="170" y="45" text-anchor="middle" font-size="10" fill="var(--fg-3)">days 1&ndash;14: no seat</text>
+    <text x="540" y="45" text-anchor="middle" font-size="10" fill="var(--brand)">days 15&ndash;30: seat active</text>
+    <text x="343" y="120" text-anchor="middle" font-size="11" fill="var(--fg-1)" font-weight="700">16 of 30 days billed</text>
+  </svg>
+  <p class="caption">The engine counts calendar days from the assignment date through month end &mdash; day 15 itself counts, giving 16 billable days in a 30-day month.</p>
+</div>
+
+<!-- Panel 4: the math -->
+<div class="panel">
+  <div class="panel-head"><span class="num">4</span><h2 class="title3">The exact formula behind that 16/30 slice</h2></div>
+  <svg class="diagram" viewBox="0 0 800 180" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="20" width="300" height="55" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="190" y="42" text-anchor="middle" font-size="11" fill="var(--fg-3)" font-family="var(--f-code)">seatChargeForPeriod()</text>
+    <text x="190" y="62" text-anchor="middle" font-size="11" fill="var(--fg-1)">price &times; (remainingDays / totalDays)</text>
+    <line x1="190" y1="75" x2="190" y2="105" stroke="var(--stroke-1)" marker-end="url(#arrJ)"/>
+    <rect x="40" y="110" width="300" height="55" rx="6" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+    <text x="190" y="135" text-anchor="middle" font-size="11" fill="var(--fg-1)">Enterprise seat: $39 &times; 16/30</text>
+    <text x="190" y="153" text-anchor="middle" font-size="13" fill="var(--brand)" font-weight="700">= $20.80 charged this cycle</text>
+    <line x1="360" y1="60" x2="430" y2="60" stroke="var(--stroke-1)" marker-end="url(#arrJ)"/>
+    <rect x="440" y="20" width="330" height="145" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <text x="605" y="45" text-anchor="middle" font-size="11" fill="var(--fg-1)">Included AI credits prorate the same way</text>
+    <text x="605" y="70" text-anchor="middle" font-size="11" fill="var(--fg-3)">3,900 &times; 16/30 &asymp; 2,080 credits</text>
+    <text x="605" y="95" text-anchor="middle" font-size="9.5" fill="var(--fg-3)">unless seatCreditPolicy: "full" overrides</text>
+    <text x="605" y="112" text-anchor="middle" font-size="9.5" fill="var(--fg-3)">this as a hypothetical comparison</text>
+    <text x="605" y="140" text-anchor="middle" font-size="9" fill="var(--fg-3)">Business seat: $19 &times; days/30</text>
+    <defs><marker id="arrJ" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">Both the seat's dollar charge and its included-credit contribution scale by the same day fraction &mdash; a late-cycle seat gets less of both.</p>
+</div>
+
+<!-- Panel 5: removal is asymmetric -->
+<div class="panel">
+  <div class="panel-head"><span class="num">5</span><h2 class="title3">But leaving mid-cycle doesn't hand any of it back</h2></div>
+  <svg class="diagram" viewBox="0 0 800 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="20" width="340" height="110" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="210" y="45" text-anchor="middle" font-size="11" fill="var(--fg-1)">unassign</text>
+    <text x="210" y="68" text-anchor="middle" font-size="10" fill="var(--fg-3)">access continues to month end</text>
+    <text x="210" y="88" text-anchor="middle" font-size="10" fill="var(--fg-3)">pool contribution stays until reset</text>
+    <text x="210" y="108" text-anchor="middle" font-size="10" fill="var(--danger-fg)">no refund either way</text>
+    <rect x="420" y="20" width="340" height="110" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="590" y="45" text-anchor="middle" font-size="11" fill="var(--fg-1)">revoke</text>
+    <text x="590" y="68" text-anchor="middle" font-size="10" fill="var(--fg-3)">access stops immediately</text>
+    <text x="590" y="88" text-anchor="middle" font-size="10" fill="var(--fg-3)">pool contribution still stays</text>
+    <text x="590" y="108" text-anchor="middle" font-size="10" fill="var(--danger-fg)">until the next monthly reset</text>
+  </svg>
+  <p class="caption">Removing a seat only changes when access stops &mdash; the credits it already contributed to the pool are never clawed back mid-cycle.</p>
+</div>
+
+<div class="final">
+  <p>Precision at the edges is the whole job: exactly 100% is allowed, one cent past it is not, and every day of a seat's life is counted, not rounded.</p>
+  <p class="gotcha">Gotcha: GitHub's docs say prorated credits "may" apply without publishing the exact formula, so the simulator also offers a full-credit hypothetical purely for comparison &mdash; it is explicitly not the documented default.</p>
+</div>
+
+</div>
+</body>
+</html>

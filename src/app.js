@@ -16,6 +16,7 @@ let scenarioCatalogError = null;
 let scenarioRun = { definitionId: "", stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
 let latestEventId = null;
 let budgetHistoryTrigger = null;
+let walkthroughTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
 let optimizedScope = { type: "enterprise", id: "" };
@@ -819,6 +820,36 @@ function closeBudgetHistory() {
   modal.setAttribute("aria-hidden", "true");
   budgetHistoryTrigger?.isConnected && budgetHistoryTrigger.focus();
   budgetHistoryTrigger = null;
+}
+
+function openWalkthrough(trigger) {
+  const modal = $("#walkthrough-modal");
+  const frame = $("#walkthrough-frame");
+  if (!frame.getAttribute("src")) frame.setAttribute("src", "docs/presentation/index.html");
+  walkthroughTrigger = trigger || document.activeElement;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  $("#walkthrough-close").focus();
+}
+
+function setWalkthroughFullscreen(full) {
+  const modal = $("#walkthrough-modal");
+  const toggle = $("#walkthrough-fullscreen");
+  modal.classList.toggle("fullscreen", full);
+  if (toggle) {
+    toggle.setAttribute("aria-pressed", String(full));
+    toggle.setAttribute("aria-label", full ? "Exit full screen" : "Expand walkthrough to full screen");
+    toggle.textContent = full ? "⤡" : "⤢";
+  }
+}
+
+function closeWalkthrough() {
+  const modal = $("#walkthrough-modal");
+  if (modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  walkthroughTrigger?.isConnected && walkthroughTrigger.focus();
+  walkthroughTrigger = null;
 }
 
 // Every node states its own type, because an icon alone doesn't tell a first-time reader which
@@ -1629,6 +1660,7 @@ $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(sce
 $("#assistant-launcher")?.addEventListener("click", () => setAssistantDrawerOpen(!assistantDrawerOpen));
 $("#assistant-collapse")?.addEventListener("click", () => setAssistantDrawerOpen(false));
 $("#assistant-fullscreen")?.addEventListener("click", () => setAssistantFullscreen(!assistantFullscreen));
+$("#walkthrough-fullscreen")?.addEventListener("click", () => setWalkthroughFullscreen(!$("#walkthrough-modal").classList.contains("fullscreen")));
 $("#assistant-model")?.addEventListener("change", (event) => {
   assistantSettings.model = event.target.value;
   updateAssistantOptimizationControl();
@@ -1691,7 +1723,8 @@ document.addEventListener("click", (event) => {
   const scenarioStep = event.target.closest("[data-scenario-step]"); if (scenarioStep) { scenarioRun.selectedStepIndex = Number(scenarioStep.dataset.scenarioStep); scenarioRun.runAllArmed = false; renderScenarioStudio(); return; }
   const dismiss = event.target.closest("[data-dismiss-toast]"); if (dismiss) { dismissToast(dismiss.closest(".toast")); return; }
   const budgetTrigger = event.target.closest("[data-history-id]"); if (budgetTrigger) { if (budgetTrigger.closest(".toast")) navigate("dashboard"); openBudgetHistory(budgetTrigger.dataset.historyId, budgetTrigger); return; }
-  const closeModal = event.target.closest("[data-close-modal]"); if (closeModal) { closeBudgetHistory(); return; }
+  const closeModal = event.target.closest("[data-close-modal]"); if (closeModal) { if (closeModal.closest("#walkthrough-modal")) closeWalkthrough(); else closeBudgetHistory(); return; }
+  const openWalkthroughBtn = event.target.closest("#open-walkthrough"); if (openWalkthroughBtn) { openWalkthrough(openWalkthroughBtn); return; }
   const go = event.target.closest("[data-go]"); if (go) navigate(go.dataset.go);
   const quick = event.target.closest("[data-quantity]"); if (quick) $("#usage-quantity").value = quick.dataset.quantity;
   const toggle = event.target.closest("[data-toggle-costcenter]"); if (toggle) {

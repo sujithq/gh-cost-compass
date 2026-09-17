@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copilot Budget Lab &middot; hackathon walkthrough</title>
+<script>
+(function () {
+  try {
+    var qp = new URLSearchParams(location.search).get("theme");
+    var stored = localStorage.getItem("eli5-theme");
+    var theme = qp || stored || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {}
+})();
+</script>
+<style>
+/* Palette: GitHub Primer color primitives (light + dark), switched via [data-theme]. */
+:root {
+  --brand:       #1a7f37;
+  --brand-hover: #116329;
+  --brand-150:   #aceebb;
+  --bg-brand-rest:  #dafbe1;
+  --fg-1:        #1f2328;
+  --fg-2:        #59636e;
+  --fg-3:        #6e7781;
+  --fg-on-brand: #ffffff;
+  --bg-canvas:   #ffffff;
+  --bg-canvas-2: #f6f8fa;
+  --bg-canvas-3: #eaeef2;
+  --bg-hover:    #f3f4f6;
+  --stroke-1:    #d0d7de;
+  --stroke-2:    #d8dee4;
+  --shadow-4:  0 1px 0 rgba(31,35,40,0.04), 0 3px 6px rgba(140,149,159,0.15);
+  --shadow-8:  0 3px 6px rgba(140,149,159,0.2);
+  --r-md:   6px;
+  --r-lg:   8px;
+  --r-pill: 9999px;
+  --sp-xs:  4px;
+  --sp-s:   8px;
+  --sp-m:   12px;
+  --sp-l:   16px;
+  --sp-xl:  20px;
+  --sp-xxl: 24px;
+  --f-text:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-code:    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --brand:       #3fb950;
+  --brand-hover: #2ea043;
+  --brand-150:   #2ea043;
+  --bg-brand-rest:  #0f2e17;
+  --fg-1:        #e6edf3;
+  --fg-2:        #9198a1;
+  --fg-3:        #7d8590;
+  --fg-on-brand: #04220b;
+  --bg-canvas:   #010409;
+  --bg-canvas-2: #0d1117;
+  --bg-canvas-3: #161b22;
+  --bg-hover:    #161b22;
+  --stroke-1:    #30363d;
+  --stroke-2:    #2ea043;
+  --shadow-4:  0 0 0 1px rgba(46,160,67,0.4), 0 4px 12px rgba(1,4,9,0.6);
+  --shadow-8:  0 0 0 1px rgba(46,160,67,0.5), 0 6px 16px rgba(1,4,9,0.7);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg-canvas); color: var(--fg-1); font-family: var(--f-text);
+  transition: background-color 0.15s ease, color 0.15s ease;
+  height: 100vh; display: flex; flex-direction: column;
+}
+header.top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-m) var(--sp-xl); border-bottom: 1px solid var(--stroke-2); background: var(--bg-canvas-2);
+}
+header.top .brand-block { display: flex; align-items: center; gap: var(--sp-m); }
+header.top .mark {
+  width: 32px; height: 32px; border-radius: var(--r-md); background: var(--brand);
+  color: var(--fg-on-brand); display: flex; align-items: center; justify-content: center; font-weight: 700;
+}
+header.top h1 { font-family: var(--f-display); font-size: 16px; margin: 0; }
+header.top p { margin: 0; font-size: 12px; color: var(--fg-3); }
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: var(--r-pill); border: 1px solid var(--stroke-1);
+  background: var(--bg-canvas); color: var(--fg-1); font-size: 16px; cursor: pointer; box-shadow: var(--shadow-4);
+}
+.theme-toggle:hover { background: var(--bg-hover); }
+main { flex: 1; display: flex; overflow: hidden; }
+nav.rail {
+  width: 260px; flex: none; border-right: 1px solid var(--stroke-2); background: var(--bg-canvas-2);
+  overflow-y: auto; padding: var(--sp-m);
+}
+nav.rail .group-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-3); margin: var(--sp-l) var(--sp-s) var(--sp-xs); padding-top: var(--sp-s);
+}
+nav.rail .group-label:first-child { margin-top: 0; }
+button.slide-link {
+  display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent;
+  border-radius: var(--r-md); padding: var(--sp-s) var(--sp-m); color: var(--fg-1); font-size: 13px;
+  cursor: pointer; margin-bottom: 2px; font-family: var(--f-text);
+}
+button.slide-link:hover { background: var(--bg-hover); }
+button.slide-link.active { background: var(--bg-brand-rest); border-color: var(--brand-150); color: var(--brand); font-weight: 600; }
+button.slide-link .idx { display: inline-block; width: 20px; color: var(--fg-3); font-family: var(--f-code); }
+.stage { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.frame-wrap { flex: 1; position: relative; background: var(--bg-canvas-3); }
+iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg-canvas); }
+.controls {
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-l);
+  padding: var(--sp-m); border-top: 1px solid var(--stroke-2); background: var(--bg-canvas-2);
+}
+.controls button {
+  border: 1px solid var(--stroke-1); background: var(--bg-canvas); color: var(--fg-1);
+  border-radius: var(--r-md); padding: var(--sp-s) var(--sp-l); font-size: 13px; cursor: pointer; box-shadow: var(--shadow-4);
+}
+.controls button:hover { background: var(--bg-hover); }
+.controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+.controls .dots { display: flex; gap: 6px; }
+.controls .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--stroke-1); }
+.controls .dots span.active { background: var(--brand); }
+.controls .step-label { font-size: 12px; color: var(--fg-3); min-width: 90px; text-align: center; font-family: var(--f-code); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand-block">
+    <span class="mark">&#9635;</span>
+    <div>
+      <h1>Copilot Budget Lab</h1>
+      <p>Hackathon walkthrough &middot; 6 explainers</p>
+    </div>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">&#9789;</button>
+</header>
+
+<main>
+  <nav class="rail" id="rail">
+    <p class="group-label">How it's built</p>
+    <button class="slide-link" data-i="0"><span class="idx">01</span> App architecture &amp; live Copilot</button>
+    <p class="group-label">Budget control model</p>
+    <button class="slide-link" data-i="1"><span class="idx">02</span> Why budget control is complex</button>
+    <p class="group-label">One level deeper &mdash; real scenarios</p>
+    <button class="slide-link" data-i="2"><span class="idx">03</span> Shared pool &rarr; paid overage</button>
+    <button class="slide-link" data-i="3"><span class="idx">04</span> Cost-center fork: block vs overage</button>
+    <button class="slide-link" data-i="4"><span class="idx">05</span> Hard-stop boundary &amp; seat proration</button>
+  </nav>
+
+  <div class="stage">
+    <div class="frame-wrap">
+      <iframe id="frame" title="Explainer slide"></iframe>
+    </div>
+    <div class="controls">
+      <button type="button" id="prev">&larr; Previous</button>
+      <div class="dots" id="dots"></div>
+      <span class="step-label" id="step-label"></span>
+      <button type="button" id="next">Next &rarr;</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var slides = [
+    { file: "eli5-budget-lab-architecture.html", label: "01 / 05" },
+    { file: "eli5-budget-control-complexity.html", label: "02 / 05" },
+    { file: "eli5-scenario-shared-pool-walkthrough.html", label: "03 / 05" },
+    { file: "eli5-scenario-cost-center-fork.html", label: "04 / 05" },
+    { file: "eli5-scenario-hard-stop-and-seats.html", label: "05 / 05" }
+  ];
+  var current = 0;
+  var frame = document.getElementById("frame");
+  var dotsEl = document.getElementById("dots");
+  var stepLabel = document.getElementById("step-label");
+  var prevBtn = document.getElementById("prev");
+  var nextBtn = document.getElementById("next");
+  var links = document.querySelectorAll(".slide-link");
+
+  slides.forEach(function () {
+    var dot = document.createElement("span");
+    dotsEl.appendChild(dot);
+  });
+
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") || "light";
+  }
+
+  function render() {
+    var slide = slides[current];
+    var sep = slide.file.indexOf("?") === -1 ? "?" : "&";
+    frame.src = slide.file + sep + "theme=" + currentTheme();
+    stepLabel.textContent = slide.label;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === slides.length - 1;
+    links.forEach(function (btn, i) { btn.classList.toggle("active", i === current); });
+    Array.prototype.forEach.call(dotsEl.children, function (dot, i) { dot.classList.toggle("active", i === current); });
+  }
+
+  function goTo(i) {
+    current = Math.max(0, Math.min(slides.length - 1, i));
+    render();
+  }
+
+  prevBtn.addEventListener("click", function () { goTo(current - 1); });
+  nextBtn.addEventListener("click", function () { goTo(current + 1); });
+  links.forEach(function (btn) {
+    btn.addEventListener("click", function () { goTo(Number(btn.dataset.i)); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") goTo(current + 1);
+    if (e.key === "ArrowLeft") goTo(current - 1);
+  });
+
+  var themeBtn = document.getElementById("theme-toggle");
+  themeBtn.addEventListener("click", function () {
+    var next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("eli5-theme", next); } catch (e) {}
+    frame.contentWindow.postMessage({ type: "eli5-theme", theme: next }, "*");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

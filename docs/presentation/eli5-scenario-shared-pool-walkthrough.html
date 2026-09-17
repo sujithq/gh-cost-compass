@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELI5: One user, one shared pool, three credit-card swipes</title>
+<script>
+(function () {
+  try {
+    var qp = new URLSearchParams(location.search).get("theme");
+    var stored = localStorage.getItem("eli5-theme");
+    var theme = qp || stored || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {}
+})();
+</script>
+<style>
+/* Palette: GitHub Primer color primitives (light + dark), switched via [data-theme].
+   Layout tokens (spacing / radius / shadow / type) kept from the eli5 skill scaffold. */
+:root {
+  --brand:       #1a7f37;
+  --brand-hover: #116329;
+  --brand-press: #0f5323;
+  --brand-link:  #1a7f37;
+  --brand-100:   #4ac26b;
+  --brand-150:   #aceebb;
+  --brand-160:   #dafbe1;
+  --bg-brand-rest:  #dafbe1;
+  --bg-brand-hover: #aceebb;
+  --success-fg:  #1a7f37;
+  --success-bg:  #dafbe1;
+  --warning-fg:  #9a6700;
+  --warning-bg:  #fff8c5;
+  --danger-fg:   #cf222e;
+  --danger-bg:   #ffebe9;
+  --info-fg:     #0969da;
+  --info-bg:     #ddf4ff;
+  --fg-1:        #1f2328;
+  --fg-2:        #59636e;
+  --fg-3:        #6e7781;
+  --fg-4:        #7d8590;
+  --fg-on-brand: #ffffff;
+  --bg-canvas:   #ffffff;
+  --bg-canvas-2: #f6f8fa;
+  --bg-canvas-3: #eaeef2;
+  --bg-canvas-4: #eef1f4;
+  --bg-hover:    #f3f4f6;
+  --bg-press:    #e7ebef;
+  --stroke-1:    #d0d7de;
+  --stroke-2:    #d8dee4;
+  --stroke-3:    #eaeef2;
+  --stroke-accessible: #57606a;
+  --shadow-2:  0 1px 0 rgba(31,35,40,0.04);
+  --shadow-4:  0 1px 0 rgba(31,35,40,0.04), 0 3px 6px rgba(140,149,159,0.15);
+  --shadow-8:  0 3px 6px rgba(140,149,159,0.2);
+  --shadow-16: 0 8px 24px rgba(140,149,159,0.2);
+  --r-sm:   3px;
+  --r-md:   6px;
+  --r-lg:   8px;
+  --r-xl:   12px;
+  --r-pill: 9999px;
+  --sp-xs:  4px;
+  --sp-s:   8px;
+  --sp-m:   12px;
+  --sp-l:   16px;
+  --sp-xl:  20px;
+  --sp-xxl: 24px;
+  --sp-3xl: 32px;
+  --f-text:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-numeric: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --f-code:    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --brand:       #3fb950;
+  --brand-hover: #2ea043;
+  --brand-press: #56d364;
+  --brand-link:  #56d364;
+  --brand-100:   #56d364;
+  --brand-150:   #2ea043;
+  --brand-160:   #0f2e17;
+  --bg-brand-rest:  #0f2e17;
+  --bg-brand-hover: #1b4721;
+  --success-fg:  #3fb950;
+  --success-bg:  #113123;
+  --warning-fg:  #d29922;
+  --warning-bg:  #3b2a06;
+  --danger-fg:   #f85149;
+  --danger-bg:   #3c1618;
+  --info-fg:     #4493f8;
+  --info-bg:     #10243e;
+  --fg-1:        #e6edf3;
+  --fg-2:        #9198a1;
+  --fg-3:        #7d8590;
+  --fg-4:        #6e7681;
+  --fg-on-brand: #04220b;
+  --bg-canvas:   #010409;
+  --bg-canvas-2: #0d1117;
+  --bg-canvas-3: #161b22;
+  --bg-canvas-4: #21262d;
+  --bg-hover:    #161b22;
+  --bg-press:    #21262d;
+  --stroke-1:    #30363d;
+  --stroke-2:    #2ea043;
+  --stroke-3:    #21262d;
+  --stroke-accessible: #9198a1;
+  --shadow-2:  0 0 0 1px rgba(46,160,67,0.3);
+  --shadow-4:  0 0 0 1px rgba(46,160,67,0.4), 0 4px 12px rgba(1,4,9,0.6);
+  --shadow-8:  0 0 0 1px rgba(46,160,67,0.5), 0 6px 16px rgba(1,4,9,0.7);
+  --shadow-16: 0 0 0 1px rgba(46,160,67,0.55), 0 10px 28px rgba(1,4,9,0.75);
+  color-scheme: dark;
+}
+body { transition: background-color 0.15s ease, color 0.15s ease; }
+.theme-toggle {
+  position: fixed; top: var(--sp-l); right: var(--sp-l); z-index: 10;
+  width: 40px; height: 40px; border-radius: var(--r-pill);
+  border: 1px solid var(--stroke-1); background: var(--bg-canvas-2); color: var(--fg-1);
+  font-size: 18px; line-height: 1; cursor: pointer; box-shadow: var(--shadow-2);
+}
+.theme-toggle:hover { background: var(--bg-hover); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-canvas); color: var(--fg-1); font-family: var(--f-text); padding: var(--sp-3xl) var(--sp-l) 80px; }
+.wrap { max-width: 880px; margin: 0 auto; }
+header { text-align: center; margin-bottom: var(--sp-xxl); }
+.eyebrow { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); margin: 0 0 var(--sp-s); }
+h1 { font-family: var(--f-display); font-size: 40px; line-height: 52px; font-weight: 600; margin: 0 0 var(--sp-s); }
+.sub { color: var(--fg-3); font-size: 16px; margin: 0 0 var(--sp-s); }
+.sourcechip { display: inline-block; font-family: var(--f-code); font-size: 12px; color: var(--fg-3); background: var(--bg-canvas-3); border-radius: var(--r-pill); padding: 4px 12px; }
+.panel { background: var(--bg-canvas-2); border: 1px solid var(--stroke-2); border-radius: var(--r-md); box-shadow: var(--shadow-4); padding: var(--sp-xl); margin-bottom: var(--sp-xxl); }
+.panel-head { display: flex; align-items: baseline; gap: var(--sp-m); margin-bottom: var(--sp-m); }
+.num {
+  font-family: var(--f-numeric); font-size: 18px; font-weight: 700;
+  width: 40px; height: 40px; min-width: 40px; border-radius: 50%;
+  background: var(--brand); color: var(--fg-on-brand);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.title3 { font-size: 24px; line-height: 32px; font-weight: 600; margin: 0; }
+.diagram { width: 100%; height: auto; display: block; }
+.caption { font-size: 12px; line-height: 16px; color: var(--fg-3); margin: var(--sp-m) 0 0; border-top: 1px dashed var(--stroke-2); padding-top: var(--sp-s); }
+code { font-family: var(--f-code); font-size: 13px; color: var(--fg-3); }
+.final { background: var(--bg-brand-rest); border: 1px solid var(--brand-150); border-radius: var(--r-md); padding: var(--sp-xxl); text-align: center; }
+.final p { font-family: var(--f-display); font-size: 24px; line-height: 32px; font-weight: 600; margin: 0 0 var(--sp-m); }
+</style>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">&#9789;</button>
+<script>
+(function () {
+  var btn = document.getElementById("theme-toggle");
+  if (window.self !== window.top) btn.hidden = true;
+  function apply(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("eli5-theme", theme); } catch (e) {}
+  }
+  btn.addEventListener("click", function () {
+    apply(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+  window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "eli5-theme") apply(event.data.theme);
+  });
+})();
+</script>
+<div class="wrap">
+<header>
+  <p class="eyebrow">One level deeper &middot; scenario: pool-to-paid-overage</p>
+  <h1>Follow Alice's actual credits, one swipe at a time</h1>
+  <p class="sub">The general "pool then overage" model, replayed with the exact numbers from a real built-in Scenario Studio definition.</p>
+  <span class="sourcechip">scenarios/pool-to-paid-overage.json &middot; environmentId: synthetic-compact</span>
+</header>
+
+<!-- Panel 0: analogy -->
+<div class="panel">
+  <div class="panel-head"><span class="num">0</span><h2 class="title3">It's a gift card that quietly becomes a credit card</h2></div>
+  <svg class="diagram" viewBox="0 0 800 190" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="55" width="220" height="90" rx="10" fill="var(--brand-150)" stroke="var(--brand)"/>
+    <text x="150" y="90" text-anchor="middle" font-size="13" fill="var(--fg-1)">gift card</text>
+    <text x="150" y="112" text-anchor="middle" font-size="12" fill="var(--fg-3)">included AI credits</text>
+    <text x="150" y="130" text-anchor="middle" font-size="12" fill="var(--fg-3)">balance: 5,800</text>
+    <circle cx="90" cy="20" r="18" fill="none" stroke="var(--stroke-1)"/>
+    <path d="M78 17 q12 -18 24 0" fill="none" stroke="var(--stroke-1)"/>
+    <text x="90" y="42" text-anchor="middle" font-size="10" fill="var(--fg-3)">Alice</text>
+    <line x1="90" y1="42" x2="120" y2="60" stroke="var(--stroke-1)" marker-end="url(#arrA)"/>
+    <line x1="270" y1="100" x2="340" y2="100" stroke="var(--stroke-1)" marker-end="url(#arrA)"/>
+    <text x="305" y="88" text-anchor="middle" font-size="10" fill="var(--fg-3)">balance hits $0</text>
+    <rect x="350" y="55" width="220" height="90" rx="10" fill="var(--bg-canvas)" stroke="var(--warning-fg)"/>
+    <text x="460" y="90" text-anchor="middle" font-size="13" fill="var(--fg-1)">credit card</text>
+    <text x="460" y="112" text-anchor="middle" font-size="12" fill="var(--fg-3)">paid overage</text>
+    <text x="460" y="130" text-anchor="middle" font-size="12" fill="var(--fg-3)">1 credit = $0.01</text>
+    <defs><marker id="arrA" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">Same swipe, same product &mdash; the only thing that changes is which balance actually moves.</p>
+</div>
+
+<!-- Panel 1: where 5,800 comes from -->
+<div class="panel">
+  <div class="panel-head"><span class="num">1</span><h2 class="title3">The 5,800-credit pool isn't a round number &mdash; it's two seats added up</h2></div>
+  <svg class="diagram" viewBox="0 0 800 160" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="30" width="220" height="60" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="150" y="52" text-anchor="middle" font-size="11" fill="var(--fg-1)">Alice &middot; Enterprise seat</text>
+    <text x="150" y="72" text-anchor="middle" font-size="13" fill="var(--brand)" font-weight="700">3,900 credits</text>
+    <rect x="40" y="100" width="220" height="45" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="150" y="120" text-anchor="middle" font-size="11" fill="var(--fg-1)">Bob &middot; Business seat</text>
+    <text x="150" y="138" text-anchor="middle" font-size="12" fill="var(--brand)" font-weight="700">1,900 credits</text>
+    <text x="330" y="90" text-anchor="middle" font-size="20" fill="var(--fg-3)">+</text>
+    <line x1="380" y1="80" x2="440" y2="80" stroke="var(--stroke-1)" marker-end="url(#arrB)"/>
+    <rect x="450" y="45" width="260" height="70" rx="8" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+    <text x="580" y="72" text-anchor="middle" font-size="12" fill="var(--fg-1)">enterprise-wide pool</text>
+    <text x="580" y="95" text-anchor="middle" font-size="14" fill="var(--brand)" font-weight="700">5,800 credits total</text>
+    <defs><marker id="arrB" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">3,900 + 1,900 = 5,800 &mdash; exactly the pool size this scenario starts from, per seat plan.</p>
+</div>
+
+<!-- Panel 2: step 1 -->
+<div class="panel">
+  <div class="panel-head"><span class="num">2</span><h2 class="title3">Step 1 &mdash; 5,000 credits used, still deep in the included pool</h2></div>
+  <svg class="diagram" viewBox="0 0 800 170" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="50" width="500" height="40" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="60" y="50" width="431" height="40" fill="var(--brand-150)"/>
+    <text x="275" y="75" text-anchor="middle" font-size="12" fill="var(--fg-1)">5,000 / 5,800 used &middot; 86%</text>
+    <rect x="600" y="30" width="160" height="90" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="680" y="55" text-anchor="middle" font-size="10" fill="var(--fg-3)">paid overage</text>
+    <text x="680" y="78" text-anchor="middle" font-size="14" fill="var(--success-fg)" font-weight="700">$0</text>
+    <text x="680" y="100" text-anchor="middle" font-size="10" fill="var(--fg-3)">ULB so far: $50 of $200</text>
+    <defs><marker id="arrC" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">800 credits still remain untouched; the ULB (raised to $200 for this scenario) tracks the $50 dollar-equivalent already, even though it's all included.</p>
+</div>
+
+<!-- Panel 3: step 2 -->
+<div class="panel">
+  <div class="panel-head"><span class="num">3</span><h2 class="title3">Step 2 &mdash; the last 800 credits empty the tank exactly</h2></div>
+  <svg class="diagram" viewBox="0 0 800 170" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="50" width="500" height="40" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="60" y="50" width="500" height="40" fill="var(--brand-150)"/>
+    <text x="310" y="75" text-anchor="middle" font-size="12" fill="var(--fg-1)">5,800 / 5,800 used &middot; 100%</text>
+    <rect x="600" y="30" width="160" height="90" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+    <text x="680" y="55" text-anchor="middle" font-size="10" fill="var(--fg-3)">paid overage</text>
+    <text x="680" y="78" text-anchor="middle" font-size="14" fill="var(--success-fg)" font-weight="700">still $0</text>
+    <text x="680" y="100" text-anchor="middle" font-size="10" fill="var(--fg-3)">ULB so far: $58 of $200</text>
+  </svg>
+  <p class="caption">The pool bar reaches exactly 100% and the metered cost is still zero &mdash; nothing paid has happened yet.</p>
+</div>
+
+<!-- Panel 4: step 3 -->
+<div class="panel">
+  <div class="panel-head"><span class="num">4</span><h2 class="title3">Step 3 &mdash; the next 1,000 credits have nowhere included to go</h2></div>
+  <svg class="diagram" viewBox="0 0 800 190" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="45" width="500" height="40" rx="6" fill="var(--bg-canvas-3)" stroke="var(--stroke-2)"/>
+    <rect x="60" y="45" width="500" height="40" fill="var(--stroke-2)"/>
+    <text x="310" y="70" text-anchor="middle" font-size="12" fill="var(--fg-3)">included pool: full, can't absorb more</text>
+    <line x1="565" y1="65" x2="620" y2="65" stroke="var(--stroke-1)" marker-end="url(#arrD)"/>
+    <rect x="630" y="20" width="150" height="90" rx="6" fill="var(--warning-bg)" stroke="var(--warning-fg)"/>
+    <text x="705" y="45" text-anchor="middle" font-size="10" fill="var(--warning-fg)">paid overage</text>
+    <text x="705" y="70" text-anchor="middle" font-size="16" fill="var(--warning-fg)" font-weight="700">$10.00</text>
+    <text x="705" y="90" text-anchor="middle" font-size="9" fill="var(--fg-3)">1,000 credits &times; $0.01</text>
+    <rect x="60" y="130" width="360" height="40" rx="6" fill="var(--bg-canvas)" stroke="var(--stroke-2)"/>
+    <text x="240" y="155" text-anchor="middle" font-size="11" fill="var(--fg-1)">attributed to cost-center + enterprise metered budgets</text>
+    <text x="500" y="155" text-anchor="middle" font-size="11" fill="var(--fg-3)">ULB now: $68 of $200 (34%)</text>
+    <defs><marker id="arrD" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--stroke-1)"/></marker></defs>
+  </svg>
+  <p class="caption">$10.00 in paid overage lands on the cost-center and enterprise metered budgets, while Alice's own hard-stop ULB still has $132 of headroom.</p>
+</div>
+
+<div class="final">
+  <p>5,000 + 800 + 1,000 credits = 100% included, then exactly $10.00 paid &mdash; the model from before, seen as real math.</p>
+  <p class="gotcha">Gotcha: the ULB kept climbing through every step, included or paid, because it measures total AI-credit spend &mdash; it just wasn't the control that stopped anything here.</p>
+</div>
+
+</div>
+</body>
+</html>
