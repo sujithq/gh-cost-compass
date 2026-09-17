@@ -1,0 +1,38 @@
+{
+  "enterprise": {
+    "id": 7001,
+    "slug": "fixture-enterprise",
+    "name": "Fixture Enterprise",
+    "currency": "USD"
+  },
+  "organizations": [
+    { "id": 101, "login": "platform", "name": "Platform" },
+    { "id": 102, "login": "product", "name": "Product" }
+  ],
+  "repositories": [
+    { "id": 201, "name": "portal", "full_name": "product/portal", "organizationLogin": "product" },
+    { "id": 202, "name": "tools", "full_name": "platform/tools", "organizationLogin": "platform" }
+  ],
+  "memberships": [
+    { "id": 301, "login": "alice", "name": "Alice Example", "organizationLogin": "product" },
+    { "id": 301, "login": "alice", "name": "Alice Example", "organizationLogin": "platform" },
+    { "id": 302, "login": "bob", "name": "Bob Example", "organizationLogin": "platform" },
+    { "id": 303, "login": "casey", "name": "Casey Example", "organizationLogin": "product" }
+  ],
+  "seats": [
+    { "assignee": { "id": 301, "login": "alice", "name": "Alice Example" }, "plan": "enterprise", "organization": { "login": "product" }, "assigned_at": "2026-09-01T00:00:00Z" },
+    { "assignee": { "id": 302, "login": "bob", "name": "Bob Example" }, "plan": "business", "organization": { "login": "platform" }, "assigned_at": "2026-09-02T00:00:00Z", "canceled_at": "2026-09-20T00:00:00Z" },
+    { "assignee": { "id": 303, "login": "casey", "name": "Casey Example" }, "plan": "business", "organization": { "login": "product" }, "assigned_at": "2026-09-03T00:00:00Z", "revoked_at": "2026-09-10T00:00:00Z" }
+  ],
+  "teams": [
+    { "id": 401, "slug": "ai-team", "name": "AI Team", "members": [{ "id": 301 }] }
+  ],
+  "costCenters": [
+    { "id": "cc-direct", "name": "Direct", "userIds": [301], "organizationIds": [], "repositoryIds": [], "enterpriseTeamIds": [] },
+    { "id": "cc-repository", "name": "Repository", "userIds": [], "organizationIds": [], "repositoryIds": [202], "enterpriseTeamIds": [] },
+    { "id": "cc-team", "name": "Team", "userIds": [], "organizationIds": [], "repositoryIds": [], "enterpriseTeamIds": [401] }
+  ],
+  "budgets": [
+    { "id": "budget-enterprise", "name": "Enterprise overage", "budgetKind": "metered", "scopeType": "enterprise", "scopeId": 7001, "productId": "ai-credits", "amount": 100, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] }
+  ]
+}

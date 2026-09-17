@@ -27,6 +27,33 @@ Resetting the simulator loads the default set selected in Configuration. Default
 
 The generated data keeps stable IDs such as `user-alice`, `user-bob`, `org-product`, `repo-portal`, `cc-ai`, and `cc-core` so guided scenarios and tests remain reviewable. A small group of enterprise users intentionally has no direct cost-center assignment, so budget attribution can demonstrate the enterprise and organization fallback behavior. Runtime imports are validated for duplicate IDs and broken references before replacing the active scenario.
 
+## Read-only GitHub enterprise extraction
+
+The optional extractor produces the same topology-only environment artifact used by guided scenarios. It makes read-only requests only; it never changes organizations, memberships, seats, cost centers, budgets, or billing settings, and it does not send customer data to an LLM. Credentials are supplied at runtime through `GITHUB_TOKEN` and are not written to the export, browser storage, fixtures, logs, or error messages.
+
+```powershell
+$env:GITHUB_TOKEN = "<runtime secret>"
+npm run extract:github -- --enterprise acme --output .\exports\acme.json
+```
+
+Exports are anonymized by default with deterministic pseudonyms. Use `--preserve-identity` only when the destination is approved for source identities. Existing output files are never overwritten. Optional API failures make the acquisition partial and stop the command; review `source.omittedCapabilities` before explicitly opting in to `--allow-partial`. The offline normalizer is deterministic for fixed input, extraction timestamp, and anonymization settings, and its output can be registered and replayed by scenarios through `environmentId`.
+
+The acquisition layer uses `GET` requests with `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2026-03-10`, bearer authentication, pagination, bounded retries for rate limiting and transient failures, and explicit required/optional capability handling. The default collection covers:
+
+| Capability | Read surface | Simulator mapping |
+| --- | --- | --- |
+| Enterprise and organizations | `GET /enterprises/{enterprise}`, `/enterprises/{enterprise}/organizations` | Enterprise, organizations |
+| Repositories and memberships | `GET /orgs/{org}/repos`, `/orgs/{org}/members` | Repositories and cross-organization users |
+| Copilot seats | `GET /orgs/{org}/copilot/billing/seats` or a compatible configured seat endpoint | Business/Enterprise plan, assignment date, cancellation/revocation lifecycle |
+| Teams | `GET /orgs/{org}/teams` or enterprise-team equivalent | Enterprise teams and cost-center relationships where supplied |
+| Budgets and prices | No assumed universal endpoint | Imported only when supplied by a supported adapter; missing data is omitted, never treated as zero or unlimited |
+
+GitHub's Copilot seat endpoints are public preview and permissions are endpoint-specific. A practical read-only token commonly needs organization Copilot read access (or `manage_billing:copilot`/`read:org` for the relevant organization endpoints), repository visibility, membership visibility, and `read:enterprise` for enterprise-team REST endpoints. Enterprise-team REST endpoints do not support fine-grained PATs or GitHub App tokens; use an approved classic PAT or a compatible GraphQL/organization-team source. Verify the exact permissions for the target enterprise and inspect `X-Accepted-GitHub-Permissions` responses before a live smoke test.
+
+The normalizer deduplicates users by GitHub identifier, preserves organization membership separately from the license-granting organization, requires an explicit override for ambiguous multi-grant licensing, and maps direct user, repository, organization, and team cost-center relationships without inventing unassigned associations. Seat dates are converted into simulator dates and `unassign`/`revoked` modes; those are simulator semantics, not raw GitHub enum values. Usage aggregates are intentionally not fabricated into per-user events. For an offline smoke test, use `tests/fixtures/github-enterprise.json` and `tests/github-environment-extractor.test.js`; the suite never makes an authenticated network call.
+
+Official API references: [REST API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions), [Copilot user management](https://docs.github.com/en/rest/copilot/copilot-user-management), [enterprise teams](https://docs.github.com/en/rest/enterprise-teams/enterprise-teams), [organizations](https://docs.github.com/en/rest/orgs/orgs), [repositories](https://docs.github.com/en/rest/repos/repos), [organization members](https://docs.github.com/en/rest/orgs/members), and [GraphQL calls](https://docs.github.com/en/graphql/guides/forming-calls-with-graphql).
+
 ## Run and test
 
 Requires Node.js 20 or newer.
