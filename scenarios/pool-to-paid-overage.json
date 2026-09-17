@@ -4,6 +4,9 @@
   "id": "pool-to-paid-overage",
   "title": "Shared pool to paid overage",
   "summary": "Consume included AI credits first, then show how paid usage flows into metered budgets.",
+  "compatibleDefaultSetIds": [
+    "compact"
+  ],
   "tags": [
     "shared pool",
     "metered usage",

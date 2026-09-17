@@ -5,6 +5,9 @@
   "defaultSetId": "compact",
   "title": "Cost center pool blocks usage",
   "summary": "Enable a cost center AI credit pool and show usage stopping when the included pool cap is reached.",
+  "compatibleDefaultSetIds": [
+    "compact"
+  ],
   "tags": [
     "cost center",
     "included pool",

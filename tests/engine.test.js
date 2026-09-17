@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
-import { materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
+import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -104,19 +104,39 @@ test("guided scenario materialization can use a selected default set", () => {
   assert.equal(replayScenario(compact).pool.total, 5800);
 });
 
-test("authored guided scenario baselines override the selected default set", () => {
+test("authored guided scenario compatibility is explicit and selected sets stay authoritative", () => {
   const definition = {
     version: 1,
     id: "authored-default-smoke",
     title: "Authored default smoke",
     summary: "Verifies a scenario keeps its authored baseline.",
     defaultSetId: "compact",
+    compatibleDefaultSetIds: ["compact"],
     steps: [{ id: "use-ai", type: "usage", title: "Use AI", description: "Alice uses credits.", expected: "Usage is accepted.", event: usage("unused", "2026-09-15", 100) }],
   };
   assert.equal(resolveScenarioDefaultSetId(definition, "enterprise"), "compact");
+  assert.equal(isScenarioCompatibleWithDefaultSet(definition, "compact"), true);
+  assert.equal(isScenarioCompatibleWithDefaultSet(definition, "enterprise"), false);
   const scenario = materializeScenario(definition, 0, { defaultSetId: "enterprise" });
-  assert.equal(scenario.users.length, 2);
-  assert.equal(replayScenario(scenario).pool.total, 5800);
+  assert.equal(scenario.users.length, 200);
+  assert.equal(replayScenario(scenario).pool.total, 666000);
+  const compact = materializeScenario(definition, 0, { defaultSetId: "compact" });
+  assert.equal(compact.users.length, 2);
+  assert.equal(replayScenario(compact).pool.total, 5800);
+});
+
+test("portable guided scenarios are compatible with every registered default set", () => {
+  const definition = {
+    version: 1,
+    id: "portable-default-smoke",
+    title: "Portable default smoke",
+    summary: "Verifies a scenario follows the selected default set.",
+    steps: [{ id: "checkpoint", type: "checkpoint", title: "Inspect", description: "Inspect the selected dataset.", expected: "The selected dataset remains active." }],
+  };
+  assert.equal(isScenarioCompatibleWithDefaultSet(definition, "enterprise"), true);
+  assert.equal(isScenarioCompatibleWithDefaultSet(definition, "compact"), true);
+  assert.equal(materializeScenario(definition, -1, { defaultSetId: "enterprise" }).users.length, 200);
+  assert.equal(materializeScenario(definition, -1, { defaultSetId: "compact" }).users.length, 2);
 });
 
 test("scenario definitions reject unknown authored baselines", () => {
@@ -130,6 +150,18 @@ test("scenario definitions reject unknown authored baselines", () => {
   };
   assert.match(validateScenarioDefinition(definition), /default set not found/);
   assert.throws(() => materializeScenario(definition), /default set not found/);
+});
+
+test("authored topology requires explicit compatible default sets", () => {
+  const definition = {
+    version: 1,
+    id: "missing-compatibility",
+    title: "Missing compatibility",
+    summary: "Invalid authored topology.",
+    defaultSetId: "compact",
+    steps: [{ id: "checkpoint", type: "checkpoint", title: "Pause", description: "Pause.", expected: "No state changes." }],
+  };
+  assert.match(validateScenarioDefinition(definition), /compatibleDefaultSetIds/);
 });
 
 test("scenario definitions reject combining defaultSetId with an environment reference", () => {
@@ -207,6 +239,7 @@ test("scenario environments are data-loaded and seed events replay before steps"
     title: "Seed smoke scenario",
     summary: "Checks reusable environment loading.",
     environmentId: "seed-smoke",
+    compatibleDefaultSetIds: ["compact"],
     seed: [usage("seed", "2026-09-02", 100)],
     steps: [{ id: "step", type: "usage", title: "Use credits", description: "Consumes more credits.", expected: "Both events are replayed.", event: usage("step-event", "2026-09-03", 200) }],
   };
@@ -731,24 +764,23 @@ test("budget health scenario catalog stays aligned with the underlying progress 
 test("guided scenarios are declarative, reversible, and produce their documented outcomes", () => {
   for (const definition of BUILT_IN_SCENARIOS) {
     assert.equal(validateScenarioDefinition(definition), null);
-    if (definition.environmentId) {
-      assert.equal(definition.defaultSetId, undefined);
+    if (definition.id === "inspect-selected-dataset") {
+      assert.equal(definition.compatibleDefaultSetIds, undefined);
     } else {
-      assert.equal(definition.defaultSetId, "compact");
+      assert.deepEqual(definition.compatibleDefaultSetIds, ["compact"]);
     }
     const baseline = materializeScenario(definition, -1);
     const complete = materializeScenario(definition, definition.steps.length - 1);
     assert.equal(baseline.events.length, 0);
     assert.equal(complete.events.length, definition.steps.filter((step) => step.type === "usage").length);
     assert.deepEqual(materializeScenario(definition, -1), baseline);
-    for (let stepIndex = -1; stepIndex < definition.steps.length; stepIndex += 1) {
-      assert.deepEqual(materializeScenario(definition, stepIndex, { defaultSetId: "enterprise" }), materializeScenario(definition, stepIndex));
-    }
+    const selected = materializeScenario(definition, -1, { defaultSetId: "enterprise" });
+    assert.equal(selected.users.length, 200);
   }
+  assert.deepEqual(BUILT_IN_SCENARIOS.filter((definition) => isScenarioCompatibleWithDefaultSet(definition, "enterprise")).map((definition) => definition.id), ["inspect-selected-dataset"]);
+  assert.equal(BUILT_IN_SCENARIOS.filter((definition) => isScenarioCompatibleWithDefaultSet(definition, "compact")).length, BUILT_IN_SCENARIOS.length);
 
-  // Built-in outcomes are authored against the compact two-user baseline. The explicit enterprise
-  // selection below must not change the materialized guided narrative.
-  const compactAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "enterprise" });
+  const compactAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "compact" });
 
   const progression = BUILT_IN_SCENARIOS.find((item) => item.id === "budget-health-progression");
   const atNinety = replayScenario(compactAt(progression, 3));
@@ -993,6 +1025,10 @@ test("simulation page previews selected steps before explicit execution", async 
   assert.match(app, /Confirm run all/);
   assert.match(app, /saveAndRender\(message, \{ toast: false \}\)/);
   assert.match(app, /trimToastStack\(stack, MAX_VISIBLE_TOASTS\)/);
+  assert.match(app, /isScenarioCompatibleWithDefaultSet/);
+  assert.match(app, /No scenarios compatible with/);
+  assert.match(app, /reconcileScenarioSelection/);
+  assert.match(app, /defaultSetId: defaultScenarioSetId/);
 });
 
 test("toast trimming removes excess notifications synchronously", () => {

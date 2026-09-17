@@ -4,6 +4,9 @@
   "id": "budget-health-progression",
   "title": "Budget health progression",
   "summary": "Move Alice's individual budget through healthy, warning, high-risk, and 100% states.",
+  "compatibleDefaultSetIds": [
+    "compact"
+  ],
   "tags": [
     "budget health",
     "alerts",

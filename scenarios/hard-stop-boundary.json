@@ -5,6 +5,9 @@
   "defaultSetId": "compact",
   "title": "User hard-stop boundary",
   "summary": "Reach a user-level budget exactly, then demonstrate atomic rejection of the next event.",
+  "compatibleDefaultSetIds": [
+    "compact"
+  ],
   "tags": [
     "hard stop",
     "blocked usage",

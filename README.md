@@ -19,6 +19,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Scenario import/export, reset, replay, and browser-local persistence
 - A preview-first Scenario Studio with non-destructive step selection, explicit execution controls, predicted and actual budget/pool deltas, alerts, and health snapshots
 - Extensible declarative scenario definitions loaded from `scenarios/catalog.json`, with JSON Schema support and browser-local import/export
+- Dataset-aware guided scenarios that follow the Configuration-selected default set and expose only explicitly compatible definitions
 - A documented scenario catalog for budget health progression and the next-step 100% saturation case
 
 ## Default enterprise dataset
@@ -80,6 +81,12 @@ Simulator-only pool-health guidance is labeled separately from GitHub budget ale
 The Simulation page includes a guided Scenario Studio. It keeps the current step, expected result, accepted or blocked outcome, budget deltas, alerts, and full health snapshot together so a scenario can be understood without switching to the Dashboard.
 
 Scenario definitions are declarative and support usage, date advancement, configuration changes, and explanatory checkpoints. Built-ins are discovered through `scenarios/catalog.json`, with editor validation from `scenarios/scenario.schema.json`; definitions can also be imported and exported through the browser. See `docs/scenario-studio.md` for the authoring guide.
+
+The Configuration-selected default set remains authoritative while browsing, previewing, resetting,
+and executing guided scenarios. A definition with an authored topology must declare
+`compatibleDefaultSetIds`; the Scenario Studio filters it out for other datasets instead of
+silently replacing the active simulation. Definitions without an authored topology are portable
+and run against whichever default set is selected.
 
 The budget progression catalog remains documented in `docs/budget-health-scenarios.md`, with machine-verified data in `docs/budget-health-scenarios.json`. The automated tests also execute the built-in guided scenarios, including the case where one further step moves a budget from 90% to exactly `100%`, cost-center included-pool blocking, and cost-center included-pool rollover into paid overage.
 

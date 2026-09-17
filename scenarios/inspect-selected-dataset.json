@@ -1,0 +1,24 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "inspect-selected-dataset",
+  "title": "Inspect the selected dataset",
+  "summary": "Start from the dataset selected in Configuration and inspect its current topology without applying authored data.",
+  "tags": [
+    "dataset",
+    "configuration"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/enterprise-cloud@latest/admin/overview/about-enterprise-accounts"
+  ],
+  "startDate": "2026-09-15",
+  "steps": [
+    {
+      "id": "inspect-baseline",
+      "type": "checkpoint",
+      "title": "Inspect the selected baseline",
+      "description": "Pause before usage so the selected default set remains visible throughout the guided flow.",
+      "expected": "The active simulation keeps the Configuration-selected dataset and no usage counters change."
+    }
+  ]
+}

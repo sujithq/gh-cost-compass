@@ -23,6 +23,12 @@ export function resolveScenarioDefaultSetId(definition, selectedDefaultSetId = D
   return selectedDefaultSetId || DEFAULT_SCENARIO_SET_ID;
 }
 
+export function isScenarioCompatibleWithDefaultSet(definition, selectedDefaultSetId = DEFAULT_SCENARIO_SET_ID) {
+  if (!definition || !selectedDefaultSetId) return false;
+  if (Array.isArray(definition.compatibleDefaultSetIds)) return definition.compatibleDefaultSetIds.includes(selectedDefaultSetId);
+  return !definition.defaultSetId && !definition.environmentId && definition.baseline === undefined;
+}
+
 function applyMutation(scenario, mutation) {
   if (mutation.target === "enterprise") {
     Object.assign(scenario.enterprise, mutation.changes);
@@ -39,6 +45,14 @@ function validateDefinitionShape(definition) {
   if (!definition.id || !definition.title || !definition.summary) return "Scenario definition requires id, title, and summary.";
   if (definition.defaultSetId && (definition.environmentId || definition.baseline)) return "Scenario definition cannot combine defaultSetId with environmentId or baseline.";
   if (definition.defaultSetId && !DEFAULT_SCENARIO_SET_IDS.has(definition.defaultSetId)) return `Scenario default set not found: ${definition.defaultSetId}.`;
+  if (definition.compatibleDefaultSetIds !== undefined) {
+    if (!Array.isArray(definition.compatibleDefaultSetIds) || definition.compatibleDefaultSetIds.length === 0 || new Set(definition.compatibleDefaultSetIds).size !== definition.compatibleDefaultSetIds.length) return "Scenario compatibleDefaultSetIds must be a non-empty unique array.";
+    if (definition.compatibleDefaultSetIds.some((id) => !DEFAULT_SCENARIO_SET_IDS.has(id))) return "Scenario compatibleDefaultSetIds contains an unknown default set.";
+  }
+  if ((definition.defaultSetId || definition.environmentId || definition.baseline !== undefined) && !Array.isArray(definition.compatibleDefaultSetIds)) {
+    return "Scenario definitions with an authored topology must declare compatibleDefaultSetIds.";
+  }
+  if (definition.defaultSetId && !definition.compatibleDefaultSetIds.includes(definition.defaultSetId)) return "Scenario compatibleDefaultSetIds must include defaultSetId.";
   if (definition.environmentId && !/^[a-z0-9][a-z0-9-]*$/.test(definition.environmentId)) return "Scenario environmentId must be a valid id.";
   if (definition.baseline !== undefined) {
     const baselineError = validateEnvironment({ ...definition.baseline, version: 1, id: definition.baseline.id || `${definition.id}-inline`, name: definition.baseline.name || definition.title, summary: definition.baseline.summary || definition.summary });
@@ -59,6 +73,12 @@ function validateDefinitionShape(definition) {
 }
 
 function baseScenarioForDefinition(definition, defaultSetId) {
+  if (defaultSetId !== undefined) {
+    const scenario = createDefaultScenario(defaultSetId);
+    scenario.events = [];
+    scenario.simulationDate = definition.startDate || scenario.simulationDate;
+    return scenario;
+  }
   if (definition.environmentId) {
     const environment = getEnvironment(definition.environmentId);
     if (!environment) throw new Error(`Scenario environment not loaded: ${definition.environmentId}.`);

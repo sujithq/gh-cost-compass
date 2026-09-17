@@ -2,6 +2,10 @@
   "version": 1,
   "scenarios": [
     {
+      "id": "inspect-selected-dataset",
+      "file": "inspect-selected-dataset.json"
+    },
+    {
       "id": "budget-health-progression",
       "file": "budget-health-progression.json"
     },

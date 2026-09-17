@@ -15,11 +15,16 @@ The Simulation page contains a guided Scenario Studio. It runs a scenario one st
 - **Import definition** adds or replaces a custom scenario in browser storage.
 - **Export** downloads the selected definition as JSON.
 
-Previous and jump operations are deterministic: the runner resolves the selected reusable environment (or the legacy default environment), applies `seed` and `setup`, and then applies each step through the requested index. It does not attempt to undo mutable state.
+Previous and jump operations are deterministic: the runner starts from the Configuration-selected
+default set, applies `seed` and `setup`, and then applies each step through the requested index. It
+does not attempt to undo mutable state. Definitions with authored topology are shown only when
+their explicit `compatibleDefaultSetIds` includes the selected set; incompatible definitions are
+never previewed or executed.
 
 ## Default enterprise baseline
 
-Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. New reusable topology environments are stored under `scenarios/environments/` and contain provenance, entities, products, and budgets, but no events or simulation date. Guided definitions should reference an `environmentId`, can provide an inline `baseline` for a self-contained import, and add optional `seed` usage before `setup` and steps. Definitions without either field retain the legacy default-environment behavior.
+Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. New reusable topology environments are stored under `scenarios/environments/` and contain provenance, entities, products, and budgets, but no events or simulation date. Guided definitions should reference an `environmentId`, can provide an inline `baseline` for a self-contained import, and add optional `seed` usage before `setup` and steps. Definitions without either field are portable and use the selected default set. Definitions with
+`defaultSetId`, `environmentId`, or `baseline` must declare one or more compatible default-set IDs.
 
 ### Authoring-agent workflow
 
@@ -56,6 +61,7 @@ Scenario definitions use version 1:
   "title": "Example scenario",
   "summary": "What this scenario demonstrates.",
   "defaultSetId": "compact",
+  "compatibleDefaultSetIds": ["compact"],
   "tags": ["budget health"],
   "sourceUrls": [
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
@@ -87,12 +93,12 @@ Scenario definitions use version 1:
 }
 ```
 
-`defaultSetId` is optional for backward compatibility with imported definitions. When present, it
-is the authored baseline for every preview, reset, jump, and replay, regardless of the ad hoc
-default set selected in Configuration. The runner rejects unknown default-set IDs. Definitions
-without `defaultSetId` use the currently selected default set, which is the legacy behavior for
-custom definitions; built-in scenarios should always declare the baseline their documented outcomes
-were authored against.
+`compatibleDefaultSetIds` declares which selectable default sets can support the definition. It is
+required for definitions with `defaultSetId`, `environmentId`, or `baseline`, and each ID must
+match a registered default set. `defaultSetId` remains supported as authored metadata for
+deterministic direct materialization, but the application always uses the selected Configuration
+dataset and filters the definition unless that dataset is listed as compatible. Definitions
+without authored topology are portable and are materialized against every selected default set.
 
 ## Supported step types
 
@@ -109,6 +115,6 @@ Cost-center scenarios can toggle `aiCreditPoolEnabled` and `aiCreditPoolCapMode`
 
 ## Adding scenarios
 
-Built-in definitions are standalone files under `scenarios/`. Add a scenario by creating a JSON file that references `scenario.schema.json`, then add its `id` and filename to `scenarios/catalog.json`. Add reusable environments as data files under `scenarios/environments/` and list them in `scenarios/environments/catalog.json`; no application-source registry edit is required. Catalog order controls dropdown order. The application loads and validates every catalog entry at startup; a missing file, duplicate ID, mismatched ID, invalid filename, invalid environment, or invalid definition produces a visible load error.
+Built-in definitions are standalone files under `scenarios/`. Add a scenario by creating a JSON file that references `scenario.schema.json`, declare `compatibleDefaultSetIds` when it depends on authored topology, then add its `id` and filename to `scenarios/catalog.json`. Add reusable environments as data files under `scenarios/environments/` and list them in `scenarios/environments/catalog.json`; no application-source registry edit is required. Catalog order controls dropdown order. The application loads and validates every catalog entry at startup; a missing file, duplicate ID, mismatched ID, invalid filename, invalid environment, or invalid definition produces a visible load error.
 
 `src/scenario-runner.js` now contains only validation and execution logic. `src/scenario-catalog.js` handles catalog loading. Custom definitions can still be imported through the Scenario Studio and remain in local browser storage. Tests discover and execute every catalog entry to verify that definitions remain valid, navigation can be reconstructed, and documented boundary outcomes still occur.
