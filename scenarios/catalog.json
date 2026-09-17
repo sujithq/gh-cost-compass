@@ -20,6 +20,10 @@
     {
       "id": "hard-stop-boundary",
       "file": "hard-stop-boundary.json"
+    },
+    {
+      "id": "enterprise-251-walkthrough",
+      "file": "enterprise-251-walkthrough.json"
     }
   ]
 }

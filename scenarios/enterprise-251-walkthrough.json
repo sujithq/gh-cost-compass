@@ -1,0 +1,290 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "enterprise-251-walkthrough",
+  "title": "Enterprise 251-user billing walkthrough",
+  "summary": "A 13-step guided walkthrough of included pools, paid overage, budget precedence, attribution, exclusions, policy blocking, and monthly reset in a 251-seat synthetic enterprise.",
+  "tags": [
+    "enterprise scale",
+    "AI credits",
+    "budgets",
+    "cost centers",
+    "seat lifecycle"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/seats-and-billing-cycles",
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets",
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing",
+    "https://docs.github.com/en/billing/concepts/budgets-and-alerts",
+    "https://docs.github.com/en/billing/reference/cost-center-allocation"
+  ],
+  "environmentId": "enterprise-251",
+  "startDate": "2026-09-15",
+  "seed": [
+    {
+      "id": "seed-user-001",
+      "date": "2026-09-15",
+      "userId": "user-001",
+      "repositoryId": "repo-01-primary",
+      "productId": "ai-credits",
+      "quantity": 64393
+    },
+    {
+      "id": "seed-user-047",
+      "date": "2026-09-15",
+      "userId": "user-047",
+      "repositoryId": "repo-01-services",
+      "productId": "ai-credits",
+      "quantity": 64393
+    },
+    {
+      "id": "seed-user-086",
+      "date": "2026-09-15",
+      "userId": "user-086",
+      "repositoryId": "repo-02-primary",
+      "productId": "ai-credits",
+      "quantity": 64393
+    },
+    {
+      "id": "seed-user-117",
+      "date": "2026-09-15",
+      "userId": "user-117",
+      "repositoryId": "repo-02-services",
+      "productId": "ai-credits",
+      "quantity": 64393
+    },
+    {
+      "id": "seed-user-144",
+      "date": "2026-09-15",
+      "userId": "user-144",
+      "repositoryId": "repo-03-primary",
+      "productId": "ai-credits",
+      "quantity": 64393
+    },
+    {
+      "id": "seed-user-167",
+      "date": "2026-09-15",
+      "userId": "user-167",
+      "repositoryId": "repo-03-services",
+      "productId": "ai-credits",
+      "quantity": 64392
+    },
+    {
+      "id": "seed-user-189",
+      "date": "2026-09-15",
+      "userId": "user-189",
+      "repositoryId": "repo-04-primary",
+      "productId": "ai-credits",
+      "quantity": 64392
+    },
+    {
+      "id": "seed-user-209",
+      "date": "2026-09-15",
+      "userId": "user-209",
+      "repositoryId": "repo-04-services",
+      "productId": "ai-credits",
+      "quantity": 64392
+    },
+    {
+      "id": "seed-user-222",
+      "date": "2026-09-15",
+      "userId": "user-222",
+      "repositoryId": "repo-05-primary",
+      "productId": "ai-credits",
+      "quantity": 64392
+    },
+    {
+      "id": "seed-user-233",
+      "date": "2026-09-15",
+      "userId": "user-233",
+      "repositoryId": "repo-05-services",
+      "productId": "ai-credits",
+      "quantity": 64392
+    },
+    {
+      "id": "seed-user-normal",
+      "date": "2026-09-15",
+      "userId": "user-normal",
+      "repositoryId": "repo-03-primary",
+      "productId": "ai-credits",
+      "quantity": 2575
+    }
+  ],
+  "setup": [
+    {
+      "target": "enterprise",
+      "changes": {
+        "seatCreditPolicy": "full"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "steady-consumption",
+      "type": "checkpoint",
+      "title": "Steady multi-org consumption",
+      "description": "Inspect 646,500 seeded credits distributed deterministically across all 251 users and 10 organizations.",
+      "expected": "All seeded usage is accepted from included credits, every metered budget remains at $0, and 12,400 enterprise credits remain."
+    },
+    {
+      "id": "pool-exhaustion",
+      "type": "usage",
+      "title": "Pool exhaustion and first paid overage",
+      "description": "An individual-budget user submits a 20,000-credit burst after accepted seed usage has left 12,400 enterprise credits.",
+      "expected": "The event splits into 12,400 included and 7,600 metered credits for exactly $76.00.",
+      "event": {
+        "date": "2026-09-16",
+        "userId": "user-individual",
+        "repositoryId": "repo-01-primary",
+        "productId": "ai-credits",
+        "quantity": 20000
+      }
+    },
+    {
+      "id": "threshold-alerts",
+      "type": "usage",
+      "title": "Threshold alerts at 75, 90, and 100",
+      "description": "A transformation-program user adds 2,000 metered credits.",
+      "expected": "The user budget raises 75%, the enterprise budget raises 90%, and the cost-center budget raises 100%, with the documented reliability strings.",
+      "event": {
+        "date": "2026-09-17",
+        "userId": "user-normal",
+        "repositoryId": "repo-03-primary",
+        "productId": "ai-credits",
+        "quantity": 2000
+      }
+    },
+    {
+      "id": "duplicate-threshold-suppression",
+      "type": "usage",
+      "title": "Duplicate-threshold suppression",
+      "description": "The same user adds 500 credits while remaining above 75% but below 90%.",
+      "expected": "Usage is accepted and the previously triggered 75% user alert does not fire again.",
+      "event": {
+        "date": "2026-09-17",
+        "userId": "user-normal",
+        "repositoryId": "repo-03-services",
+        "productId": "ai-credits",
+        "quantity": 500
+      }
+    },
+    {
+      "id": "soft-budget-breach",
+      "type": "usage",
+      "title": "Soft organization-budget breach",
+      "description": "An unattributed vendor consumes 1,500 metered credits.",
+      "expected": "The organization budget reaches 125%, alerts fire, usage stays accepted, and no cost-center metered budget changes.",
+      "event": {
+        "date": "2026-09-18",
+        "userId": "user-soft",
+        "repositoryId": "repo-10-primary",
+        "productId": "ai-credits",
+        "quantity": 1500
+      }
+    },
+    {
+      "id": "hard-stop-rejection",
+      "type": "usage",
+      "title": "Hard-stop rejection",
+      "description": "A controlled-program user attempts 1,500 metered credits against a $10 hard budget.",
+      "expected": "The event is blocked atomically and pool plus budget state remain identical to the previous step.",
+      "event": {
+        "date": "2026-09-19",
+        "userId": "user-hard-stop",
+        "repositoryId": "repo-05-primary",
+        "productId": "ai-credits",
+        "quantity": 1500
+      }
+    },
+    {
+      "id": "ulb-spans-boundary",
+      "type": "checkpoint",
+      "title": "User budget spans an included-pool boundary",
+      "description": "Inspect the earlier 20,000-credit burst after the shared-pool boundary.",
+      "expected": "The individual ULB grew by the full $200 event value while metered budgets grew only by the $76 overage."
+    },
+    {
+      "id": "ulb-precedence",
+      "type": "usage",
+      "title": "User-budget precedence",
+      "description": "A universal-only user consumes 1,000 credits after individual and cost-center cases have already run.",
+      "expected": "The new event moves only the universal ULB; cumulative results show individual, then cost-center, then universal precedence.",
+      "event": {
+        "date": "2026-09-21",
+        "userId": "user-universal",
+        "repositoryId": "repo-08-primary",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "direct-assignment",
+      "type": "usage",
+      "title": "Direct cost-center assignment wins",
+      "description": "A Product Delivery user directly assigned to the product programme consumes 1,000 credits.",
+      "expected": "The product-programme budget moves and the organization-mapped Central IT budget does not.",
+      "event": {
+        "date": "2026-09-22",
+        "userId": "user-direct-override",
+        "repositoryId": "repo-02-primary",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "cost-center-exclusion",
+      "type": "usage",
+      "title": "Cost-center exclusion",
+      "description": "An unassigned-seat leaver in the excluded transformation programme consumes 1,000 credits before cycle end.",
+      "expected": "The event is accepted and moves the excluded cost-center budget but not the enterprise budget, contrasting with the normal programme event.",
+      "event": {
+        "date": "2026-09-30",
+        "userId": "user-leaver",
+        "repositoryId": "repo-09-primary",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "disable-paid-usage",
+      "type": "configuration",
+      "title": "Disable paid AI usage",
+      "description": "The enterprise disables paid AI usage after September pools are exhausted.",
+      "expected": "Configuration changes without retroactively changing earlier accepted overage.",
+      "mutation": {
+        "target": "enterprise",
+        "changes": {
+          "paidAiUsage": false
+        }
+      }
+    },
+    {
+      "id": "paid-usage-policy-block",
+      "type": "usage",
+      "title": "Paid-usage policy blocks overage",
+      "description": "A universal-budget user attempts another 1,000 credits while metered budgets still have headroom.",
+      "expected": "The event is blocked because paid usage is disabled, and counters remain atomic.",
+      "event": {
+        "date": "2026-09-30",
+        "userId": "user-universal",
+        "repositoryId": "repo-08-services",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "month-end-reset",
+      "type": "usage",
+      "title": "Seat lifecycle and month-end reset",
+      "description": "On October 1, the prior transformation user consumes 4,581 credits in the new cycle.",
+      "expected": "The October pool and budget state keys reset, September history remains, and the 75% user threshold can fire again; fixture lifecycle users retain the documented proration, unassignment, and revoke semantics.",
+      "event": {
+        "date": "2026-10-01",
+        "userId": "user-normal",
+        "repositoryId": "repo-03-primary",
+        "productId": "ai-credits",
+        "quantity": 4581
+      }
+    }
+  ]
+}

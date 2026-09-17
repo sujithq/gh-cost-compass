@@ -1,0 +1,4207 @@
+{
+  "version": 1,
+  "id": "enterprise-251",
+  "name": "Enterprise 251-user synthetic environment",
+  "summary": "10 organizations, 20 finance-owned cost centers, 251 licensed users, and 16 budgets",
+  "source": {
+    "kind": "synthetic",
+    "enterprise": "Synthetic Enterprise 251",
+    "createdAt": "2026-09-01T00:00:00Z",
+    "assumptions": [
+      "Usage events are atomic and never partially charged.",
+      "Seat charges and included credits use calendar-day proration.",
+      "Cost-center assignment through enterprise teams is not modeled in this fixture.",
+      "Each user has one deterministic licensing organization; random monthly selection across granting organizations is not modeled.",
+      "Cost-center included-usage controls are configured explicitly and are not created automatically.",
+      "No separate additional-usage cap is modeled beyond paid-usage policy and budgets."
+    ],
+    "omittedCapabilities": [
+      "Live GitHub API identities and usage",
+      "Enterprise-team cost-center extraction",
+      "Multiple granting-organization selection"
+    ],
+    "anonymized": true
+  },
+  "enterprise": {
+    "id": "ent-enterprise-251",
+    "name": "Synthetic Enterprise 251",
+    "currency": "USD",
+    "paidAiUsage": true,
+    "seatCreditPolicy": "prorated"
+  },
+  "organizations": [
+    {
+      "id": "org-platform",
+      "name": "Platform Engineering"
+    },
+    {
+      "id": "org-product",
+      "name": "Product Delivery"
+    },
+    {
+      "id": "org-data",
+      "name": "Data and AI"
+    },
+    {
+      "id": "org-security",
+      "name": "Security Engineering"
+    },
+    {
+      "id": "org-finance",
+      "name": "Finance Systems"
+    },
+    {
+      "id": "org-sales",
+      "name": "Sales Technology"
+    },
+    {
+      "id": "org-shared",
+      "name": "Platform Engineering - EU Global Shared Services and Enterprise Applications Operations"
+    },
+    {
+      "id": "org-research",
+      "name": "Research Labs"
+    },
+    {
+      "id": "org-legal",
+      "name": "Legal Technology"
+    },
+    {
+      "id": "org-vendors",
+      "name": "Contractors and Strategic Vendors"
+    }
+  ],
+  "repositories": [
+    {
+      "id": "repo-01-primary",
+      "name": "platform-primary",
+      "organizationId": "org-platform"
+    },
+    {
+      "id": "repo-01-services",
+      "name": "platform-services",
+      "organizationId": "org-platform"
+    },
+    {
+      "id": "repo-02-primary",
+      "name": "product-primary",
+      "organizationId": "org-product"
+    },
+    {
+      "id": "repo-02-services",
+      "name": "product-services",
+      "organizationId": "org-product"
+    },
+    {
+      "id": "repo-03-primary",
+      "name": "data-primary",
+      "organizationId": "org-data"
+    },
+    {
+      "id": "repo-03-services",
+      "name": "data-services",
+      "organizationId": "org-data"
+    },
+    {
+      "id": "repo-04-primary",
+      "name": "security-primary",
+      "organizationId": "org-security"
+    },
+    {
+      "id": "repo-04-services",
+      "name": "security-services",
+      "organizationId": "org-security"
+    },
+    {
+      "id": "repo-05-primary",
+      "name": "finance-primary",
+      "organizationId": "org-finance"
+    },
+    {
+      "id": "repo-05-services",
+      "name": "finance-services",
+      "organizationId": "org-finance"
+    },
+    {
+      "id": "repo-06-primary",
+      "name": "sales-primary",
+      "organizationId": "org-sales"
+    },
+    {
+      "id": "repo-06-services",
+      "name": "sales-services",
+      "organizationId": "org-sales"
+    },
+    {
+      "id": "repo-07-primary",
+      "name": "global-shared-services-enterprise-applications-and-operations-platform",
+      "organizationId": "org-shared"
+    },
+    {
+      "id": "repo-07-services",
+      "name": "shared-services",
+      "organizationId": "org-shared"
+    },
+    {
+      "id": "repo-08-primary",
+      "name": "research-primary",
+      "organizationId": "org-research"
+    },
+    {
+      "id": "repo-08-services",
+      "name": "research-services",
+      "organizationId": "org-research"
+    },
+    {
+      "id": "repo-09-primary",
+      "name": "legal-primary",
+      "organizationId": "org-legal"
+    },
+    {
+      "id": "repo-09-services",
+      "name": "legal-services",
+      "organizationId": "org-legal"
+    },
+    {
+      "id": "repo-10-primary",
+      "name": "vendors-primary",
+      "organizationId": "org-vendors"
+    },
+    {
+      "id": "repo-10-services",
+      "name": "vendors-services",
+      "organizationId": "org-vendors"
+    }
+  ],
+  "costCenters": [
+    {
+      "id": "cc-apac-programs",
+      "name": "APAC programmes",
+      "organizationIds": [
+        "org-finance",
+        "org-sales"
+      ],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-central-it",
+      "name": "Central IT shared services",
+      "organizationIds": [
+        "org-platform",
+        "org-product"
+      ],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-contractors",
+      "name": "Strategic contractors and vendors",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-customer-operations",
+      "name": "Customer operations",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-emea-programs",
+      "name": "EMEA programmes",
+      "organizationIds": [
+        "org-data",
+        "org-security"
+      ],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-excluded-transformation",
+      "name": "Transformation programme - enterprise budget excluded",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": true
+    },
+    {
+      "id": "cc-finance-modernization",
+      "name": "Finance modernization",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-global-programs",
+      "name": "Global programmes",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-hard-cap",
+      "name": "Controlled additional usage programme",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-internal-audit",
+      "name": "Internal audit",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-legal-operations",
+      "name": "Legal operations",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-north-america",
+      "name": "North America region",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-normal-transformation",
+      "name": "Transformation programme - enterprise budget included",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-people-systems",
+      "name": "People systems",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-procurement",
+      "name": "Procurement",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-product-program",
+      "name": "Product investment programme",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-research-grants",
+      "name": "Research grants",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-risk-and-compliance",
+      "name": "Risk and compliance",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-sparse-experiment",
+      "name": "Sparse experimental finance allocation with an intentionally long name",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    },
+    {
+      "id": "cc-workplace-services",
+      "name": "Workplace services",
+      "organizationIds": [],
+      "repositoryIds": [],
+      "userIds": [],
+      "enterpriseTeamIds": [],
+      "aiCreditPoolEnabled": false,
+      "aiCreditPoolCapMode": "allowOverage",
+      "excludeFromEnterpriseBudget": false
+    }
+  ],
+  "enterpriseTeams": [],
+  "users": [
+    {
+      "id": "user-001",
+      "name": "Contributor 001",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-002",
+      "name": "Contributor 002",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-003",
+      "name": "Contributor 003",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-004",
+      "name": "Contributor 004",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-005",
+      "name": "Contributor 005",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-006",
+      "name": "Contributor 006",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-007",
+      "name": "Contributor 007",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-008",
+      "name": "Contributor 008",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-009",
+      "name": "Contributor 009",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-010",
+      "name": "Contributor 010",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-011",
+      "name": "Contributor 011",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-012",
+      "name": "Contributor 012",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-013",
+      "name": "Contributor 013",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-014",
+      "name": "Contributor 014",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-015",
+      "name": "Contributor 015",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-016",
+      "name": "Contributor 016",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-017",
+      "name": "Contributor 017",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-018",
+      "name": "Contributor 018",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-019",
+      "name": "Contributor 019",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-020",
+      "name": "Contributor 020",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-021",
+      "name": "Contributor 021",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-022",
+      "name": "Contributor 022",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-023",
+      "name": "Contributor 023",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-024",
+      "name": "Contributor 024",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-025",
+      "name": "Contributor 025",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-026",
+      "name": "Contributor 026",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-027",
+      "name": "Contributor 027",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-028",
+      "name": "Contributor 028",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-029",
+      "name": "Contributor 029",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform",
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-030",
+      "name": "Contributor 030",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-031",
+      "name": "Contributor 031",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-032",
+      "name": "Contributor 032",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-033",
+      "name": "Contributor 033",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-034",
+      "name": "Contributor 034",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-035",
+      "name": "Contributor 035",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-036",
+      "name": "Contributor 036",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-037",
+      "name": "Contributor 037",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-038",
+      "name": "Contributor 038",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-039",
+      "name": "Contributor 039",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-040",
+      "name": "Contributor 040",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-041",
+      "name": "Contributor 041",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-042",
+      "name": "Contributor 042",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-043",
+      "name": "Contributor 043",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-044",
+      "name": "Contributor 044",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-045",
+      "name": "Contributor 045",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-046",
+      "name": "Contributor 046",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-047",
+      "name": "Contributor 047",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-048",
+      "name": "Contributor 048",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-049",
+      "name": "Contributor 049",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-050",
+      "name": "Contributor 050",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-051",
+      "name": "Contributor 051",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-052",
+      "name": "Contributor 052",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-053",
+      "name": "Contributor 053",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-054",
+      "name": "Contributor 054",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-055",
+      "name": "Contributor 055",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-056",
+      "name": "Contributor 056",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-057",
+      "name": "Contributor 057",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-058",
+      "name": "Contributor 058",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product",
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-059",
+      "name": "Contributor 059",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-060",
+      "name": "Contributor 060",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-061",
+      "name": "Contributor 061",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-062",
+      "name": "Contributor 062",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-063",
+      "name": "Contributor 063",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-064",
+      "name": "Contributor 064",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-065",
+      "name": "Contributor 065",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-066",
+      "name": "Contributor 066",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-067",
+      "name": "Contributor 067",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-068",
+      "name": "Contributor 068",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-069",
+      "name": "Contributor 069",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-070",
+      "name": "Contributor 070",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-071",
+      "name": "Contributor 071",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-072",
+      "name": "Contributor 072",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-073",
+      "name": "Contributor 073",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-074",
+      "name": "Contributor 074",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-075",
+      "name": "Contributor 075",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-076",
+      "name": "Contributor 076",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-077",
+      "name": "Contributor 077",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-078",
+      "name": "Contributor 078",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-079",
+      "name": "Contributor 079",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-080",
+      "name": "Contributor 080",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-081",
+      "name": "Contributor 081",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-082",
+      "name": "Contributor 082",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-083",
+      "name": "Contributor 083",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-084",
+      "name": "Contributor 084",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-085",
+      "name": "Contributor 085",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-086",
+      "name": "Contributor 086",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-087",
+      "name": "Contributor 087",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data",
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-088",
+      "name": "Contributor 088",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-089",
+      "name": "Contributor 089",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-090",
+      "name": "Contributor 090",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-091",
+      "name": "Contributor 091",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-092",
+      "name": "Contributor 092",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-093",
+      "name": "Contributor 093",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-094",
+      "name": "Contributor 094",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-095",
+      "name": "Contributor 095",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-096",
+      "name": "Contributor 096",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-097",
+      "name": "Contributor 097",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-098",
+      "name": "Contributor 098",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-099",
+      "name": "Contributor 099",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-100",
+      "name": "Contributor 100",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-101",
+      "name": "Contributor 101",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-102",
+      "name": "Contributor 102",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-103",
+      "name": "Contributor 103",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-104",
+      "name": "Contributor 104",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-105",
+      "name": "Contributor 105",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-106",
+      "name": "Contributor 106",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-107",
+      "name": "Contributor 107",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-108",
+      "name": "Contributor 108",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-109",
+      "name": "Contributor 109",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-110",
+      "name": "Contributor 110",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-111",
+      "name": "Contributor 111",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-112",
+      "name": "Contributor 112",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-113",
+      "name": "Contributor 113",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-114",
+      "name": "Contributor 114",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-115",
+      "name": "Contributor 115",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-116",
+      "name": "Contributor 116",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-data",
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-117",
+      "name": "Contributor 117",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-118",
+      "name": "Contributor 118",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-119",
+      "name": "Contributor 119",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-120",
+      "name": "Contributor 120",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-121",
+      "name": "Contributor 121",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-122",
+      "name": "Contributor 122",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-123",
+      "name": "Contributor 123",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-124",
+      "name": "Contributor 124",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-125",
+      "name": "Contributor 125",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-126",
+      "name": "Contributor 126",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-127",
+      "name": "Contributor 127",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-128",
+      "name": "Contributor 128",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-129",
+      "name": "Contributor 129",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-130",
+      "name": "Contributor 130",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-131",
+      "name": "Contributor 131",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-132",
+      "name": "Contributor 132",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-133",
+      "name": "Contributor 133",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-134",
+      "name": "Contributor 134",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-135",
+      "name": "Contributor 135",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-136",
+      "name": "Contributor 136",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-137",
+      "name": "Contributor 137",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-138",
+      "name": "Contributor 138",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-139",
+      "name": "Contributor 139",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-140",
+      "name": "Contributor 140",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-141",
+      "name": "Contributor 141",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-142",
+      "name": "Contributor 142",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-143",
+      "name": "Contributor 143",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-144",
+      "name": "Contributor 144",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-145",
+      "name": "Contributor 145",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-finance",
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-146",
+      "name": "Contributor 146",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-147",
+      "name": "Contributor 147",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-148",
+      "name": "Contributor 148",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-149",
+      "name": "Contributor 149",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-150",
+      "name": "Contributor 150",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-151",
+      "name": "Contributor 151",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-152",
+      "name": "Contributor 152",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-153",
+      "name": "Contributor 153",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-154",
+      "name": "Contributor 154",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-155",
+      "name": "Contributor 155",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-156",
+      "name": "Contributor 156",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-157",
+      "name": "Contributor 157",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-158",
+      "name": "Contributor 158",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-159",
+      "name": "Contributor 159",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-160",
+      "name": "Contributor 160",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-161",
+      "name": "Contributor 161",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-162",
+      "name": "Contributor 162",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-163",
+      "name": "Contributor 163",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-164",
+      "name": "Contributor 164",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-165",
+      "name": "Contributor 165",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-166",
+      "name": "Contributor 166",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-167",
+      "name": "Contributor 167",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-168",
+      "name": "Contributor 168",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-169",
+      "name": "Contributor 169",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-170",
+      "name": "Contributor 170",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-171",
+      "name": "Contributor 171",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-172",
+      "name": "Contributor 172",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-173",
+      "name": "Contributor 173",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-174",
+      "name": "Contributor 174",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales",
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-175",
+      "name": "Contributor 175",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-176",
+      "name": "Contributor 176",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-177",
+      "name": "Contributor 177",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-178",
+      "name": "Contributor 178",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-179",
+      "name": "Contributor 179",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-180",
+      "name": "Contributor 180",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-181",
+      "name": "Contributor 181",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-182",
+      "name": "Contributor 182",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-183",
+      "name": "Contributor 183",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-184",
+      "name": "Contributor 184",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-185",
+      "name": "Contributor 185",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-186",
+      "name": "Contributor 186",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-187",
+      "name": "Contributor 187",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-188",
+      "name": "Contributor 188",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-sales"
+      ],
+      "licenseOrganizationId": "org-sales",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-189",
+      "name": "Contributor 189",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-190",
+      "name": "Contributor 190",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-191",
+      "name": "Contributor 191",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-192",
+      "name": "Contributor 192",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-193",
+      "name": "Contributor 193",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-194",
+      "name": "Contributor 194",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-195",
+      "name": "Contributor 195",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-196",
+      "name": "Contributor 196",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-finance-modernization",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-197",
+      "name": "Contributor 197",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-198",
+      "name": "Contributor 198",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-199",
+      "name": "Contributor 199",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-200",
+      "name": "Contributor 200",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-201",
+      "name": "Contributor 201",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-202",
+      "name": "Contributor 202",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-203",
+      "name": "Contributor 203",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared",
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-204",
+      "name": "Contributor 204",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-205",
+      "name": "Contributor 205",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-206",
+      "name": "Contributor 206",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-207",
+      "name": "Contributor 207",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-risk-and-compliance",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-208",
+      "name": "Contributor 208",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-shared"
+      ],
+      "licenseOrganizationId": "org-shared",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-209",
+      "name": "Contributor 209",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-210",
+      "name": "Contributor 210",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-211",
+      "name": "Contributor 211",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-212",
+      "name": "Contributor 212",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-213",
+      "name": "Contributor 213",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-214",
+      "name": "Contributor 214",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-215",
+      "name": "Contributor 215",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-216",
+      "name": "Contributor 216",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-217",
+      "name": "Contributor 217",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-218",
+      "name": "Contributor 218",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-people-systems",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-219",
+      "name": "Contributor 219",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-procurement",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-220",
+      "name": "Contributor 220",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-221",
+      "name": "Contributor 221",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": "cc-research-grants",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-222",
+      "name": "Contributor 222",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-223",
+      "name": "Contributor 223",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-224",
+      "name": "Contributor 224",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-225",
+      "name": "Contributor 225",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-226",
+      "name": "Contributor 226",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-227",
+      "name": "Contributor 227",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-global-programs",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-228",
+      "name": "Contributor 228",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-229",
+      "name": "Contributor 229",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-internal-audit",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-230",
+      "name": "Contributor 230",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-legal-operations",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-231",
+      "name": "Contributor 231",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-north-america",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-232",
+      "name": "Contributor 232",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-legal",
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-233",
+      "name": "Contributor 233",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-234",
+      "name": "Contributor 234",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-235",
+      "name": "Contributor 235",
+      "role": "Business analyst",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-236",
+      "name": "Contributor 236",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-237",
+      "name": "Contributor 237",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": null,
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-238",
+      "name": "Contributor 238",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": "cc-sparse-experiment",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-239",
+      "name": "Contributor 239",
+      "role": "Software engineer",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": "cc-workplace-services",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-contract-001",
+      "name": "Long-Named Strategic Contractor Supporting Global Enterprise Applications and Shared Services",
+      "role": "Contractor",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": "cc-contractors",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": "2026-09-26",
+      "licenseEndMode": "revoke"
+    },
+    {
+      "id": "user-contract-002",
+      "name": "Morgan Strategic Contractor",
+      "role": "Contractor",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": "cc-contractors",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-cost-center",
+      "name": "Bailey Cost Center Budget Owner",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-central-it",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-direct-override",
+      "name": "Casey Direct Assignment Override",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-product"
+      ],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-product-program",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-excluded",
+      "name": "Emerson Excluded Transformation Programme Member",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-security"
+      ],
+      "licenseOrganizationId": "org-security",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-hard-stop",
+      "name": "Finley Hard Metered Budget Member",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-finance"
+      ],
+      "licenseOrganizationId": "org-finance",
+      "costCenterId": "cc-hard-cap",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-individual",
+      "name": "Avery Individual Budget Owner",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-platform"
+      ],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-central-it",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-joiner",
+      "name": "Harper Mid-Month Joiner",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-15",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-leaver",
+      "name": "Indigo Unassigned Seat Leaver",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-legal"
+      ],
+      "licenseOrganizationId": "org-legal",
+      "costCenterId": "cc-excluded-transformation",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": "2026-09-20",
+      "licenseEndMode": "unassign"
+    },
+    {
+      "id": "user-normal",
+      "name": "Devon Included Transformation Programme Member",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-data"
+      ],
+      "licenseOrganizationId": "org-data",
+      "costCenterId": "cc-normal-transformation",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-soft",
+      "name": "Jordan Unattributed Vendor",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-vendors"
+      ],
+      "licenseOrganizationId": "org-vendors",
+      "costCenterId": null,
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-universal",
+      "name": "Gray Universal Budget Member",
+      "role": "Enterprise contributor",
+      "organizationIds": [
+        "org-research"
+      ],
+      "licenseOrganizationId": "org-research",
+      "costCenterId": null,
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    }
+  ],
+  "products": [
+    {
+      "id": "actions",
+      "name": "Actions overage",
+      "unit": "minute",
+      "unitPrice": 0.008,
+      "billingMode": "metered"
+    },
+    {
+      "id": "ai-credits",
+      "name": "Copilot AI credits",
+      "unit": "AI credit",
+      "unitPrice": 0.01,
+      "billingMode": "aiCredits"
+    }
+  ],
+  "budgets": [
+    {
+      "id": "metered-cc-central",
+      "name": "Central IT AI forecast",
+      "budgetKind": "metered",
+      "scopeType": "costCenter",
+      "scopeId": "cc-central-it",
+      "productId": "ai-credits",
+      "amount": 3850,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-cc-contractors",
+      "name": "Contractor AI forecast",
+      "budgetKind": "metered",
+      "scopeType": "costCenter",
+      "scopeId": "cc-contractors",
+      "productId": "ai-credits",
+      "amount": 920,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-cc-excluded",
+      "name": "Excluded transformation forecast",
+      "budgetKind": "metered",
+      "scopeType": "costCenter",
+      "scopeId": "cc-excluded-transformation",
+      "productId": "ai-credits",
+      "amount": 1275,
+      "effectiveFrom": "2026-09-12",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-cc-hard",
+      "name": "Controlled additional usage",
+      "budgetKind": "metered",
+      "scopeType": "costCenter",
+      "scopeId": "cc-hard-cap",
+      "productId": "ai-credits",
+      "amount": 10,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-cc-normal",
+      "name": "Included transformation forecast",
+      "budgetKind": "metered",
+      "scopeType": "costCenter",
+      "scopeId": "cc-normal-transformation",
+      "productId": "ai-credits",
+      "amount": 20,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        100
+      ]
+    },
+    {
+      "id": "metered-cc-product",
+      "name": "Product programme forecast",
+      "budgetKind": "metered",
+      "scopeType": "costCenter",
+      "scopeId": "cc-product-program",
+      "productId": "ai-credits",
+      "amount": 1435,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-enterprise",
+      "name": "Enterprise AI overage forecast",
+      "budgetKind": "metered",
+      "scopeType": "enterprise",
+      "scopeId": "ent-enterprise-251",
+      "productId": "ai-credits",
+      "amount": 106.66,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        90
+      ]
+    },
+    {
+      "id": "metered-org-legal",
+      "name": "Legal Technology AI forecast",
+      "budgetKind": "metered",
+      "scopeType": "organization",
+      "scopeId": "org-legal",
+      "productId": "ai-credits",
+      "amount": 740,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-org-research",
+      "name": "Research Labs AI forecast",
+      "budgetKind": "metered",
+      "scopeType": "organization",
+      "scopeId": "org-research",
+      "productId": "ai-credits",
+      "amount": 1680,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-org-shared",
+      "name": "Shared Services AI forecast",
+      "budgetKind": "metered",
+      "scopeType": "organization",
+      "scopeId": "org-shared",
+      "productId": "ai-credits",
+      "amount": 2310,
+      "effectiveFrom": "2026-09-10",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "metered-org-vendors",
+      "name": "Vendor AI forecast",
+      "budgetKind": "metered",
+      "scopeType": "organization",
+      "scopeId": "org-vendors",
+      "productId": "ai-credits",
+      "amount": 12,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "soft",
+      "thresholds": [
+        75,
+        100
+      ]
+    },
+    {
+      "id": "ulb-central-it",
+      "name": "Central IT user budget",
+      "budgetKind": "user",
+      "userBudgetType": "costCenter",
+      "scopeType": "costCenter",
+      "scopeId": "cc-central-it",
+      "productId": "ai-credits",
+      "amount": 100,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "ulb-individual",
+      "name": "Individual walkthrough budget",
+      "budgetKind": "user",
+      "userBudgetType": "individual",
+      "scopeType": "user",
+      "scopeId": "user-individual",
+      "productId": "ai-credits",
+      "amount": 400,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "ulb-joiner",
+      "name": "Joiner individual budget",
+      "budgetKind": "user",
+      "userBudgetType": "individual",
+      "scopeType": "user",
+      "scopeId": "user-joiner",
+      "productId": "ai-credits",
+      "amount": 80,
+      "effectiveFrom": "2026-09-15",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    },
+    {
+      "id": "ulb-normal",
+      "name": "Transformation user budget",
+      "budgetKind": "user",
+      "userBudgetType": "costCenter",
+      "scopeType": "costCenter",
+      "scopeId": "cc-normal-transformation",
+      "productId": "ai-credits",
+      "amount": 61,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90
+      ]
+    },
+    {
+      "id": "ulb-universal",
+      "name": "Universal user budget",
+      "budgetKind": "user",
+      "userBudgetType": "universal",
+      "scopeType": "enterprise",
+      "scopeId": "ent-enterprise-251",
+      "productId": "ai-credits",
+      "amount": 1000,
+      "effectiveFrom": "2026-09-01",
+      "enforcement": "hard",
+      "thresholds": [
+        75,
+        90,
+        100
+      ]
+    }
+  ]
+}

@@ -23,6 +23,12 @@ Default baselines are stored as JSON in `scenarios/default-sets/` and selected f
 
 Built-in scenarios should prefer stable seed entities such as `user-alice`, `user-bob`, `org-product`, `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is not important. This keeps examples readable while the surrounding generated tenant gives the dashboard enterprise-scale context.
 
+The `enterprise-251` reusable environment is the scale fixture for issue #17. It contains exactly 251 licensed users (160 Business and 91 Enterprise), 10 organizations, 20 finance-owned cost centers, 20 repositories, and 16 budgets. Its companion `enterprise-251-walkthrough` definition seeds 646,500 deterministic September credits, leaving 12,400 of the 658,900-credit shared pool before a 20,000-credit burst crosses into exactly 7,600 paid credits ($76.00).
+
+The walkthrough's compact executable outcomes live in `docs/enterprise-251-walkthrough.golden.json`. They intentionally record only event status, included/metered quantities, cost, changed budget state keys, alerts, and pool totals rather than snapshotting the complete environment or replay object.
+
+The normal test suite also enforces Node CPU-time p95 budgets of less than 50 ms for one materialize-and-replay pass and less than 100 ms for the four-pass sequence used by Scenario Studio. CPU time keeps the contract deterministic on shared runners by excluding unrelated process scheduling stalls.
+
 ## Definition format
 
 Scenario definitions use version 1:
@@ -76,6 +82,8 @@ Scenario definitions use version 1:
 Every step requires a unique `id`, `title`, `description`, and `expected` outcome. Setup and configuration mutations target `enterprise`, `budget`, `user`, `organization`, `repository`, `costCenter`, `enterpriseTeam`, or `product`. Non-enterprise targets also require the existing entity `id` and a `changes` object.
 
 Cost-center scenarios can toggle `aiCreditPoolEnabled` and `aiCreditPoolCapMode` to model the documented included-usage control. Use `aiCreditPoolCapMode: "block"` when the cost center should stop at its included-pool cap, or `"allowOverage"` when usage should continue into paid overage subject to the enterprise paid-usage policy and metered budgets.
+
+The enterprise-scale walkthrough labels simulator assumptions explicitly in its environment provenance: events are atomic, calendar-day proration is assumed, enterprise-team assignment and random granting-organization selection are not modeled, cost-center included-usage controls are explicit rather than automatic, and no separate additional-usage cap is simulated.
 
 ## Adding scenarios
 

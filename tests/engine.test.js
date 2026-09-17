@@ -18,6 +18,58 @@ async function fileFetch(url) {
 
 const BUILT_IN_SCENARIOS = await loadScenarioCatalog(new URL("../scenarios/catalog.json", import.meta.url), fileFetch);
 
+function compactWalkthroughOutcome(definition, stepIndex) {
+  const step = definition.steps[stepIndex];
+  const replay = replayScenario(materializeScenario(definition, stepIndex));
+  const eventId = step.type === "usage" ? `scenario-${definition.id}-${step.id}` : null;
+  const result = eventId ? replay.results.find((item) => item.eventId === eventId) : null;
+  const fixed = (value) => Number(Number(value).toFixed(2));
+  return {
+    stepId: step.id,
+    eventId,
+    status: result?.status || null,
+    reasonIncludes: result?.status === "blocked"
+      ? result.reason.includes("paid usage is disabled") ? "paid usage is disabled"
+        : result.reason.includes("Stop usage when budget limit is reached") ? "Stop usage when budget limit is reached"
+          : result.reason
+      : null,
+    includedQuantity: result ? fixed(result.includedQuantity) : null,
+    meteredQuantity: result ? fixed(result.meteredQuantity) : null,
+    cost: result ? fixed(result.cost) : null,
+    affectedBudgets: result?.affectedBudgets.map((item) => ({
+      budgetId: item.budgetId,
+      stateKey: item.stateKey,
+      before: fixed(item.before),
+      after: fixed(item.after),
+    })) || [],
+    alerts: eventId
+      ? replay.alerts.filter((alert) => alert.eventId === eventId).map((alert) => ({
+        budgetId: alert.budgetId,
+        stateKey: alert.stateKey,
+        threshold: alert.threshold,
+        reliability: alert.reliability,
+      }))
+      : [],
+    pool: {
+      stateId: replay.pool.stateId,
+      total: fixed(replay.pool.total),
+      consumed: fixed(replay.pool.consumed),
+    },
+  };
+}
+
+function percentile95(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.ceil(sorted.length * 0.95) - 1];
+}
+
+function cpuMilliseconds(action) {
+  const started = process.cpuUsage();
+  action();
+  const elapsed = process.cpuUsage(started);
+  return (elapsed.user + elapsed.system) / 1000;
+}
+
 function usage(id, date, quantity, overrides = {}) {
   return { id, date, quantity, userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", ...overrides };
 }
@@ -148,6 +200,60 @@ test("scenario environments are data-loaded and seed events replay before steps"
   assert.equal(materialized.events.length, 2);
   assert.deepEqual(materialized.events.map((event) => event.id), ["seed", "scenario-seed-smoke-scenario-step"]);
   assert.equal(replayScenario(materialized).pool.consumed, 300);
+});
+
+test("enterprise-251 environment pins the reviewed scale and topology shape", async () => {
+  const environment = JSON.parse(await readFile(new URL("../scenarios/environments/enterprise-251.json", import.meta.url), "utf8"));
+  assert.equal(validateEnvironment(environment), null);
+  assert.equal(environment.users.length, 251);
+  assert.equal(environment.users.filter((user) => user.licensePlan === "business").length, 160);
+  assert.equal(environment.users.filter((user) => user.licensePlan === "enterprise").length, 91);
+  assert.equal(environment.organizations.length, 10);
+  assert.equal(environment.costCenters.length, 20);
+  assert.ok(environment.budgets.length >= 13);
+  assert.equal(new Set(environment.users.map((user) => user.id)).size, 251);
+
+  const organizationCounts = environment.organizations.map((organization) =>
+    environment.users.filter((user) => user.licenseOrganizationId === organization.id).length);
+  assert.equal(Math.min(...organizationCounts), 10);
+  assert.equal(Math.max(...organizationCounts), 48);
+  assert.ok(organizationCounts.some((count) => count >= 40));
+
+  const mappedCostCenters = environment.costCenters.filter((costCenter) => costCenter.organizationIds.length > 1);
+  assert.ok(mappedCostCenters.length >= 3);
+  const mappedOrganizations = mappedCostCenters.flatMap((costCenter) => costCenter.organizationIds);
+  assert.equal(new Set(mappedOrganizations).size, mappedOrganizations.length);
+  assert.ok(environment.costCenters.some((costCenter) => costCenter.excludeFromEnterpriseBudget));
+  assert.ok(environment.costCenters.some((costCenter) => !costCenter.excludeFromEnterpriseBudget));
+
+  const allMappedOrganizations = new Set(environment.costCenters.flatMap((costCenter) => costCenter.organizationIds));
+  const unattributedUsers = environment.users.filter((user) =>
+    !user.costCenterId && !allMappedOrganizations.has(user.licenseOrganizationId));
+  assert.ok(unattributedUsers.length >= 5);
+  assert.ok(environment.organizations.some((item) => item.name.length >= 60));
+  assert.ok(environment.costCenters.some((item) => item.name.length >= 60));
+  assert.ok(environment.repositories.some((item) => item.name.length >= 60));
+  assert.ok(environment.users.some((item) => item.name.length >= 60));
+  assert.ok(environment.organizations.some((item) => item.name === "Platform Engineering"));
+  assert.ok(environment.organizations.some((item) => item.name.startsWith("Platform Engineering - EU")));
+  assert.ok(environment.costCenters.some((item) => item.name.startsWith("Transformation programme")));
+  assert.ok(environment.costCenters.some((item) =>
+    environment.users.filter((user) => user.costCenterId === item.id).length <= 2));
+
+  const budgetScopes = new Set(environment.budgets.map((budget) => budget.scopeType));
+  assert.ok(["enterprise", "organization", "costCenter", "user"].every((scope) => budgetScopes.has(scope)));
+  assert.ok(environment.budgets.filter((budget) => budget.effectiveFrom > "2026-09-01").length >= 2);
+  assert.ok(environment.budgets.filter((budget) => budget.budgetKind === "metered" && budget.enforcement === "hard").length >= 2);
+  assert.ok(environment.budgets.filter((budget) => budget.budgetKind === "user").every((budget) => budget.enforcement === "hard"));
+
+  const joiner = environment.users.find((user) => user.id === "user-joiner");
+  const leaver = environment.users.find((user) => user.id === "user-leaver");
+  const revoked = environment.users.find((user) => user.id === "user-contract-001");
+  assert.equal(Number(seatChargeForPeriod(joiner, "2026-09-15").toFixed(2)), 10.13);
+  assert.equal(Number(userPoolContribution(joiner, "2026-09-15", { enterprise: { seatCreditPolicy: "prorated" } }).toFixed(2)), 1013.33);
+  assert.equal(isSeatActiveForDate(leaver, "2026-09-30"), true);
+  assert.equal(isSeatActiveForDate(leaver, "2026-10-01"), false);
+  assert.equal(isSeatActiveForDate(revoked, "2026-09-26"), false);
 });
 
 test("scenario validation rejects broken enterprise data references", () => {
@@ -637,8 +743,8 @@ test("guided scenarios are declarative, reversible, and produce their documented
     assert.equal(validateScenarioDefinition(definition), null);
     const baseline = materializeScenario(definition, -1);
     const complete = materializeScenario(definition, definition.steps.length - 1);
-    assert.equal(baseline.events.length, 0);
-    assert.equal(complete.events.length, definition.steps.filter((step) => step.type === "usage").length);
+    assert.equal(baseline.events.length, (definition.seed || []).length);
+    assert.equal(complete.events.length, (definition.seed || []).length + definition.steps.filter((step) => step.type === "usage").length);
     assert.deepEqual(materializeScenario(definition, -1), baseline);
   }
 
@@ -671,6 +777,102 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.equal(overage.results.at(-1).status, "accepted");
   assert.equal(overage.results.at(-1).meteredQuantity, 2400);
   assert.ok(overage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
+});
+
+test("enterprise-251 walkthrough matches its compact golden outcomes", async () => {
+  const definition = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-251-walkthrough");
+  const golden = JSON.parse(await readFile(new URL("../docs/enterprise-251-walkthrough.golden.json", import.meta.url), "utf8"));
+  assert.equal(definition.version, 1);
+  assert.equal(definition.environmentId, "enterprise-251");
+  assert.equal(definition.steps.length, 13);
+  assert.equal(golden.scenarioId, definition.id);
+  assert.deepEqual(
+    definition.steps.map((step, index) => compactWalkthroughOutcome(definition, index)),
+    golden.steps,
+  );
+
+  const baseline = replayScenario(materializeScenario(definition, -1));
+  assert.equal(baseline.pool.total, 658900);
+  assert.equal(baseline.pool.consumed, 646500);
+  assert.equal(baseline.pool.remaining, 12400);
+  assert.equal(baseline.results.every((result) => result.status === "accepted" && result.meteredQuantity === 0), true);
+  assert.equal(baseline.budgetStates.filter((state) => state.budgetKind === "metered").every((state) => state.spent === 0), true);
+
+  const thresholdReplay = replayScenario(materializeScenario(definition, 2));
+  const thresholdAlerts = thresholdReplay.alerts.filter((alert) => alert.eventId === "scenario-enterprise-251-walkthrough-threshold-alerts");
+  assert.deepEqual(thresholdAlerts.map((alert) => [alert.stateKey, alert.threshold, alert.reliability]), [
+    ["ulb-normal:user-normal:2026-09", 75, "User-level alert delivery is not guaranteed by GitHub"],
+    ["metered-cc-normal:2026-09", 100, "UI and email"],
+    ["metered-enterprise:2026-09", 90, "UI and email"],
+  ]);
+
+  const beforeHardStop = replayScenario(materializeScenario(definition, 4));
+  const atHardStop = replayScenario(materializeScenario(definition, 5));
+  assert.equal(atHardStop.results.at(-1).status, "blocked");
+  assert.deepEqual(atHardStop.pool, beforeHardStop.pool);
+  assert.deepEqual(atHardStop.budgetStates, beforeHardStop.budgetStates);
+
+  const afterBoundary = replayScenario(materializeScenario(definition, 1));
+  const boundaryResult = afterBoundary.results.find((result) => result.eventId === "scenario-enterprise-251-walkthrough-pool-exhaustion");
+  assert.equal(boundaryResult.affectedBudgets.find((item) => item.budgetId === "ulb-individual").after
+    - boundaryResult.affectedBudgets.find((item) => item.budgetId === "ulb-individual").before, 200);
+  assert.equal(boundaryResult.affectedBudgets.find((item) => item.budgetId === "metered-enterprise").after
+    - boundaryResult.affectedBudgets.find((item) => item.budgetId === "metered-enterprise").before, 76);
+
+  const precedence = replayScenario(materializeScenario(definition, 7));
+  const individual = precedence.results.find((result) => result.eventId === "scenario-enterprise-251-walkthrough-pool-exhaustion");
+  const costCenter = precedence.results.find((result) => result.eventId === "scenario-enterprise-251-walkthrough-threshold-alerts");
+  const universal = precedence.results.find((result) => result.eventId === "scenario-enterprise-251-walkthrough-ulb-precedence");
+  assert.deepEqual(individual.affectedBudgets.filter((item) => item.budgetId.startsWith("ulb-")).map((item) => item.budgetId), ["ulb-individual"]);
+  assert.deepEqual(costCenter.affectedBudgets.filter((item) => item.budgetId.startsWith("ulb-")).map((item) => item.budgetId), ["ulb-normal"]);
+  assert.deepEqual(universal.affectedBudgets.filter((item) => item.budgetId.startsWith("ulb-")).map((item) => item.budgetId), ["ulb-universal"]);
+
+  const direct = replayScenario(materializeScenario(definition, 8)).results.at(-1);
+  assert.ok(direct.affectedBudgets.some((item) => item.budgetId === "metered-cc-product"));
+  assert.ok(!direct.affectedBudgets.some((item) => item.budgetId === "metered-cc-central"));
+
+  const unattributed = replayScenario(materializeScenario(definition, 4)).results.at(-1);
+  assert.ok(unattributed.affectedBudgets.some((item) => item.budgetId === "metered-org-vendors"));
+  assert.ok(!unattributed.affectedBudgets.some((item) => item.budgetId.startsWith("metered-cc-")));
+
+  const normal = replayScenario(materializeScenario(definition, 3)).results.find((result) => result.eventId === "scenario-enterprise-251-walkthrough-threshold-alerts");
+  const excluded = replayScenario(materializeScenario(definition, 9)).results.at(-1);
+  assert.ok(normal.affectedBudgets.some((item) => item.budgetId === "metered-enterprise"));
+  assert.ok(!excluded.affectedBudgets.some((item) => item.budgetId === "metered-enterprise"));
+
+  const beforePolicyBlock = replayScenario(materializeScenario(definition, 10));
+  const atPolicyBlock = replayScenario(materializeScenario(definition, 11));
+  assert.equal(atPolicyBlock.results.at(-1).status, "blocked");
+  assert.match(atPolicyBlock.results.at(-1).reason, /paid usage is disabled/);
+  assert.deepEqual(atPolicyBlock.pool, beforePolicyBlock.pool);
+  assert.deepEqual(atPolicyBlock.budgetStates, beforePolicyBlock.budgetStates);
+
+  const october = replayScenario(materializeScenario(definition, 12));
+  assert.equal(october.period, "2026-10");
+  assert.equal(october.pool.stateId, "enterprise:2026-10");
+  assert.equal(october.pool.consumed, 4581);
+  assert.ok(october.results.some((result) => result.date.startsWith("2026-09")));
+  assert.ok(october.alerts.some((alert) =>
+    alert.stateKey === "ulb-normal:user-normal:2026-10" && alert.threshold === 75));
+  assert.deepEqual(materializeScenario(definition, 12), materializeScenario(definition, 12));
+});
+
+test("enterprise-251 walkthrough remains within the replay performance budget", () => {
+  const definition = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-251-walkthrough");
+  const finalIndex = definition.steps.length - 1;
+  const singlePass = [];
+  const fourPass = [];
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    singlePass.push(cpuMilliseconds(() => replayScenario(materializeScenario(definition, finalIndex))));
+    fourPass.push(cpuMilliseconds(() => {
+      replayScenario(materializeScenario(definition, finalIndex));
+      replayScenario(materializeScenario(definition, finalIndex - 1));
+      replayScenario(materializeScenario(definition, finalIndex - 2));
+      replayScenario(materializeScenario(definition, finalIndex));
+    }));
+  }
+  assert.ok(percentile95(singlePass) < 50, `single-pass p95 was ${percentile95(singlePass).toFixed(2)} ms`);
+  assert.ok(percentile95(fourPass) < 100, `four-pass p95 was ${percentile95(fourPass).toFixed(2)} ms`);
 });
 
 test("guided configuration steps do not retroactively change earlier usage attribution", () => {

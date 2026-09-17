@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "scenarioId": "enterprise-251-walkthrough",
+  "steps": [
+    {
+      "stepId": "steady-consumption",
+      "eventId": null,
+      "status": null,
+      "reasonIncludes": null,
+      "includedQuantity": null,
+      "meteredQuantity": null,
+      "cost": null,
+      "affectedBudgets": [],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 646500
+      }
+    },
+    {
+      "stepId": "pool-exhaustion",
+      "eventId": "scenario-enterprise-251-walkthrough-pool-exhaustion",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 12400,
+      "meteredQuantity": 7600,
+      "cost": 76,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-individual",
+          "stateKey": "ulb-individual:user-individual:2026-09",
+          "before": 0,
+          "after": 200
+        },
+        {
+          "budgetId": "metered-cc-central",
+          "stateKey": "metered-cc-central:2026-09",
+          "before": 0,
+          "after": 76
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "before": 0,
+          "after": 76
+        }
+      ],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "threshold-alerts",
+      "eventId": "scenario-enterprise-251-walkthrough-threshold-alerts",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 0,
+      "meteredQuantity": 2000,
+      "cost": 20,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-normal",
+          "stateKey": "ulb-normal:user-normal:2026-09",
+          "before": 25.75,
+          "after": 45.75
+        },
+        {
+          "budgetId": "metered-cc-normal",
+          "stateKey": "metered-cc-normal:2026-09",
+          "before": 0,
+          "after": 20
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "before": 76,
+          "after": 96
+        }
+      ],
+      "alerts": [
+        {
+          "budgetId": "ulb-normal",
+          "stateKey": "ulb-normal:user-normal:2026-09",
+          "threshold": 75,
+          "reliability": "User-level alert delivery is not guaranteed by GitHub"
+        },
+        {
+          "budgetId": "metered-cc-normal",
+          "stateKey": "metered-cc-normal:2026-09",
+          "threshold": 100,
+          "reliability": "UI and email"
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "threshold": 90,
+          "reliability": "UI and email"
+        }
+      ],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "duplicate-threshold-suppression",
+      "eventId": "scenario-enterprise-251-walkthrough-duplicate-threshold-suppression",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 0,
+      "meteredQuantity": 500,
+      "cost": 5,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-normal",
+          "stateKey": "ulb-normal:user-normal:2026-09",
+          "before": 45.75,
+          "after": 50.75
+        },
+        {
+          "budgetId": "metered-cc-normal",
+          "stateKey": "metered-cc-normal:2026-09",
+          "before": 20,
+          "after": 25
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "before": 96,
+          "after": 101
+        }
+      ],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "soft-budget-breach",
+      "eventId": "scenario-enterprise-251-walkthrough-soft-budget-breach",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 0,
+      "meteredQuantity": 1500,
+      "cost": 15,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-universal",
+          "stateKey": "ulb-universal:user-soft:2026-09",
+          "before": 0,
+          "after": 15
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "before": 101,
+          "after": 116
+        },
+        {
+          "budgetId": "metered-org-vendors",
+          "stateKey": "metered-org-vendors:2026-09",
+          "before": 0,
+          "after": 15
+        }
+      ],
+      "alerts": [
+        {
+          "budgetId": "metered-org-vendors",
+          "stateKey": "metered-org-vendors:2026-09",
+          "threshold": 75,
+          "reliability": "UI and email"
+        },
+        {
+          "budgetId": "metered-org-vendors",
+          "stateKey": "metered-org-vendors:2026-09",
+          "threshold": 100,
+          "reliability": "UI and email"
+        }
+      ],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "hard-stop-rejection",
+      "eventId": "scenario-enterprise-251-walkthrough-hard-stop-rejection",
+      "status": "blocked",
+      "reasonIncludes": "Stop usage when budget limit is reached",
+      "includedQuantity": 0,
+      "meteredQuantity": 1500,
+      "cost": 15,
+      "affectedBudgets": [],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "ulb-spans-boundary",
+      "eventId": null,
+      "status": null,
+      "reasonIncludes": null,
+      "includedQuantity": null,
+      "meteredQuantity": null,
+      "cost": null,
+      "affectedBudgets": [],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "ulb-precedence",
+      "eventId": "scenario-enterprise-251-walkthrough-ulb-precedence",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 0,
+      "meteredQuantity": 1000,
+      "cost": 10,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-universal",
+          "stateKey": "ulb-universal:user-universal:2026-09",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "before": 116,
+          "after": 126
+        },
+        {
+          "budgetId": "metered-org-research",
+          "stateKey": "metered-org-research:2026-09",
+          "before": 0,
+          "after": 10
+        }
+      ],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "direct-assignment",
+      "eventId": "scenario-enterprise-251-walkthrough-direct-assignment",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 0,
+      "meteredQuantity": 1000,
+      "cost": 10,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-universal",
+          "stateKey": "ulb-universal:user-direct-override:2026-09",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "budgetId": "metered-cc-product",
+          "stateKey": "metered-cc-product:2026-09",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-09",
+          "before": 126,
+          "after": 136
+        }
+      ],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "cost-center-exclusion",
+      "eventId": "scenario-enterprise-251-walkthrough-cost-center-exclusion",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 0,
+      "meteredQuantity": 1000,
+      "cost": 10,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-universal",
+          "stateKey": "ulb-universal:user-leaver:2026-09",
+          "before": 0,
+          "after": 10
+        },
+        {
+          "budgetId": "metered-cc-excluded",
+          "stateKey": "metered-cc-excluded:2026-09",
+          "before": 0,
+          "after": 10
+        }
+      ],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "disable-paid-usage",
+      "eventId": null,
+      "status": null,
+      "reasonIncludes": null,
+      "includedQuantity": null,
+      "meteredQuantity": null,
+      "cost": null,
+      "affectedBudgets": [],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "paid-usage-policy-block",
+      "eventId": "scenario-enterprise-251-walkthrough-paid-usage-policy-block",
+      "status": "blocked",
+      "reasonIncludes": "paid usage is disabled",
+      "includedQuantity": 0,
+      "meteredQuantity": 1000,
+      "cost": 10,
+      "affectedBudgets": [],
+      "alerts": [],
+      "pool": {
+        "stateId": "enterprise:2026-09",
+        "total": 658900,
+        "consumed": 658900
+      }
+    },
+    {
+      "stepId": "month-end-reset",
+      "eventId": "scenario-enterprise-251-walkthrough-month-end-reset",
+      "status": "accepted",
+      "reasonIncludes": null,
+      "includedQuantity": 4581,
+      "meteredQuantity": 0,
+      "cost": 0,
+      "affectedBudgets": [
+        {
+          "budgetId": "ulb-normal",
+          "stateKey": "ulb-normal:user-normal:2026-10",
+          "before": 0,
+          "after": 45.81
+        },
+        {
+          "budgetId": "metered-cc-normal",
+          "stateKey": "metered-cc-normal:2026-10",
+          "before": 0,
+          "after": 0
+        },
+        {
+          "budgetId": "metered-enterprise",
+          "stateKey": "metered-enterprise:2026-10",
+          "before": 0,
+          "after": 0
+        }
+      ],
+      "alerts": [
+        {
+          "budgetId": "ulb-normal",
+          "stateKey": "ulb-normal:user-normal:2026-10",
+          "threshold": 75,
+          "reliability": "User-level alert delivery is not guaranteed by GitHub"
+        }
+      ],
+      "pool": {
+        "stateId": "enterprise:2026-10",
+        "total": 655100,
+        "consumed": 4581
+      }
+    }
+  ]
+}

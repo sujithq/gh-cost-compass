@@ -1,4 +1,9 @@
 {
   "version": 1,
-  "environments": []
+  "environments": [
+    {
+      "id": "enterprise-251",
+      "file": "enterprise-251.json"
+    }
+  ]
 }

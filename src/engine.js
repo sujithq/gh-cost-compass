@@ -12,6 +12,7 @@ export const scopeLabels = {
 const AI_CREDIT_PRICE = 0.01;
 const INCLUDED_CREDITS = { business: 1900, enterprise: 3900 };
 const SEAT_PRICE = { business: 19, enterprise: 39 };
+let activeCostCenterCache;
 
 export function monthKey(date) {
   return String(date).slice(0, 7);
@@ -74,7 +75,7 @@ export function normalizeScenario(scenario) {
 }
 
 function eventScenario(scenario, event) {
-  return normalizeScenario(event.scenarioSnapshot ? structuredClone(event.scenarioSnapshot) : scenario);
+  return normalizeScenario(event.scenarioSnapshot || scenario);
 }
 
 function isActive(budget, date) {
@@ -84,13 +85,22 @@ function isActive(budget, date) {
 export function costCenterForUser(scenario, user) {
   normalizeScenario(scenario);
   if (!user) return undefined;
+  const cached = activeCostCenterCache?.get(scenario);
+  if (cached?.has(user.id)) return cached.get(user.id);
   const direct = scenario.costCenters.find((item) => item.id === user.costCenterId)
     || scenario.costCenters.find((item) => item.userIds.includes(user.id));
-  if (direct) return direct;
-  const teamIds = new Set(scenario.enterpriseTeams.filter((team) => team.userIds.includes(user.id)).map((team) => team.id));
-  const teamCostCenter = scenario.costCenters.find((item) => item.enterpriseTeamIds.some((teamId) => teamIds.has(teamId)));
-  if (teamCostCenter) return teamCostCenter;
-  return scenario.costCenters.find((item) => item.organizationIds.includes(user.licenseOrganizationId));
+  let costCenter = direct;
+  if (!costCenter) {
+    const teamIds = new Set(scenario.enterpriseTeams.filter((team) => team.userIds.includes(user.id)).map((team) => team.id));
+    costCenter = scenario.costCenters.find((item) => item.enterpriseTeamIds.some((teamId) => teamIds.has(teamId)))
+      || scenario.costCenters.find((item) => item.organizationIds.includes(user.licenseOrganizationId));
+  }
+  if (activeCostCenterCache) {
+    const scenarioCache = cached || new Map();
+    scenarioCache.set(user.id, costCenter);
+    if (!cached) activeCostCenterCache.set(scenario, scenarioCache);
+  }
+  return costCenter;
 }
 
 function costCenterForEvent(scenario, event, product) {
@@ -283,7 +293,7 @@ export function describeScope(scenario, budget) {
   return collections[budget.scopeType]?.find((item) => item.id === budget.scopeId)?.name || budget.scopeId;
 }
 
-export function replayScenario(scenario) {
+function replayScenarioInternal(scenario) {
   normalizeScenario(scenario);
   const states = new Map();
   const pools = new Map();
@@ -307,7 +317,7 @@ export function replayScenario(scenario) {
     const poolTotal = costCenterPoolEnabled ? costCenterIncludedPoolFor(effectiveScenario, eventCostCenter.id, event.date) : includedPoolFor(effectiveScenario, event.date, { excludeCostCenterPools: true });
     const userAccessBlocked = user && !isSeatActiveForDate(user, event.date);
     let blockingReason = userAccessBlocked ? `${user.name} does not have an active Copilot seat on ${event.date}` : null;
-    const eligiblePoolUsers = isAi ? includedPoolUsers(effectiveScenario, costCenterPoolEnabled ? eventCostCenter : null) : [];
+    const eligiblePoolUsers = isAi && poolBefore < poolTotal ? includedPoolUsers(effectiveScenario, costCenterPoolEnabled ? eventCostCenter : null) : [];
     const includedCapacityRemaining = eligiblePoolUsers.reduce((sum, poolUser) => {
       const key = `${poolUser.id}:${period}`;
       return sum + Math.max(0, userPoolContribution(poolUser, event.date, effectiveScenario) - (includedConsumedByUser.get(key) || 0));
@@ -459,6 +469,16 @@ export function replayScenario(scenario) {
   });
 
   return { results, alerts, budgetStates, costCenterPoolStates, period: selectedPeriod, pool: { stateId: `enterprise:${selectedPeriod}`, total: effectivePoolTotal, consumed, remaining: Math.max(0, effectivePoolTotal - consumed), percent: effectivePoolTotal ? consumed / effectivePoolTotal * 100 : 100, meteredCost } };
+}
+
+export function replayScenario(scenario) {
+  const previousCache = activeCostCenterCache;
+  activeCostCenterCache = new WeakMap();
+  try {
+    return replayScenarioInternal(scenario);
+  } finally {
+    activeCostCenterCache = previousCache;
+  }
 }
 
 // Re-runs replayScenario as if only events up to and including eventId had happened yet, using the

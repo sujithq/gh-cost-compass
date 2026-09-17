@@ -91,6 +91,7 @@ export function materializeScenario(definition, stepIndex = -1, { defaultSetId }
   const error = validateDefinitionShape(definition);
   if (error) throw new Error(error);
   const scenario = baseScenarioForDefinition(definition, defaultSetId);
+  let scenarioSnapshot;
   for (const seedEvent of definition.seed || []) {
     scenario.events.push({ ...clone(seedEvent), id: seedEvent.id || `scenario-${definition.id}-seed-${scenario.events.length}` });
     if (seedEvent.date > scenario.simulationDate) scenario.simulationDate = seedEvent.date;
@@ -101,12 +102,14 @@ export function materializeScenario(definition, stepIndex = -1, { defaultSetId }
   for (let index = 0; index <= Math.min(stepIndex, definition.steps.length - 1); index += 1) {
     const step = definition.steps[index];
     if (step.type === "usage") {
-      scenario.events.push({ ...clone(step.event), id: `scenario-${definition.id}-${step.id}`, scenarioSnapshot: clone({ ...scenario, events: [] }) });
+      scenarioSnapshot ||= clone({ ...scenario, events: [] });
+      scenario.events.push({ ...clone(step.event), id: `scenario-${definition.id}-${step.id}`, scenarioSnapshot });
       if (step.event.date > scenario.simulationDate) scenario.simulationDate = step.event.date;
     } else if (step.type === "advance-date") {
       scenario.simulationDate = step.date;
     } else if (step.type === "configuration") {
       applyMutation(scenario, step.mutation);
+      scenarioSnapshot = undefined;
     }
   }
   const materializedError = validateMaterializedScenario(scenario);
