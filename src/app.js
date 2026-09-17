@@ -990,9 +990,12 @@ function changeScenarioDefinition(id) {
     render();
     return;
   }
+  const definition = scenarioDefinitions().find((item) => item.id === id);
+  scenario = materializeScenarioForDefaultSet(definition, -1);
   scenarioRun = { definitionId: id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
   latestEventId = null;
-  render();
+  seenAlertIds = new Set(replayScenario(scenario).alerts.map((alert) => alert.id));
+  saveAndRender("Scenario reset to its baseline");
 }
 
 function renderGlobalScenarioHeader(definition, definitions) {

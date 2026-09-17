@@ -1,0 +1,68 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "enterprise-cost-center-pool-blocks",
+  "defaultSetId": "enterprise",
+  "title": "Enterprise cost center pool blocks usage",
+  "summary": "Enable the AI Innovation cost-center pool in the Enterprise tenant and stop usage at its included cap.",
+  "compatibleDefaultSetIds": [
+    "enterprise"
+  ],
+  "tags": [
+    "cost center",
+    "included pool",
+    "hard stop",
+    "enterprise"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 10000
+      }
+    },
+    {
+      "target": "costCenter",
+      "id": "cc-ai",
+      "changes": {
+        "aiCreditPoolEnabled": true,
+        "aiCreditPoolCapMode": "block"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "near-cap",
+      "type": "usage",
+      "title": "Consume most AI Innovation credits",
+      "description": "Alice consumes 38,800 of the AI Innovation cost center's 38,900 included credits.",
+      "expected": "Usage is accepted from the cost-center pool, leaving 100 included credits.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 38800
+      }
+    },
+    {
+      "id": "cap-blocks",
+      "type": "usage",
+      "title": "Try to exceed the pool cap",
+      "description": "Alice tries to consume 200 more AI credits after only 100 remain in the AI Innovation pool.",
+      "expected": "The complete event is blocked because the AI Innovation cost center is configured to stop at its included-pool cap.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 200
+      }
+    }
+  ]
+}
