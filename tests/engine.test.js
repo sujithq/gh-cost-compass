@@ -45,6 +45,7 @@ test("assistant context summarizes the live budget health for the current simula
   assert.ok(context.risks.length > 0 || !context.risks.length);
   assert.ok(context.docs.some((doc) => doc.title.includes("budgets")));
   assert.equal(context.latestResult.status, latestResult.status);
+  assert.ok(context.latestResult.controlEvaluations.length > 0);
   assert.match(context.riskOverview, /at .*\(|No active budget/);
 });
 
@@ -57,7 +58,13 @@ test("assistant provider returns grounded summaries and safe read-only draft sce
 
   const explanation = provider.answer("Why was the latest event blocked or accepted?", context);
   assert.equal(explanation.kind, "explanation");
-  assert.match(explanation.text, /This event was|Included pool/);
+  assert.match(explanation.text, /Settings evaluated/);
+  assert.match(explanation.text, /Stop usage|Eligible pool|Budget Type/);
+
+  const riskExplanation = provider.answer(`Why is ${context.risks[0].name} the closest pressure point?`, context);
+  assert.equal(riskExplanation.kind, "risk-explanation");
+  assert.match(riskExplanation.text, /settings that make that true/i);
+  assert.match(riskExplanation.text, /amount:|threshold alerts:|current usage:/);
 
   const summary = provider.answer("How much included headroom remains?", context);
   assert.equal(summary.kind, "summary");

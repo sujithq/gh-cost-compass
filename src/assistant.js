@@ -18,7 +18,45 @@ function asSafeList(items, max = 5) {
     amount: Number(item.amount || 0),
     percent: Number(item.percent || 0),
     remaining: Number((item.amount || 0) - (item.spent || 0)),
+    enforcement: item.enforcement,
+    thresholds: item.thresholds || [],
+    productId: item.productId,
+    scopeId: item.scopeId,
+    userBudgetType: item.userBudgetType,
+    effectiveDate: item.effectiveDate,
+    expiresAt: item.expiresAt || null,
   }));
+}
+
+function describeBudgetKind(risk) {
+  if (risk.budgetKind === "user") return "user-level bundled AI credits budget";
+  return risk.productId === "ai-credits" ? "SKU-level budget for AI credits" : "metered spending budget";
+}
+
+function describeStopUsage(risk) {
+  if (risk.budgetKind === "user") return "Stop usage is always enabled for user-level budgets";
+  return risk.enforcement === "hard" ? "Stop usage when budget limit is reached is enabled" : "Stop usage is not enabled, so this budget alerts but does not block by itself";
+}
+
+function describeRiskSettings(risk) {
+  if (!risk) return "No active budget controls are currently creating pressure.";
+  const settings = [
+    `type: ${describeBudgetKind(risk)}`,
+    `scope: ${risk.scopeType}${risk.userBudgetType ? ` (${risk.userBudgetType})` : ""}`,
+    `amount: ${money(risk.amount, "USD")}`,
+    `basis: ${risk.budgetKind === "user" ? "total AI-credit consumption, including included credits and paid usage" : "paid metered overage after included credits"}`,
+    describeStopUsage(risk),
+    `threshold alerts: ${risk.thresholds.length ? `${risk.thresholds.join("%, ")}%` : "not configured"}`,
+    `effective from: ${risk.effectiveDate || "start of scenario"}`,
+    `current usage: ${money(risk.spent, "USD")} of ${money(risk.amount, "USD")} (${percent(risk.percent)})`,
+  ];
+  if (risk.expiresAt) settings.push(`expires: ${risk.expiresAt}`);
+  return settings.join("; ");
+}
+
+function describeControlEvaluation(evaluation) {
+  const settings = (evaluation.settings || evaluation.configuration || []).map((item) => `${item.label}: ${item.value}`).join("; ");
+  return `${evaluation.control} (${evaluation.outcome}) — ${settings}. ${evaluation.result}`;
 }
 
 export function buildAssistantContext(scenario, replay = replayScenario(scenario), options = {}) {
@@ -58,6 +96,12 @@ export function buildAssistantContext(scenario, replay = replayScenario(scenario
         percent: Number(impact.percent || 0),
         before: Number(impact.before || 0),
         after: Number(impact.after || 0),
+      })) || [],
+      controlEvaluations: latestResult.controlEvaluations?.slice(0, 6).map((evaluation) => ({
+        control: evaluation.control,
+        outcome: evaluation.outcome,
+        settings: evaluation.configuration || [],
+        result: evaluation.result,
       })) || [],
     } : null,
     selectedScope: options.selectedScope || { type: "enterprise", id: "" },
@@ -133,12 +177,15 @@ export function createAssistantProvider(options = {}) {
 
       if (latest && /blocked|why.*(block|reject|accept)|why.*this|why.*event/i.test(normalized)) {
         const outcome = latest.status === "blocked" ? "blocked" : "accepted";
+        const controlDetails = latest.controlEvaluations?.length
+          ? ` Settings evaluated: ${latest.controlEvaluations.map(describeControlEvaluation).join(" ")}`
+          : "";
         const guidance = latest.status === "blocked"
           ? `This event was ${outcome} because the current governing control stopped it before consumption. The assistant saw: ${latest.reason}.`
           : `This event was accepted because the active controls allowed it. The assistant saw: ${latest.reason}.`;
         return {
           kind: "explanation",
-          text: `${guidance} Included pool and budget state for this snapshot show ${Number(context.includedPool?.remaining ?? 0).toLocaleString()} included credits remaining and ${context.risks.length ? context.risks[0].name : "no immediate risk"} is the nearest budget pressure point.`,
+          text: `${guidance}${controlDetails} Included pool state: ${Number(context.includedPool?.remaining ?? 0).toLocaleString()} included credits remain out of ${Number(context.includedPool?.total ?? 0).toLocaleString()}.`,
           sources: docs,
         };
       }
@@ -151,11 +198,20 @@ export function createAssistantProvider(options = {}) {
         };
       }
 
-      if (/risk|alert|which.*budget|budget.*at.*risk|top.*risk|govern/i.test(normalized)) {
+      if (/risk|alert|which.*budget|budget.*at.*risk|top.*risk|govern|pressure|closest/i.test(normalized)) {
         const topRisk = context.risks[0];
         const list = context.risks.length
           ? context.risks.map((risk) => `${risk.name} (${percent(risk.percent)})`).join(", ")
           : "No active budget is at or above the current alert threshold.";
+        if (/why|explain|setting|made.*so|pressure point|closest pressure/i.test(normalized)) {
+          return {
+            kind: "risk-explanation",
+            text: topRisk
+              ? `${topRisk.name} is the closest pressure point because it has the highest current usage percentage among active budget controls: ${percent(topRisk.percent)}. The settings that make that true are: ${describeRiskSettings(topRisk)}.`
+              : "No active budget control is currently the closest pressure point because no budget state has accumulated usage in this replay snapshot.",
+            sources: docs,
+          };
+        }
         return {
           kind: "risk-summary",
           text: `The main budget risks in this scenario are ${list}. The highest-current pressure is ${topRisk ? `${topRisk.name} at ${percent(topRisk.percent)}` : "not currently tracked"}.`,
