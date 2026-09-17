@@ -2,7 +2,6 @@
   "$schema": "./scenario.schema.json",
   "version": 1,
   "id": "pool-to-paid-overage",
-  "defaultSetId": "compact",
   "title": "Shared pool to paid overage",
   "summary": "Consume included AI credits first, then show how paid usage flows into metered budgets.",
   "tags": [
