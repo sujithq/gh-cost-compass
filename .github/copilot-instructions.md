@@ -18,11 +18,11 @@ No install or build step is required. There is no lockfile and no lint script.
 - `src/scenario-catalog.js` loads the external guided-scenario catalog.
 - `src/app.js` owns browser state, rendering, and interactions.
 - `tests/engine.test.js` is the executable contract for engine, catalog, scenario, UI-markup, and toast behavior.
-- `.github/extensions/budget-lab/extension.mjs` is a project-scoped canvas extension (`canvasId: "budget-lab"`) that lets a Copilot chat/CLI session open this app as a live side panel instead of running `npm start` manually. It hosts the same static app over a loopback-only HTTP server and exposes `/api/assistant`, wired to the live Copilot session, for the experimental LLM-backed assistant.
+- `.github/extensions/budget-lab/extension.mjs` is a project-scoped canvas extension (`canvasId: "budget-lab"`) that lets a Copilot chat/CLI session open this app as a live side panel instead of running `npm start` manually. It hosts the same static app over a loopback-only HTTP server and exposes `/api/assistant`, wired to the live Copilot session, for the Copilot-backed assistant. Opening the canvas defaults to `assistantBackend: "copilot"`; passing `"scripted"` opts a given panel out. `npm start` is unaffected and always uses the scripted assistant.
 
 ## Opening the canvas app
 
-When a user asks to open, preview, or "spin up" the Budget Lab canvas, open the `budget-lab` canvas (see `.github/extensions/budget-lab/extension.mjs`) rather than starting a terminal server. Its `inputSchema.assistantBackend` **must keep `scripted` as the default** — only pass `assistantBackend: "copilot"` when the user explicitly asks for the Copilot-backed assistant. Never change that default, and never make the extension auto-detect or probe for Copilot availability, so every unconfigured instance and `npm start` keep behaving identically to before this extension existed.
+When a user asks to open, preview, or "spin up" the Budget Lab canvas, open the `budget-lab` canvas (see `.github/extensions/budget-lab/extension.mjs`) rather than starting a terminal server. Its `inputSchema.assistantBackend` **defaults to `"copilot"`** for canvas instances; pass `assistantBackend: "scripted"` only when the user explicitly asks to opt a panel out of the Copilot-backed assistant. `npm start` is a separate code path and always uses the scripted assistant regardless of this canvas default — never make it load the Copilot SDK or probe for Copilot availability.
 
 ## Data contracts
 

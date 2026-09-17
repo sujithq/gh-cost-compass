@@ -196,14 +196,14 @@ session = await joinSession({
         createCanvas({
             id: "budget-lab",
             displayName: "Copilot Budget Lab",
-            description: "Explore live GitHub billing simulations with an opt-in Copilot-backed assistant.",
+            description: "Explore live GitHub billing simulations with a Copilot-backed assistant.",
             inputSchema: {
                 type: "object",
                 properties: {
                     assistantBackend: {
                         type: "string",
                         enum: ["scripted", "copilot"],
-                        description: "Assistant backend for this canvas instance. Defaults to scripted.",
+                        description: "Assistant backend for this canvas instance. Defaults to copilot; pass \"scripted\" to opt out.",
                     },
                 },
                 additionalProperties: false,
@@ -215,10 +215,10 @@ session = await joinSession({
                     entry = await startServer(root);
                     servers.set(ctx.instanceId, entry);
                 }
-                const backend = ctx.input?.assistantBackend === "copilot" ? "copilot" : "scripted";
+                const backend = ctx.input?.assistantBackend === "scripted" ? "scripted" : "copilot";
                 return {
                     title: "Copilot Budget Lab",
-                    status: backend === "copilot" ? "Copilot assistant enabled for this canvas only" : "Scripted assistant",
+                    status: backend === "copilot" ? "Copilot assistant enabled" : "Scripted assistant (opted out of Copilot)",
                     url: `${entry.url}?assistantBackend=${backend}`,
                 };
             },

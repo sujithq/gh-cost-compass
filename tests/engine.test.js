@@ -897,7 +897,7 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.match(app, /#assistant-fullscreen"\)\?\.addEventListener\("click", \(\) => setAssistantFullscreen\(!assistantFullscreen\)\)/);
   assert.match(app, /\[data-assistant-prompt\]/);
   assert.match(extension, /enum: \["scripted", "copilot"\]/);
-  assert.match(extension, /ctx\.input\?\.assistantBackend === "copilot" \? "copilot" : "scripted"/);
+  assert.match(extension, /ctx\.input\?\.assistantBackend === "scripted" \? "scripted" : "copilot"/);
   assert.match(extension, /session\.sendAndWait/);
   assert.match(extension, /github-ai-credit-finops/);
   assert.match(extension, /session\.rpc\.model\.list/);
