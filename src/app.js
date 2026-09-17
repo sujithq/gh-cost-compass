@@ -264,7 +264,10 @@ function scenarioResultHtml(result) {
 function scenarioHealthIcon(item) {
   if (item.healthType === "pool") return { name: "pool", color: "pool", label: "Included credit pool" };
   if (item.healthType === "costCenterPool") return { name: "costCenter", color: "cost-center", label: "Cost center included pool" };
-  if (item.budgetKind === "user") return { name: "user", color: "user", label: "User-level budget" };
+  if (item.budgetKind === "user") {
+    if (item.userBudgetType === "costCenter") return { name: "costCenter", color: "cost-center", label: "Cost center-level budget" };
+    return { name: "user", color: "user", label: "User-level budget" };
+  }
   const scope = ({ enterprise: { name: "enterprise", color: "enterprise", label: "Enterprise budget" }, organization: { name: "organization", color: "org", label: "Organization budget" }, costCenter: { name: "costCenter", color: "cost-center", label: "Cost center budget" }, repository: { name: "repo", color: "repo", label: "Repository budget" } })[item.scopeType];
   return scope || { name: "alertOnly", color: "metered", label: "Metered budget" };
 }
@@ -458,7 +461,7 @@ function renderSummary(replay, currency) {
 
 function dashboardBudgetIcon(budget) {
   if (budget.budgetKind === "pool") return "pool";
-  if (budget.budgetKind === "user") return "user";
+  if (budget.budgetKind === "user") return budget.userBudgetType === "costCenter" ? "costCenter" : "user";
   return ({ enterprise: "enterprise", organization: "organization", costCenter: "costCenter", repository: "repo" })[budget.scopeType] || "alertOnly";
 }
 
@@ -474,7 +477,7 @@ function renderBudgets(replay, currency) {
     const scope = budgetScopeText(budget);
     const basis = isUlb ? "total AI-credit value (pool + paid)" : "paid overage only";
   const iconName = dashboardBudgetIcon(budget);
-  const colorClass = isUlb ? "user" : ({ enterprise: "enterprise", organization: "org", costCenter: "cost-center", repository: "repo" })[budget.scopeType] || "metered";
+  const colorClass = isUlb ? (budget.userBudgetType === "costCenter" ? "cost-center" : "user") : ({ enterprise: "enterprise", organization: "org", costCenter: "cost-center", repository: "repo" })[budget.scopeType] || "metered";
   return `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-${colorClass}">${icon(iconName)}${escapeHtml(budget.displayName)}</h3><p>Budget Type: ${escapeHtml(budgetTypeLabel(budget))} · Budget scope: ${escapeHtml(scope)} · ${basis} · ${escapeHtml(budgetStopLabel(budget))}</p></div><span class="percent">${percent(budget.percent)}</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
   }).join("");
   const hiddenNotice = hiddenCount > 0 ? `<div class="empty">${hiddenCount} lower-activity budget controls are hidden on the dashboard. They remain active in simulation and export data.</div>` : "";

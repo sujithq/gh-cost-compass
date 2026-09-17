@@ -705,6 +705,17 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   assert.equal(new Set(Object.values(paths)).size, 5);
 });
 
+test("cost-center-scoped user-level budgets use the cost-center icon, not the person icon", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  // A ULB's budgetKind is always "user", but userBudgetType distinguishes an individual person
+  // from a whole cost center; the icon/color helpers must branch on userBudgetType so a
+  // cost-center-wide ULB doesn't render as if it were a single named person.
+  assert.match(app, /if \(item\.userBudgetType === "costCenter"\) return \{ name: "costCenter", color: "cost-center", label: "Cost center-level budget" \};/);
+  assert.match(app, /if \(budget\.budgetKind === "user"\) return budget\.userBudgetType === "costCenter" \? "costCenter" : "user";/);
+  assert.match(app, /const colorClass = isUlb \? \(budget\.userBudgetType === "costCenter" \? "cost-center" : "user"\) : /);
+});
+
 test("the hierarchy tree stays usable at enterprise scale", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
