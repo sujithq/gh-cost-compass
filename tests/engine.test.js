@@ -731,7 +731,11 @@ test("budget health scenario catalog stays aligned with the underlying progress 
 test("guided scenarios are declarative, reversible, and produce their documented outcomes", () => {
   for (const definition of BUILT_IN_SCENARIOS) {
     assert.equal(validateScenarioDefinition(definition), null);
-    assert.equal(definition.defaultSetId, "compact");
+    if (definition.environmentId) {
+      assert.equal(definition.defaultSetId, undefined);
+    } else {
+      assert.equal(definition.defaultSetId, "compact");
+    }
     const baseline = materializeScenario(definition, -1);
     const complete = materializeScenario(definition, definition.steps.length - 1);
     assert.equal(baseline.events.length, 0);
