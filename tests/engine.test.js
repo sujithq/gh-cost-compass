@@ -873,8 +873,8 @@ test("enterprise-251 walkthrough remains within the replay performance budget", 
   const singlePass = [];
   const fourPass = [];
   for (let iteration = 0; iteration < 40; iteration += 1) {
-    singlePass.push(averageCpuMilliseconds(5, () => replayScenario(materializeScenario(definition, finalIndex))));
-    fourPass.push(averageCpuMilliseconds(3, () => {
+    singlePass.push(averageCpuMilliseconds(10, () => replayScenario(materializeScenario(definition, finalIndex))));
+    fourPass.push(averageCpuMilliseconds(10, () => {
       replayScenario(materializeScenario(definition, finalIndex));
       replayScenario(materializeScenario(definition, finalIndex - 1));
       replayScenario(materializeScenario(definition, finalIndex - 2));
