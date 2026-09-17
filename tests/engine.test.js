@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
+import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
 import { trimToastStack } from "../src/toast-stack.js";
 
 async function fileFetch(url) {
@@ -43,6 +44,31 @@ test("default scenario provides an enterprise-grade synthetic tenant", () => {
   assert.equal(validateScenario(scenario), null);
   assert.equal(new Set(scenario.users.map((user) => user.id)).size, scenario.users.length);
   assert.equal(replayScenario(scenario).results.length, 2);
+});
+
+test("enterprise default distributes generated personas and leaves a deterministic unassigned cohort", () => {
+  const scenario = createDefaultScenario();
+  const roleCounts = scenario.users.reduce((counts, user) => {
+    counts[user.role] = (counts[user.role] || 0) + 1;
+    return counts;
+  }, {});
+  const unassignedUsers = scenario.users.filter((user) => user.costCenterId === null);
+  const multiOrganizationUsers = scenario.users.filter((user) => user.organizationIds.length > 1);
+
+  assert.deepEqual(roleCounts, {
+    "Software Engineer": 73,
+    "Project Manager": 27,
+    "Data Scientist": 34,
+    "Security Engineer": 18,
+    "Site Reliability Engineer": 18,
+    "Business Analyst": 16,
+    "UX Designer": 14,
+  });
+  assert.equal(unassignedUsers.length, 15);
+  assert.ok(unassignedUsers.some((user) => user.id === "user-engineer-012"));
+  assert.equal(multiOrganizationUsers.length, 11);
+  assert.ok(multiOrganizationUsers.every((user) => user.organizationIds.includes(user.licenseOrganizationId)));
+  assert.ok(scenario.users.every((user) => scenario.organizations.some((organization) => organization.id === user.licenseOrganizationId)));
 });
 
 test("default scenario sets can load the compact demo tenant", () => {
@@ -104,6 +130,90 @@ test("scenario definitions reject unknown authored baselines", () => {
   };
   assert.match(validateScenarioDefinition(definition), /default set not found/);
   assert.throws(() => materializeScenario(definition), /default set not found/);
+});
+
+test("scenario definitions reject combining defaultSetId with an environment reference", () => {
+  const definition = {
+    version: 1,
+    id: "conflicting-baseline",
+    title: "Conflicting baseline",
+    summary: "Invalid combination.",
+    defaultSetId: "compact",
+    environmentId: "some-environment",
+    steps: [{ id: "checkpoint", type: "checkpoint", title: "Checkpoint", description: "Pause.", expected: "No state changes." }],
+  };
+  assert.match(validateScenarioDefinition(definition), /cannot combine defaultSetId/);
+});
+
+test("shared materialized validator enforces licensing and budget invariants", () => {
+  const scenario = createDefaultScenario("compact");
+  scenario.users[0].licenseOrganizationId = "org-missing";
+  assert.match(validateMaterializedScenario(scenario), /unknown license organization/);
+  scenario.users[0].licenseOrganizationId = scenario.users[0].organizationIds[0];
+  scenario.users[0].organizationIds = [];
+  assert.match(validateMaterializedScenario(scenario), /at least one organization/);
+});
+
+test("environment provenance and topology validation reject runtime state", () => {
+  const scenario = createDefaultScenario("compact");
+  const environment = {
+    version: 1,
+    id: "validator-smoke",
+    name: "Validator smoke",
+    summary: "A reusable topology fixture.",
+    source: {
+      kind: "synthetic",
+      createdAt: "2026-09-01T00:00:00Z",
+      assumptions: ["Synthetic identities"],
+      omittedCapabilities: ["Live usage"],
+    },
+    ...scenario,
+  };
+  delete environment.version;
+  environment.version = 1;
+  delete environment.events;
+  delete environment.simulationDate;
+  assert.equal(validateEnvironment(environment), null);
+  environment.events = [];
+  assert.match(validateEnvironment(environment), /topology only/);
+});
+
+test("scenario environments are data-loaded and seed events replay before steps", () => {
+  const source = createDefaultScenario("compact");
+  const environment = {
+    version: 1,
+    id: "seed-smoke",
+    name: "Seed smoke",
+    summary: "A reusable topology fixture.",
+    source: {
+      kind: "synthetic",
+      createdAt: "2026-09-01T00:00:00Z",
+      assumptions: [],
+      omittedCapabilities: [],
+    },
+    enterprise: source.enterprise,
+    organizations: source.organizations,
+    repositories: source.repositories,
+    costCenters: source.costCenters,
+    enterpriseTeams: source.enterpriseTeams,
+    users: source.users,
+    products: source.products,
+    budgets: source.budgets,
+  };
+  registerEnvironment(environment);
+  const definition = {
+    version: 1,
+    id: "seed-smoke-scenario",
+    title: "Seed smoke scenario",
+    summary: "Checks reusable environment loading.",
+    environmentId: "seed-smoke",
+    seed: [usage("seed", "2026-09-02", 100)],
+    steps: [{ id: "step", type: "usage", title: "Use credits", description: "Consumes more credits.", expected: "Both events are replayed.", event: usage("step-event", "2026-09-03", 200) }],
+  };
+  const materialized = materializeScenario(definition, 0);
+  assert.equal(materialized.events.length, 2);
+  assert.deepEqual(materialized.events.map((event) => event.id), ["seed", "scenario-seed-smoke-scenario-step"]);
+  assert.equal(replayScenario(materialized).pool.consumed, 300);
 });
 
 test("scenario validation rejects broken enterprise data references", () => {

@@ -1,4 +1,5 @@
 import { DEFAULT_SCENARIO_SET_ID, createScenarioFromDefaultSet, defaultScenarioSetOptions } from "./default-scenario-sets.js";
+import { validateMaterializedScenario } from "./environment.js";
 
 export const scopeLabels = {
   enterprise: "Enterprise",
@@ -659,51 +660,7 @@ export function validateScenario(value) {
   normalizeScenario(value);
   const requiredArrays = ["organizations", "repositories", "costCenters", "users", "products", "budgets", "events", "enterpriseTeams"];
   const missing = requiredArrays.find((key) => !Array.isArray(value[key]));
-  if (missing) return `Missing ${missing} array.`;
-  const collections = {
-    organizations: value.organizations,
-    repositories: value.repositories,
-    costCenters: value.costCenters,
-    users: value.users,
-    products: value.products,
-    budgets: value.budgets,
-    events: value.events,
-  };
-  for (const [name, items] of Object.entries(collections)) {
-    const ids = items.map((item) => item?.id).filter(Boolean);
-    if (ids.length !== items.length) return `Every ${name} item needs an id.`;
-    const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
-    if (duplicate) return `Duplicate ${name} id: ${duplicate}.`;
-  }
-  const organizationIds = new Set(value.organizations.map((item) => item.id));
-  const repositoryIds = new Set(value.repositories.map((item) => item.id));
-  const costCenterIds = new Set(value.costCenters.map((item) => item.id));
-  const userIds = new Set(value.users.map((item) => item.id));
-  const productIds = new Set(value.products.map((item) => item.id));
-  for (const repository of value.repositories) {
-    if (!organizationIds.has(repository.organizationId)) return `Repository ${repository.id} references unknown organization ${repository.organizationId}.`;
-  }
-  for (const costCenter of value.costCenters) {
-    const unknownOrganization = (costCenter.organizationIds || []).find((id) => !organizationIds.has(id));
-    if (unknownOrganization) return `Cost center ${costCenter.id} references unknown organization ${unknownOrganization}.`;
-  }
-  for (const user of value.users) {
-    if (!organizationIds.has(user.licenseOrganizationId)) return `User ${user.id} references unknown license organization ${user.licenseOrganizationId}.`;
-    const unknownOrganization = (user.organizationIds || []).find((id) => !organizationIds.has(id));
-    if (unknownOrganization) return `User ${user.id} references unknown organization ${unknownOrganization}.`;
-    if (user.costCenterId && !costCenterIds.has(user.costCenterId)) return `User ${user.id} references unknown cost center ${user.costCenterId}.`;
-  }
-  for (const budget of value.budgets) {
-    if (!productIds.has(budget.productId)) return `Budget ${budget.id} references unknown product ${budget.productId}.`;
-    const scopeSets = { enterprise: new Set([value.enterprise.id]), organization: organizationIds, repository: repositoryIds, costCenter: costCenterIds, user: userIds };
-    if (!scopeSets[budget.scopeType]?.has(budget.scopeId)) return `Budget ${budget.id} references unknown ${scopeLabels[budget.scopeType] || budget.scopeType} ${budget.scopeId}.`;
-  }
-  for (const event of value.events) {
-    if (!userIds.has(event.userId)) return `Event ${event.id} references unknown user ${event.userId}.`;
-    if (!productIds.has(event.productId)) return `Event ${event.id} references unknown product ${event.productId}.`;
-    if (event.repositoryId && !repositoryIds.has(event.repositoryId)) return `Event ${event.id} references unknown repository ${event.repositoryId}.`;
-  }
-  return null;
+  return missing ? `Missing ${missing} array.` : validateMaterializedScenario(value);
 }
 
 export function createId(prefix) {

@@ -1,4 +1,5 @@
 import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
+import { loadEnvironmentCatalog } from "./environment-catalog.js";
 
 export const DEFAULT_SCENARIO_CATALOG_URL = new URL("../scenarios/catalog.json", import.meta.url);
 
@@ -9,6 +10,9 @@ export async function loadScenarioCatalog(catalogUrl = DEFAULT_SCENARIO_CATALOG_
   const catalog = await catalogResponse.json();
   if (catalog?.version !== 1 || !Array.isArray(catalog.scenarios) || catalog.scenarios.length === 0) {
     throw new Error("Scenario catalog must use version 1 and contain at least one entry.");
+  }
+  if (String(catalogUrl) === String(DEFAULT_SCENARIO_CATALOG_URL)) {
+    await loadEnvironmentCatalog(undefined, fetchImpl);
   }
 
   const ids = new Set();

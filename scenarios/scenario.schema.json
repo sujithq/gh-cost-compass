@@ -15,6 +15,9 @@
     "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
     "sourceUrls": { "type": "array", "items": { "type": "string", "format": "uri", "pattern": "^https://" }, "uniqueItems": true },
     "startDate": { "type": "string", "format": "date" },
+    "environmentId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "baseline": { "$ref": "./environment.schema.json" },
+    "seed": { "type": "array", "items": { "$ref": "#/$defs/seedEvent" } },
     "setup": { "type": "array", "items": { "$ref": "#/$defs/mutation" } },
     "steps": {
       "type": "array",
@@ -31,6 +34,19 @@
         "target": { "enum": ["enterprise", "budget", "user", "organization", "repository", "costCenter", "enterpriseTeam", "product"] },
         "id": { "type": "string" },
         "changes": { "type": "object", "minProperties": 1 }
+      }
+    },
+    "seedEvent": {
+      "type": "object",
+      "required": ["date", "userId", "productId", "quantity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "userId": { "type": "string" },
+        "repositoryId": { "type": ["string", "null"] },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number", "exclusiveMinimum": 0 }
       }
     },
     "commonStep": {

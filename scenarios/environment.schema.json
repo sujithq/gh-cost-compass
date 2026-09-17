@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "environment.schema.json",
+  "title": "Copilot Budget Lab reusable environment",
+  "type": "object",
+  "required": ["version", "id", "name", "summary", "source", "enterprise", "organizations", "repositories", "costCenters", "users", "products", "budgets"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["kind", "createdAt", "assumptions", "omittedCapabilities"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["synthetic", "github-api", "imported"] },
+        "enterprise": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "assumptions": { "type": "array", "items": { "type": "string" } },
+        "omittedCapabilities": { "type": "array", "items": { "type": "string" } },
+        "anonymized": { "type": "boolean" }
+      }
+    },
+    "enterprise": { "type": "object" },
+    "organizations": { "type": "array" },
+    "repositories": { "type": "array" },
+    "costCenters": { "type": "array" },
+    "enterpriseTeams": { "type": "array" },
+    "users": { "type": "array" },
+    "products": { "type": "array" },
+    "budgets": { "type": "array" }
+  }
+}
