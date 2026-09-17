@@ -78,3 +78,4 @@
 .assistant-stream-caret{display:inline-block;width:7px;height:1em;margin-left:2px;background:var(--accent);vertical-align:-.15em;animation:assistant-caret .8s steps(1) infinite}
 @keyframes assistant-dot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-2px)}}@keyframes assistant-caret{50%{opacity:0}}
 @media(max-width:760px){.assistant-drawer .assistant-panel{padding:20px}.assistant-prompts{margin-top:0}}
+.global-timeline-bar{position:static}

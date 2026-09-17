@@ -709,6 +709,7 @@ test("optimized UI hierarchy nodes double as clickable scope selectors", async (
 test("scenario timeline lives in the app header so it scrubs every page, not just the optimized subpage", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
   const simulateIndex = html.indexOf('data-view="simulate"');
   const optimizedIndex = html.indexOf('data-view="optimized"');
   assert.ok(simulateIndex > -1 && optimizedIndex > simulateIndex, "Optimized UI nav item should come after Simulate usage");
@@ -729,6 +730,7 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);
   assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
+  assert.match(styles, /\.global-timeline-bar\{position:static\}/);
 });
 
 test("assistant is available globally as a collapsible side panel", async () => {
