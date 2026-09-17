@@ -150,6 +150,36 @@ test("scenario environments are data-loaded and seed events replay before steps"
   assert.equal(replayScenario(materialized).pool.consumed, 300);
 });
 
+test("generated environments are reusable by multiple guided definitions without topology duplication", async () => {
+  const environment = JSON.parse(await readFile(new URL("../scenarios/environments/synthetic-compact.json", import.meta.url), "utf8"));
+  const environmentSchema = JSON.parse(await readFile(new URL("../scenarios/environment.schema.json", import.meta.url), "utf8"));
+  assert.equal(environmentSchema.properties.version.const, 1);
+  assert.equal(validateEnvironment(environment), null);
+  assert.equal(environment.events, undefined);
+  assert.equal(environment.simulationDate, undefined);
+  assert.equal(environment.source.kind, "synthetic");
+
+  const shared = BUILT_IN_SCENARIOS.filter((definition) => definition.environmentId === environment.id);
+  assert.deepEqual(shared.map((definition) => definition.id), ["budget-health-progression", "pool-to-paid-overage"]);
+  assert.ok(shared.every((definition) => definition.baseline === undefined));
+  assert.ok(shared.every((definition) => validateScenarioDefinition(definition) === null));
+
+  for (const definition of shared) {
+    const baseline = materializeScenario(definition, -1);
+    const replay = replayScenario(materializeScenario(definition, definition.steps.length - 1));
+    assert.equal(baseline.users.length, 2);
+    assert.equal(baseline.events.length, 0);
+    assert.deepEqual(materializeScenario(definition, -1), baseline);
+    assert.ok(replay.results.length > 0);
+    assert.ok(replay.results.every((result) => ["accepted", "blocked"].includes(result.status)));
+  }
+  const progression = shared.find((definition) => definition.id === "budget-health-progression");
+  const atHundred = replayScenario(materializeScenario(progression, 4));
+  assert.equal(atHundred.budgetStates.find((item) => item.id === "ulb-alice").percent, 100);
+  assert.equal(atHundred.results.at(-1).status, "accepted");
+  assert.ok(atHundred.alerts.some((alert) => alert.budgetId === "ulb-alice" && alert.threshold === 100));
+});
+
 test("scenario validation rejects broken enterprise data references", () => {
   const scenario = createDefaultScenario();
   scenario.users[0].costCenterId = "cc-missing";

@@ -12,6 +12,7 @@
   "sourceUrls": [
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing"
   ],
+  "environmentId": "synthetic-compact",
   "startDate": "2026-09-15",
   "setup": [
     {

@@ -1,4 +1,9 @@
 {
   "version": 1,
-  "environments": []
+  "environments": [
+    {
+      "id": "synthetic-compact",
+      "file": "synthetic-compact.json"
+    }
+  ]
 }
