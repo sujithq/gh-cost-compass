@@ -8,7 +8,7 @@ target: vscode
 
 # Default Set Generator
 
-Create repository default-set definitions from the user's description. Work only on default sets and the files needed to register, document, and test them.
+Create repository environment or legacy default-set definitions from the user's description. Work only on the requested topology artifact and the files needed to import, document, and test it.
 
 ## Input gate
 
@@ -28,17 +28,61 @@ The user may explicitly say to inherit any omitted choices from an existing defa
 
 If there is no meaningful set description, ask the user to provide one and stop. If only part of the description is missing, ask one concise, consolidated set of questions for only the missing decisions and stop. If the user asks for sequential clarification, ask exactly one missing decision at a time, record each answer, and do not repeat settled decisions. Offer `compact`, `enterprise`, or "use repository defaults" as shortcuts where useful. Do not inspect unrelated code, create files, or make assumptions about material business rules until the answers arrive.
 
-## Repository contract
+## Repository contracts
+
+Prefer the reusable environment contract for new authoring. It is topology only: no usage
+events and no simulation date. Usage belongs in a guided scenario's `seed` or `steps`.
+Synthetic output must record its provenance and assumptions:
+
+```json
+{
+  "version": 1,
+  "id": "stable-kebab-case-id",
+  "name": "Display name",
+  "summary": "Materialized topology counts and purpose",
+  "source": {
+    "kind": "synthetic",
+    "createdAt": "2026-09-01T00:00:00Z",
+    "assumptions": ["..."],
+    "omittedCapabilities": ["Live usage and billing history"],
+    "anonymized": true
+  },
+  "enterprise": {},
+  "organizations": [],
+  "repositories": [],
+  "costCenters": [],
+  "enterpriseTeams": [],
+  "users": [],
+  "products": [],
+  "budgets": []
+}
+```
+
+Write new environments to `scenarios/environments/<id>.json` and add only the matching
+data entry to `scenarios/environments/catalog.json`; do not edit an application-source
+registry. Validate provenance, topology references, unique IDs, license membership,
+budget invariants, and attribution intentionally before import. A user with no direct,
+team, or organization-fallback attribution must be modeled accordingly, not merely with
+`costCenterId: null`.
+
+The legacy mode remains supported. If the user explicitly requests an existing version-2
+default set, or needs generated users, use `scenarios/default-sets/<id>.json` and the
+`src/default-scenario-sets.js` registry as before. Do not convert or overwrite an existing
+artifact without explicit intent.
 
 Once the input is complete, inspect these local sources before editing:
 
+- `scenarios/environment.schema.json` and an existing environment catalog entry, when using the reusable contract.
 - `scenarios/default-sets/compact.json` for the minimal explicit shape.
 - `scenarios/default-sets/enterprise.json` for deterministic generated users.
 - `src/default-scenario-sets.js` for expansion and registration behavior.
 - `validateScenario` in `src/engine.js` for runtime invariants.
 - The default-set tests in `tests/engine.test.js` for expected integration coverage.
 
-Default sets are not guided Scenario Studio definitions. Do not model them against `scenarios/scenario.schema.json` or add them to `scenarios/catalog.json`.
+Environments are not guided Scenario Studio definitions and must not contain events or
+`simulationDate`. Default sets are not guided Scenario Studio definitions either. Do not
+model either artifact against `scenarios/scenario.schema.json` or add it to
+`scenarios/catalog.json`.
 
 Each definition belongs at `scenarios/default-sets/<id>.json` and has this envelope:
 
@@ -78,10 +122,15 @@ Use the optional top-level `generatedUsers` shape only when it materially reduce
 
 After creating the JSON definition:
 
-1. Import it in `src/default-scenario-sets.js` and add it to `defaultScenarioSetDefinitions`. Do not change `DEFAULT_SCENARIO_SET_ID` unless requested.
-2. Extend focused coverage in `tests/engine.test.js` so the file is parsed, the set is materialized through `createDefaultScenario`, `validateScenario` returns `null`, generated counts match the description, and IDs are unique. Replay representative events and assert their intended accepted or blocked statuses, costs or pool effects, and affected budget IDs so a valid reference graph cannot hide an inactive budget. Materialize every built-in guided scenario against the new default-set ID to verify that its stable IDs satisfy existing scenario mutations and events; repository IDs remain optional only where the runtime supports absent repository attribution.
-3. Update default-set documentation only when the available set list or documented behavior would otherwise be stale.
-4. Run `npm test`. Fix only failures caused by the new set or its registration.
-5. Review the final diff for accidental changes, inconsistent counts, duplicate IDs, dangling references, and unstated assumptions.
+1. For an environment, add its catalog entry, validate it with `validateEnvironment`, and verify that
+   `loadEnvironmentCatalog` can import it without source-code changes.
+2. For a legacy default set, import it in `src/default-scenario-sets.js` and add it to
+   `defaultScenarioSetDefinitions`. Do not change `DEFAULT_SCENARIO_SET_ID` unless requested.
+3. Extend focused coverage in `tests/engine.test.js` so the artifact is parsed, materialized,
+   references are valid, IDs are unique, and representative replay outcomes assert accepted or
+   blocked status, costs or pool effects, and affected budget IDs.
+4. Run `npm test`. Fix only failures caused by the artifact or registration.
+5. Review the final diff for accidental files, inconsistent counts, duplicate IDs, dangling
+   references, missing provenance, and unstated assumptions.
 
 Report the created set, materialized shape, registration changes, and validation result. Clearly call out any deliberately inherited defaults.

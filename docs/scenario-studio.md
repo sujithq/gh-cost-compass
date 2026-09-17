@@ -19,7 +19,29 @@ Previous and jump operations are deterministic: the runner resolves the selected
 
 ## Default enterprise baseline
 
-Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. Reusable topology environments are stored under `scenarios/environments/` and contain provenance, entities, products, and budgets, but no events or simulation date. Guided definitions can reference an `environmentId`, provide an inline `baseline` for a self-contained import, and add optional `seed` usage before `setup` and steps. Definitions without either field retain the legacy default-environment behavior.
+Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. New reusable topology environments are stored under `scenarios/environments/` and contain provenance, entities, products, and budgets, but no events or simulation date. Guided definitions should reference an `environmentId`, can provide an inline `baseline` for a self-contained import, and add optional `seed` usage before `setup` and steps. Definitions without either field retain the legacy default-environment behavior.
+
+### Authoring-agent workflow
+
+The repository Default Set Generator and Scenario Generator share this contract. Describe the
+tenant scale, roles, license mix, topology, dates, policies, and intended lesson, or explicitly
+name defaults to inherit. The default-set agent emits a version-1 environment with synthetic
+provenance and records assumptions and omitted capabilities; it adds a data-only catalog entry.
+The scenario agent references that environment and keeps events and narrative steps in the
+version-1 scenario definition. Both agents preserve the legacy version-2 default-set and
+version-1 default-environment modes when requested.
+
+Before import, validate the environment schema and shared reference validator, then materialize
+each scenario prefix and replay it. Check observable outcomes such as included and metered
+quantities, costs, affected budgets, alerts, hard stops, and blocking reasons. Re-materializing
+the same input must produce the same topology and event IDs. A synthetic environment must not
+claim live GitHub facts; use `source.assumptions` and `source.omittedCapabilities` for inherited
+or simulator-only decisions.
+
+For a compact smoke run, use the checked-in `synthetic-compact` environment: two guided
+definitions share its stable `user-alice`, `repo-portal`, `cc-ai`, and `ulb-alice` entities
+without copying the topology. Add new environments to `scenarios/environments/catalog.json`,
+not to application source.
 
 Built-in scenarios should prefer stable seed entities such as `user-alice`, `user-bob`, `org-product`, `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is not important. This keeps examples readable while the surrounding generated tenant gives the dashboard enterprise-scale context.
 

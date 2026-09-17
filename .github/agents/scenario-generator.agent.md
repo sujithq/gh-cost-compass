@@ -8,7 +8,9 @@ target: vscode
 
 # Scenario Generator
 
-Create repository Scenario Studio definitions from the user's description. Work only on the scenario and the files needed to register, document, and test it.
+Create repository Scenario Studio definitions from the user's description. Prefer a reusable
+environment reference and work only on the scenario plus the files needed to register, document,
+and test it.
 
 ## Input gate
 
@@ -38,7 +40,27 @@ Once the input is complete, inspect these local sources before editing:
 - The guided-scenario tests in `tests/engine.test.js` for integration and outcome coverage.
 - The targeted baseline under `scenarios/default-sets/` to verify every referenced entity and policy.
 
-Guided scenarios are not default-set definitions. Do not place them under `scenarios/default-sets/`, import them in `src/default-scenario-sets.js`, or modify baseline data merely to make a scenario pass unless the user explicitly requests that broader change.
+Guided scenarios reference reusable topology through `environmentId` whenever possible:
+
+```json
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "example-scenario",
+  "title": "Example scenario",
+  "summary": "What this scenario demonstrates.",
+  "environmentId": "synthetic-compact",
+  "startDate": "2026-09-15",
+  "seed": [],
+  "setup": [],
+  "steps": []
+}
+```
+
+Use `baseline` only for a self-contained imported definition. Definitions without either
+`environmentId` or `baseline` retain the legacy default-environment behavior. Guided scenarios
+must not duplicate a large topology, place environments under `scenarios/default-sets/`, import
+them in `src/default-scenario-sets.js`, or modify baseline data merely to make a scenario pass.
 
 Each built-in definition belongs at `scenarios/<id>.json` and uses this envelope:
 
@@ -69,7 +91,10 @@ Setup entries use the same mutation shape. Mutation targets are `enterprise`, `b
 ## Generation rules
 
 1. Derive stable kebab-case IDs and never overwrite an existing scenario unless the user explicitly requests replacement.
-2. Reference entities that exist in every targeted baseline. Prefer stable seeds such as `user-alice`, `user-bob`, `org-product`, `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is not material.
+2. Resolve and validate the referenced environment before writing steps. Reference entities that
+   exist in it, and prefer stable seeds such as `user-alice`, `user-bob`, `org-product`,
+   `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is
+   not material.
 3. Use ISO `YYYY-MM-DD` dates and a coherent chronological sequence. Remember that materialization clears baseline events, applies `setup`, and rebuilds from the baseline through each selected step.
 4. Keep setup minimal and behavior-focused. Mutate existing entities only; the runner does not create entities through mutations.
 5. Make `description` state the action and `expected` state a falsifiable result with exact values when the lesson depends on a threshold, cost, pool transition, alert, or hard stop.
@@ -82,10 +107,15 @@ Setup entries use the same mutation shape. Mutation targets are `enterprise`, `b
 After creating the JSON definition:
 
 1. Add its matching `id` and filename to `scenarios/catalog.json`. Catalog order controls dropdown order; preserve existing entries and place the new scenario deliberately.
-2. Extend focused coverage in `tests/engine.test.js`. Validate the definition, materialize the baseline and every behaviorally important prefix, and replay it. Assert the described accepted or blocked statuses, reasons, pool totals or consumption, metered costs, affected budget IDs and amounts or percentages, and alert thresholds as applicable.
-3. Verify reset and reconstruction determinism by materializing the same prefix more than once. For multi-baseline scenarios, run the assertions against every promised baseline.
-4. Update scenario documentation only when the catalog or documented behavior would otherwise be stale.
+2. Validate the referenced environment or inline baseline, then materialize the baseline and every
+   behaviorally important prefix. Replay it and assert accepted or blocked status, reasons, pool
+   movement, metered costs, affected budgets, percentages, and alerts as applicable.
+3. Verify reset and reconstruction determinism by materializing the same prefix more than once.
+   For multi-baseline scenarios, run the assertions against every promised baseline.
+4. Update scenario documentation only when the catalog, environment references, or documented
+   authoring behavior would otherwise be stale.
 5. Run `npm test`. Fix only failures caused by the new scenario or its registration.
-6. Review the final diff for accidental changes, duplicate IDs, dangling references, timeline errors, claims not covered by assertions, and unstated assumptions.
+6. Review the final diff for duplicate topology, dangling references, timeline errors, claims not
+   covered by assertions, and unstated synthetic or inherited assumptions.
 
 Report the created scenario, targeted baseline, step sequence, catalog placement, documented outcomes, and validation result. Clearly call out any deliberately inherited defaults or simulator assumptions.

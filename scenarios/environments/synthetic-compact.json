@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "id": "synthetic-compact",
+  "name": "Synthetic compact authoring environment",
+  "summary": "2 organizations, 2 cost centers, and 2 licensed users for deterministic authoring examples.",
+  "source": {
+    "kind": "synthetic",
+    "createdAt": "2026-09-01T00:00:00Z",
+    "assumptions": [
+      "The compact tenant represents a synthetic two-team enterprise.",
+      "Budget amounts and license dates are simulator fixtures, not extracted tenant data."
+    ],
+    "omittedCapabilities": [
+      "Live GitHub usage history",
+      "Real tenant identity and billing records"
+    ],
+    "anonymized": true
+  },
+  "enterprise": {
+    "id": "ent-acme",
+    "name": "Acme Enterprise",
+    "currency": "USD",
+    "paidAiUsage": true,
+    "seatCreditPolicy": "prorated"
+  },
+  "organizations": [
+    { "id": "org-platform", "name": "Platform Engineering" },
+    { "id": "org-product", "name": "Product Delivery" }
+  ],
+  "repositories": [
+    { "id": "repo-portal", "name": "customer-portal", "organizationId": "org-product" },
+    { "id": "repo-tools", "name": "developer-tools", "organizationId": "org-platform" }
+  ],
+  "costCenters": [
+    { "id": "cc-ai", "name": "AI Innovation", "organizationIds": [], "excludeFromEnterpriseBudget": false },
+    { "id": "cc-core", "name": "Core Engineering", "organizationIds": [], "excludeFromEnterpriseBudget": false }
+  ],
+  "enterpriseTeams": [
+    { "id": "team-ai", "name": "AI Platform Team", "userIds": ["user-alice"] },
+    { "id": "team-core", "name": "Core Engineering Team", "userIds": ["user-bob"] }
+  ],
+  "users": [
+    {
+      "id": "user-alice",
+      "name": "Alice",
+      "organizationIds": ["org-product"],
+      "licenseOrganizationId": "org-product",
+      "costCenterId": "cc-ai",
+      "licensePlan": "enterprise",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    },
+    {
+      "id": "user-bob",
+      "name": "Bob",
+      "organizationIds": ["org-platform"],
+      "licenseOrganizationId": "org-platform",
+      "costCenterId": "cc-core",
+      "licensePlan": "business",
+      "licenseStartsAt": "2026-09-01",
+      "licenseEndsAt": null,
+      "licenseEndMode": null
+    }
+  ],
+  "products": [
+    { "id": "ai-credits", "name": "Copilot AI credits", "unit": "AI credit", "unitPrice": 0.01, "billingMode": "aiCredits" },
+    { "id": "actions", "name": "Actions overage", "unit": "minute", "unitPrice": 0.008, "billingMode": "metered" }
+  ],
+  "budgets": [
+    { "id": "ulb-universal", "name": "Universal ULB", "budgetKind": "user", "userBudgetType": "universal", "scopeType": "enterprise", "scopeId": "ent-acme", "productId": "ai-credits", "amount": 50, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+    { "id": "ulb-ai-team", "name": "AI team ULB", "budgetKind": "user", "userBudgetType": "costCenter", "scopeType": "costCenter", "scopeId": "cc-ai", "productId": "ai-credits", "amount": 35, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+    { "id": "ulb-alice", "name": "Alice temporary ULB", "budgetKind": "user", "userBudgetType": "individual", "scopeType": "user", "scopeId": "user-alice", "productId": "ai-credits", "amount": 45, "effectiveFrom": "2026-09-01", "expiresAt": null, "enforcement": "hard", "thresholds": [75, 90, 100] },
+    { "id": "metered-enterprise", "name": "Enterprise AI overage", "budgetKind": "metered", "scopeType": "enterprise", "scopeId": "ent-acme", "productId": "ai-credits", "amount": 100, "effectiveFrom": "2026-09-01", "enforcement": "hard", "thresholds": [75, 90, 100] },
+    { "id": "metered-product-org", "name": "Product org AI overage", "budgetKind": "metered", "scopeType": "organization", "scopeId": "org-product", "productId": "ai-credits", "amount": 50, "effectiveFrom": "2026-09-01", "enforcement": "soft", "thresholds": [75, 90, 100] },
+    { "id": "metered-ai-team", "name": "AI team overage", "budgetKind": "metered", "scopeType": "costCenter", "scopeId": "cc-ai", "productId": "ai-credits", "amount": 30, "effectiveFrom": "2026-09-10", "enforcement": "hard", "thresholds": [75, 90, 100] }
+  ]
+}

@@ -25,6 +25,14 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 
 Resetting the simulator loads the default set selected in Configuration. Default set data lives in `scenarios/default-sets/*.json`, while `src/default-scenario-sets.js` only loads and expands those JSON definitions. The enterprise set contains 10 organizations, 20 cost centers, 20 repositories, and 200 licensed users across software engineering, data science, project management, security, SRE, analyst, and design personas. A compact two-user set remains available for focused demos and tests.
 
+New authoring uses reusable topology environments in `scenarios/environments/*.json`. They carry
+synthetic/import provenance, entities, products, and budgets, but no events or simulation date;
+guided definitions reference them with `environmentId` and keep usage in `seed` or scenario steps.
+The repository Default Set Generator and Scenario Generator document this workflow in
+`docs/scenario-studio.md` and preserve the legacy version-2 default-set and default-environment
+modes when explicitly requested. The checked-in `synthetic-compact` environment is shared by two
+guided scenarios as a small deterministic authoring example.
+
 The generated data keeps stable IDs such as `user-alice`, `user-bob`, `org-product`, `repo-portal`, `cc-ai`, and `cc-core` so guided scenarios and tests remain reviewable. A small group of enterprise users intentionally has no direct cost-center assignment, so budget attribution can demonstrate the enterprise and organization fallback behavior. Runtime imports are validated for duplicate IDs and broken references before replacing the active scenario.
 
 ## Run and test
