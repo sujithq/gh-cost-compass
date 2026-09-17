@@ -2,6 +2,7 @@ import { DEFAULT_SCENARIO_SET_ID, budgetInScope, bucketsForEvent, costCenterForU
 import { materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
+import { buildAssistantContext, createAssistantProvider } from "./assistant.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
@@ -17,6 +18,11 @@ let budgetHistoryTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
 let optimizedScope = { type: "enterprise", id: "" };
+const assistantProvider = createAssistantProvider();
+const assistantThread = [
+  { role: "assistant", text: "Ask about budgets, included headroom, or why the latest event was blocked. I can answer from the current browser state and GitHub billing guidance." },
+];
+let assistantDrawerOpen = false;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -399,6 +405,64 @@ function runScenarioToStep(stepIndex, message) {
   }
 }
 
+function renderAssistantPanel() {
+  const container = $("#assistant-thread");
+  if (!container) return;
+  const replay = replayScenario(scenario);
+  const latestResult = latestEventId ? replay.results.find((item) => item.eventId === latestEventId) : replay.results.at(-1) || null;
+  const context = buildAssistantContext(scenario, replay, { latestResult, selectedScope: optimizedScope });
+  container.innerHTML = assistantThread.map((message) => `
+    <div class="assistant-message assistant-message-${message.role}">
+      <div class="assistant-bubble">
+        <strong>${message.role === "assistant" ? "Assistant" : "You"}</strong>
+        <p>${escapeHtml(message.text)}</p>
+        ${message.sources?.length ? `<div class="assistant-sources">${message.sources.map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a>`).join("")}</div>` : ""}
+      </div>
+    </div>
+  `).join("");
+  const status = $("#assistant-status");
+  if (status) {
+    status.textContent = `${Number(context.includedPool?.remaining ?? 0).toLocaleString()} included credits remaining · ${context.risks.length ? `${context.risks[0].name} is the closest budget pressure` : "No current budget pressure"}`;
+  }
+  const launcher = $("#assistant-launcher");
+  if (launcher) {
+    launcher.setAttribute("aria-expanded", String(assistantDrawerOpen));
+    launcher.classList.toggle("assistant-launcher-open", assistantDrawerOpen);
+    launcher.hidden = assistantDrawerOpen;
+  }
+  const drawer = $("#assistant-drawer");
+  if (drawer) {
+    drawer.hidden = !assistantDrawerOpen;
+    drawer.setAttribute("aria-hidden", String(!assistantDrawerOpen));
+  }
+  document.body.classList.toggle("assistant-open", assistantDrawerOpen);
+}
+
+function setAssistantDrawerOpen(open) {
+  assistantDrawerOpen = open;
+  renderAssistantPanel();
+  if (open) $("#assistant-input")?.focus();
+}
+
+function askAssistantQuestion(event) {
+  if (event) event.preventDefault();
+  const input = $("#assistant-input");
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return;
+  assistantThread.push({ role: "user", text: value });
+  const replay = replayScenario(scenario);
+  const latestResult = latestEventId ? replay.results.find((item) => item.eventId === latestEventId) : replay.results.at(-1) || null;
+  const context = buildAssistantContext(scenario, replay, { latestResult, selectedScope: optimizedScope });
+  const answer = assistantProvider.answer(value, context);
+  assistantThread.push({ role: "assistant", text: answer.text, sources: answer.sources || [] });
+  input.value = "";
+  renderAssistantPanel();
+  if (answer.kind === "draft" && answer.draft) {
+    showToast("Draft proposal ready", { tone: "info", detail: "Validated and marked read-only until explicitly imported." });
+  }
+}
+
 function render() {
   const replay = replayScenario(scenario);
   const currency = scenario.enterprise.currency;
@@ -417,6 +481,7 @@ function render() {
   renderConfiguration();
   renderImpactPreviews();
   renderTimeline(replay, currency);
+  renderAssistantPanel();
   if (latestEventId) renderResult(replay, currency);
   announceSimulationFeedback(replay);
 }
@@ -1274,6 +1339,14 @@ $("#optimized-scope").addEventListener("change", (event) => {
 });
 $("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
+$("#assistant-launcher")?.addEventListener("click", () => setAssistantDrawerOpen(!assistantDrawerOpen));
+$("#assistant-collapse")?.addEventListener("click", () => setAssistantDrawerOpen(false));
+$$("[data-assistant-prompt]").forEach((button) => button.addEventListener("click", () => {
+  const input = $("#assistant-input");
+  if (!input) return;
+  input.value = button.dataset.assistantPrompt || "";
+  askAssistantQuestion();
+}));
 document.addEventListener("click", (event) => {
   // Tree chrome is checked before scope selection so that clicking a disclosure arrow inside a
   // clickable scope node only collapses the branch instead of also changing the inspected scope.
@@ -1409,6 +1482,7 @@ $("#usage-form").addEventListener("submit", (event) => {
   if (usage.date > scenario.simulationDate) scenario.simulationDate = usage.date;
   saveAndRender("Usage event simulated");
 });
+$("#assistant-form").addEventListener("submit", (event) => { askAssistantQuestion(event); });
 ["#usage-user", "#usage-repository", "#usage-product", "#usage-date"].forEach((selector) => $(selector).addEventListener("change", () => { renderSelectors(); renderApplicableControls(replayScenario(scenario), scenario.enterprise.currency); }));
 
 $("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.paidAiUsage = $("#paid-ai-usage").checked; scenario.enterprise.seatCreditPolicy = $("#seat-credit-policy").value || "prorated"; saveAndRender("Enterprise saved"); });

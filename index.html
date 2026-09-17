@@ -134,6 +134,30 @@
       </section>
     </main>
   </div>
+  <button id="assistant-launcher" class="assistant-launcher" type="button" aria-controls="assistant-drawer" aria-expanded="false">✦ <span>Ask assistant</span></button>
+  <aside id="assistant-drawer" class="assistant-drawer" aria-label="Budget health assistant" aria-hidden="true" hidden>
+    <article class="panel assistant-panel">
+      <div class="assistant-header">
+        <div>
+          <p class="eyebrow">AI ASSISTANT</p>
+          <h3>Budget assistant</h3>
+        </div>
+        <button id="assistant-collapse" type="button" class="text-button" aria-label="Collapse budget assistant">Collapse</button>
+      </div>
+      <span id="assistant-status" class="assistant-status">0 included credits remaining</span>
+      <div class="assistant-prompts" aria-label="Example assistant prompts">
+        <button type="button" data-assistant-prompt="Which budget is closest to risk right now?">Closest budget risk</button>
+        <button type="button" data-assistant-prompt="How much included AI credit headroom remains?">Included headroom</button>
+        <button type="button" data-assistant-prompt="Why was the latest usage blocked or accepted?">Latest event outcome</button>
+      </div>
+      <div id="assistant-thread" class="assistant-thread" aria-live="polite"></div>
+      <form id="assistant-form" class="assistant-form">
+        <label for="assistant-input" class="sr-only">Ask about budget health</label>
+        <textarea id="assistant-input" rows="2" placeholder="Ask a budget-health question..."></textarea>
+        <button type="submit" class="primary">Ask assistant</button>
+      </form>
+    </article>
+  </aside>
   <div id="toast-stack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
   <div id="budget-history-modal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal="true"></div>
