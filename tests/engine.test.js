@@ -787,6 +787,84 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   assert.equal(new Set(Object.values(paths)).size, 5);
 });
 
+test("cost-center-scoped user-level budgets use the cost-center icon, not the person icon", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  // A ULB's budgetKind is always "user", but userBudgetType distinguishes an individual person
+  // from a whole cost center; the icon/color helpers must branch on userBudgetType so a
+  // cost-center-wide ULB doesn't render as if it were a single named person.
+  assert.match(app, /if \(item\.userBudgetType === "costCenter"\) return \{ name: "costCenter", color: "cost-center", label: "Cost center-level budget" \};/);
+  assert.match(app, /if \(budget\.budgetKind === "user"\) return budget\.userBudgetType === "costCenter" \? "costCenter" : "user";/);
+  assert.match(app, /const colorClass = isUlb \? \(budget\.userBudgetType === "costCenter" \? "cost-center" : "user"\) : /);
+});
+
+test("the dashboard budget grid groups cards by type, collapsed by default", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /const BUDGET_GROUP_KINDS = \{/);
+  for (const label of ["Included AI-credit pools", "Enterprise budgets", "Organization budgets", "Cost center budgets", "Repository budgets", "User-level budgets", "Other budgets"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  // Groups must default to collapsed so an enterprise with many configured budgets isn't a wall of
+  // open cards; only a group an admin has explicitly toggled should stay open across re-renders.
+  assert.match(app, /function budgetGroupExpanded\(key, fallback = false\)/);
+  assert.match(app, /function budgetGroupKeyFor\(budget\)/);
+  assert.match(app, /data-budget-group-toggle="\$\{escapeHtml\(key\)\}" aria-expanded="\$\{open\}"/);
+  assert.match(app, /\$\{open \? `<div class="budget-group-body">/);
+  // The pool card and cost-center pools group under the same "pool" key as any other budget type.
+  assert.match(app, /const groups = new Map\(\[\["pool", \[poolCard, \.\.\.costCenterPoolCards\]\]\]\);/);
+  // Clicking a group's toggle button must flip its expansion state and re-render just the grid.
+  assert.match(app, /const budgetGroupToggle = event\.target\.closest\("\[data-budget-group-toggle\]"\);/);
+  assert.match(app, /budgetGroupExpansion\.set\(key, !open\);/);
+  assert.match(app, /renderBudgets\(replayScenario\(scenario\), scenario\.enterprise\.currency\);/);
+  assert.match(css, /\.budget-group-toggle\{/);
+  assert.match(css, /\.budget-group-body\{/);
+});
+
+test("user-level budgets are sub-grouped by type and sorted by percent, amount, then name when expanded", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // A ULB is an individual person, a whole cost center, or every licensed user; these are
+  // different enough item types that the "User-level budgets" group nests its own disclosures
+  // per sub-type instead of dumping them into one undifferentiated list.
+  assert.match(app, /const USER_BUDGET_SUBGROUP_KINDS = \{/);
+  for (const label of ["Individual budgets", "Cost center-scoped budgets", "All-user budgets"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  assert.match(app, /function userBudgetSubgroupKeyFor\(budget\)/);
+  assert.match(app, /function userBudgetSubgroupsHtml\(items\)/);
+  assert.match(app, /const groupKey = `user:\$\{subKey\}`;/);
+  // Sub-groups nest inside the "user" group's body instead of a flat card list.
+  assert.match(app, /const body = key === "user" \? userBudgetSubgroupsHtml\(items\) : sortBudgetItems\(items\)\.map\(\(item\) => item\.html\)\.join\(""\);/);
+  // Whenever a group or sub-group is open, its cards must be sorted by highest percent first,
+  // then largest budget amount, then alphabetically - never left in arbitrary replay order.
+  assert.match(app, /function sortBudgetItems\(items\) \{/);
+  assert.match(app, /b\.percent - a\.percent \|\| b\.amount - a\.amount \|\| a\.name\.localeCompare\(b\.name\)/);
+  assert.match(app, /subKey: isUlb \? userBudgetSubgroupKeyFor\(budget\) : undefined/);
+  assert.match(css, /\.budget-subgroup\{/);
+});
+
+test("single-card budget groups shrink to their item's column so multi-item groups get more room", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // The "Included AI-credit pools" group (and any other group with exactly one card, such as an
+  // enterprise with no cost-center pools) should not stretch across the full grid width; it gets
+  // a "solo" modifier so it only occupies a single column, leaving the rest of the row free for
+  // groups that actually need it.
+  assert.match(app, /const soloClass = items\.length === 1 \? " budget-group-solo" : "";/);
+  assert.match(app, /<div class="budget-group\$\{soloClass\}">/);
+  // Groups default to spanning the full grid row; only solo (single-card) groups are constrained
+  // back down to a single column.
+  assert.match(css, /\.budget-group\{grid-column:1\/-1;/);
+  assert.match(css, /\.budget-group-solo\{grid-column:span 1\}/);
+  // With the freed-up row width, the expanded user-level sub-groups render three columns of cards
+  // instead of two.
+  assert.match(css, /\.budget-subgroup-body\{grid-template-columns:repeat\(3,1fr\);/);
+});
+
 test("the hierarchy tree stays usable at enterprise scale", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
