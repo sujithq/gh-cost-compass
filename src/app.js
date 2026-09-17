@@ -770,7 +770,6 @@ function renderConfiguration() {
   $("#enterprise-currency").value = scenario.enterprise.currency;
   $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
   $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
-  $("#default-scenario-set").innerHTML = defaultScenarioSetOptions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === defaultScenarioSetId ? "selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.summary)}</option>`).join("");
   const reposByOrg = groupBy(scenario.repositories, (repo) => repo.organizationId);
   const costCenterMembers = new Map();
   for (const user of scenario.users) {
@@ -1010,6 +1009,11 @@ function changeScenarioDefinition(id) {
 }
 
 function renderGlobalScenarioHeader(definition, definitions) {
+  const defaultSetSelector = $("#default-scenario-set");
+  if (defaultSetSelector) {
+    defaultSetSelector.innerHTML = defaultScenarioSetOptions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === defaultScenarioSetId ? "selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.summary)}</option>`).join("");
+  }
+
   const selector = $("#global-scenario-definition");
   if (!selector) return;
   if (!definition) {
