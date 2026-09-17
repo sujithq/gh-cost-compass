@@ -15,11 +15,11 @@ The Simulation page contains a guided Scenario Studio. It runs a scenario one st
 - **Import definition** adds or replaces a custom scenario in browser storage.
 - **Export** downloads the selected definition as JSON.
 
-Previous and jump operations are deterministic: the runner recreates the default environment, applies `setup`, and then applies each step through the requested index. It does not attempt to undo mutable state.
+Previous and jump operations are deterministic: the runner resolves the selected reusable environment (or the legacy default environment), applies `seed` and `setup`, and then applies each step through the requested index. It does not attempt to undo mutable state.
 
 ## Default enterprise baseline
 
-Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. The enterprise baseline is a deterministic synthetic tenant with 10 organizations, 20 cost centers, 20 repositories, and 200 licensed users. The compact baseline keeps the original two-user demo shape for focused walkthroughs. The enterprise user set includes software engineers, data scientists, project managers, security engineers, SREs, analysts, and designers. Some users intentionally have `costCenterId: null`; those users can still consume the enterprise shared AI-credit pool and fall back to organization or enterprise budget attribution unless an organization-based cost-center assignment applies.
+Default baselines are stored as JSON in `scenarios/default-sets/` and selected from the Configuration view. Reusable topology environments are stored under `scenarios/environments/` and contain provenance, entities, products, and budgets, but no events or simulation date. Guided definitions can reference an `environmentId`, provide an inline `baseline` for a self-contained import, and add optional `seed` usage before `setup` and steps. Definitions without either field retain the legacy default-environment behavior.
 
 Built-in scenarios should prefer stable seed entities such as `user-alice`, `user-bob`, `org-product`, `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is not important. This keeps examples readable while the surrounding generated tenant gives the dashboard enterprise-scale context.
 
@@ -79,6 +79,6 @@ Cost-center scenarios can toggle `aiCreditPoolEnabled` and `aiCreditPoolCapMode`
 
 ## Adding scenarios
 
-Built-in definitions are standalone files under `scenarios/`. Add a scenario by creating a JSON file that references `scenario.schema.json`, then add its `id` and filename to `scenarios/catalog.json`. Catalog order controls dropdown order. The application loads and validates every catalog entry at startup; a missing file, duplicate ID, mismatched ID, invalid filename, or invalid definition produces a visible load error.
+Built-in definitions are standalone files under `scenarios/`. Add a scenario by creating a JSON file that references `scenario.schema.json`, then add its `id` and filename to `scenarios/catalog.json`. Add reusable environments as data files under `scenarios/environments/` and list them in `scenarios/environments/catalog.json`; no application-source registry edit is required. Catalog order controls dropdown order. The application loads and validates every catalog entry at startup; a missing file, duplicate ID, mismatched ID, invalid filename, invalid environment, or invalid definition produces a visible load error.
 
 `src/scenario-runner.js` now contains only validation and execution logic. `src/scenario-catalog.js` handles catalog loading. Custom definitions can still be imported through the Scenario Studio and remain in local browser storage. Tests discover and execute every catalog entry to verify that definitions remain valid, navigation can be reconstructed, and documented boundary outcomes still occur.
