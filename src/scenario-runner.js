@@ -1,4 +1,4 @@
-import { createDefaultScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, createDefaultScenario, defaultScenarioSetOptions } from "./engine.js";
 import { getEnvironment, validateMaterializedScenario, validateEnvironment } from "./environment.js";
 
 const COLLECTIONS = {
@@ -15,6 +15,14 @@ function clone(value) {
   return structuredClone(value);
 }
 
+const DEFAULT_SCENARIO_SET_IDS = new Set(defaultScenarioSetOptions.map((item) => item.id));
+
+export function resolveScenarioDefaultSetId(definition, selectedDefaultSetId = DEFAULT_SCENARIO_SET_ID) {
+  const authoredDefaultSetId = definition.defaultSetId;
+  if (authoredDefaultSetId) return authoredDefaultSetId;
+  return selectedDefaultSetId || DEFAULT_SCENARIO_SET_ID;
+}
+
 function applyMutation(scenario, mutation) {
   if (mutation.target === "enterprise") {
     Object.assign(scenario.enterprise, mutation.changes);
@@ -29,6 +37,8 @@ function applyMutation(scenario, mutation) {
 function validateDefinitionShape(definition) {
   if (!definition || definition.version !== 1) return "Scenario definition must use version 1.";
   if (!definition.id || !definition.title || !definition.summary) return "Scenario definition requires id, title, and summary.";
+  if (definition.defaultSetId && (definition.environmentId || definition.baseline)) return "Scenario definition cannot combine defaultSetId with environmentId or baseline.";
+  if (definition.defaultSetId && !DEFAULT_SCENARIO_SET_IDS.has(definition.defaultSetId)) return `Scenario default set not found: ${definition.defaultSetId}.`;
   if (definition.environmentId && !/^[a-z0-9][a-z0-9-]*$/.test(definition.environmentId)) return "Scenario environmentId must be a valid id.";
   if (definition.baseline !== undefined) {
     const baselineError = validateEnvironment({ ...definition.baseline, version: 1, id: definition.baseline.id || `${definition.id}-inline`, name: definition.baseline.name || definition.title, summary: definition.baseline.summary || definition.summary });
@@ -59,7 +69,7 @@ function baseScenarioForDefinition(definition, defaultSetId) {
     const { source, name, summary, ...topology } = structuredClone(definition.baseline);
     return normalizeEnvironmentScenario({ ...topology, version: 2, events: [], simulationDate: definition.startDate || source.createdAt.slice(0, 10), enterpriseTeams: topology.enterpriseTeams || [] });
   }
-  const scenario = createDefaultScenario(defaultSetId);
+  const scenario = createDefaultScenario(resolveScenarioDefaultSetId(definition, defaultSetId));
   scenario.events = [];
   scenario.simulationDate = definition.startDate || scenario.simulationDate;
   return scenario;

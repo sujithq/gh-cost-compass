@@ -2,6 +2,7 @@
   "$schema": "./scenario.schema.json",
   "version": 1,
   "id": "hard-stop-boundary",
+  "defaultSetId": "compact",
   "title": "User hard-stop boundary",
   "summary": "Reach a user-level budget exactly, then demonstrate atomic rejection of the next event.",
   "tags": [

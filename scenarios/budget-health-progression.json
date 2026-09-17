@@ -2,6 +2,7 @@
   "$schema": "./scenario.schema.json",
   "version": 1,
   "id": "budget-health-progression",
+  "defaultSetId": "compact",
   "title": "Budget health progression",
   "summary": "Move Alice's individual budget through healthy, warning, high-risk, and 100% states.",
   "tags": [

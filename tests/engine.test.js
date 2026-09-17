@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
-import { materializeScenario, validateScenarioDefinition } from "../src/scenario-runner.js";
+import { materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
 import { trimToastStack } from "../src/toast-stack.js";
@@ -102,6 +102,47 @@ test("guided scenario materialization can use a selected default set", () => {
   const compact = materializeScenario(definition, 0, { defaultSetId: "compact" });
   assert.equal(compact.users.length, 2);
   assert.equal(replayScenario(compact).pool.total, 5800);
+});
+
+test("authored guided scenario baselines override the selected default set", () => {
+  const definition = {
+    version: 1,
+    id: "authored-default-smoke",
+    title: "Authored default smoke",
+    summary: "Verifies a scenario keeps its authored baseline.",
+    defaultSetId: "compact",
+    steps: [{ id: "use-ai", type: "usage", title: "Use AI", description: "Alice uses credits.", expected: "Usage is accepted.", event: usage("unused", "2026-09-15", 100) }],
+  };
+  assert.equal(resolveScenarioDefaultSetId(definition, "enterprise"), "compact");
+  const scenario = materializeScenario(definition, 0, { defaultSetId: "enterprise" });
+  assert.equal(scenario.users.length, 2);
+  assert.equal(replayScenario(scenario).pool.total, 5800);
+});
+
+test("scenario definitions reject unknown authored baselines", () => {
+  const definition = {
+    version: 1,
+    id: "unknown-default",
+    title: "Unknown default",
+    summary: "Invalid baseline.",
+    defaultSetId: "missing",
+    steps: [{ id: "checkpoint", type: "checkpoint", title: "Checkpoint", description: "Pause.", expected: "No state changes." }],
+  };
+  assert.match(validateScenarioDefinition(definition), /default set not found/);
+  assert.throws(() => materializeScenario(definition), /default set not found/);
+});
+
+test("scenario definitions reject combining defaultSetId with an environment reference", () => {
+  const definition = {
+    version: 1,
+    id: "conflicting-baseline",
+    title: "Conflicting baseline",
+    summary: "Invalid combination.",
+    defaultSetId: "compact",
+    environmentId: "some-environment",
+    steps: [{ id: "checkpoint", type: "checkpoint", title: "Checkpoint", description: "Pause.", expected: "No state changes." }],
+  };
+  assert.match(validateScenarioDefinition(definition), /cannot combine defaultSetId/);
 });
 
 test("shared materialized validator enforces licensing and budget invariants", () => {
@@ -660,16 +701,20 @@ test("budget health scenario catalog stays aligned with the underlying progress 
 test("guided scenarios are declarative, reversible, and produce their documented outcomes", () => {
   for (const definition of BUILT_IN_SCENARIOS) {
     assert.equal(validateScenarioDefinition(definition), null);
+    assert.equal(definition.defaultSetId, "compact");
     const baseline = materializeScenario(definition, -1);
     const complete = materializeScenario(definition, definition.steps.length - 1);
     assert.equal(baseline.events.length, 0);
     assert.equal(complete.events.length, definition.steps.filter((step) => step.type === "usage").length);
     assert.deepEqual(materializeScenario(definition, -1), baseline);
+    for (let stepIndex = -1; stepIndex < definition.steps.length; stepIndex += 1) {
+      assert.deepEqual(materializeScenario(definition, stepIndex, { defaultSetId: "enterprise" }), materializeScenario(definition, stepIndex));
+    }
   }
 
-  // Outcome assertions below reference the user-alice / cc-ai fixtures and the credit arithmetic of
-  // the two-user tenant, so they pin the compact set rather than the enterprise default.
-  const compactAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "compact" });
+  // Built-in outcomes are authored against the compact two-user baseline. The explicit enterprise
+  // selection below must not change the materialized guided narrative.
+  const compactAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "enterprise" });
 
   const progression = BUILT_IN_SCENARIOS.find((item) => item.id === "budget-health-progression");
   const atNinety = replayScenario(compactAt(progression, 3));
@@ -690,6 +735,14 @@ test("guided scenarios are declarative, reversible, and produce their documented
   const blockedAtPool = replayScenario(compactAt(poolBlocks, 1));
   assert.equal(blockedAtPool.results.at(-1).status, "blocked");
   assert.match(blockedAtPool.results.at(-1).reason, /included AI credit pool cap/);
+
+  const sharedPool = BUILT_IN_SCENARIOS.find((item) => item.id === "pool-to-paid-overage");
+  const sharedPoolOverage = replayScenario(compactAt(sharedPool, 2));
+  assert.equal(sharedPoolOverage.results.at(-1).status, "accepted");
+  assert.equal(sharedPoolOverage.results.at(-1).includedQuantity, 0);
+  assert.equal(sharedPoolOverage.results.at(-1).meteredQuantity, 1000);
+  assert.equal(sharedPoolOverage.results.at(-1).cost, 10);
+  assert.deepEqual(sharedPoolOverage.results.at(-1).affectedBudgets.map((item) => item.budgetId), ["ulb-alice", "metered-enterprise", "metered-ai-team"]);
 
   const poolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-to-overage");
   const overage = replayScenario(compactAt(poolOverage, 1));

@@ -1,5 +1,5 @@
 import { DEFAULT_SCENARIO_SET_ID, budgetInScope, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
-import { materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
+import { materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
 
@@ -76,7 +76,7 @@ function selectedScenarioDefinition() {
 }
 
 function materializeScenarioForDefaultSet(definition, stepIndex) {
-  return materializeScenario(definition, stepIndex, { defaultSetId: defaultScenarioSetId });
+  return materializeScenario(definition, stepIndex, { defaultSetId: resolveScenarioDefaultSetId(definition, defaultScenarioSetId) });
 }
 
 function saveAndRender(message, { toast = true } = {}) {
@@ -294,6 +294,8 @@ function renderScenarioStudio() {
   ["#scenario-reset", "#export-scenario-definition"].forEach((id) => { $(id).disabled = false; });
   $("#scenario-title").textContent = definition.title;
   $("#scenario-summary").textContent = definition.summary;
+  const scenarioDefaultSet = defaultScenarioSetOptions.find((item) => item.id === resolveScenarioDefaultSetId(definition, defaultScenarioSetId));
+  $("#scenario-summary").textContent = `${definition.summary} Baseline: ${scenarioDefaultSet?.name || "repository default"}.`;
   $("#scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
   const sources = (definition.sourceUrls || []).map(safeSourceUrl).filter(Boolean);
   $("#scenario-sources").innerHTML = sources.length ? sources.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Source ${index + 1}</a>`).join("") : `<span class="muted">No external sources supplied</span>`;

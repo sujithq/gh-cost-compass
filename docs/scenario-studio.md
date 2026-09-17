@@ -33,6 +33,7 @@ Scenario definitions use version 1:
   "id": "example-scenario",
   "title": "Example scenario",
   "summary": "What this scenario demonstrates.",
+  "defaultSetId": "compact",
   "tags": ["budget health"],
   "sourceUrls": [
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
@@ -63,6 +64,13 @@ Scenario definitions use version 1:
   ]
 }
 ```
+
+`defaultSetId` is optional for backward compatibility with imported definitions. When present, it
+is the authored baseline for every preview, reset, jump, and replay, regardless of the ad hoc
+default set selected in Configuration. The runner rejects unknown default-set IDs. Definitions
+without `defaultSetId` use the currently selected default set, which is the legacy behavior for
+custom definitions; built-in scenarios should always declare the baseline their documented outcomes
+were authored against.
 
 ## Supported step types
 
