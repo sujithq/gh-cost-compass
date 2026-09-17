@@ -711,7 +711,7 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const simulateIndex = html.indexOf('data-view="simulate"');
   const optimizedIndex = html.indexOf('data-view="optimized"');
-  assert.ok(simulateIndex > -1 && optimizedIndex > simulateIndex, "Optimized UI nav item should come after Simulate usage");
+  assert.ok(simulateIndex > -1 && optimizedIndex > -1, "Simulate and optimized views should both remain available");
   assert.match(html, /nav-item nav-subitem" data-view="optimized"/);
 
   // The timeline bar must sit above the first page section so it is shared by every view.
@@ -728,7 +728,33 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /function updateBucketPanel\(/);
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);
+});
+
+test("sidebar collapses from its in-panel brand control without changing the app grid structure", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(html, /<aside class="sidebar">\s*<button[^>]+id="sidebar-toggle"/);
+  assert.match(html, /id="sidebar-toggle"[^>]+aria-expanded="true"/);
+  assert.match(app, /classList\.toggle\("sidebar-collapsed", collapsed\)/);
+  assert.match(app, /setAttribute\("aria-expanded", String\(!collapsed\)\)/);
+  assert.match(styles, /\.app-shell\.sidebar-collapsed\{grid-template-columns:86px 1fr\}/);
+  assert.match(styles, /\.sidebar-collapsed #navigation[^}]*display:none/);
   assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
+});
+
+test("custom usage events have a dedicated Simulate subpage", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const guidedStart = html.indexOf('<section id="simulate" class="view">');
+  const customStart = html.indexOf('<section id="custom-event" class="view">');
+  const usageForm = html.indexOf('id="usage-form"');
+
+  assert.match(html, /data-view="custom-event"[^>]*>[\s\S]*?Run custom event<\/button>/);
+  assert.ok(guidedStart > -1 && customStart > guidedStart, "Custom event should follow the guided scenario view");
+  assert.ok(usageForm > customStart, "Usage form should live inside the custom event view");
+  assert.match(app, /"custom-event": "Run custom event"/);
 });
 
 test("assistant is available globally as a collapsible side panel", async () => {
@@ -1321,4 +1347,3 @@ test("changing the scenario definition rematerializes the scenario before render
   // Importing a custom scenario selects it, so it must take the same rematerialize-and-render path.
   assert.match(app, /changeScenarioDefinition\(definitions\.at\(-1\)\.id\)/);
 });
-

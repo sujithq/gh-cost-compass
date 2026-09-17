@@ -11,11 +11,18 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">⌁</span><div><strong>Copilot Budget Lab</strong><small>Safe simulation sandbox</small></div></div>
+      <button type="button" class="brand-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="true">
+        <span class="brand-mark">⌁</span>
+        <div><strong>Copilot Budget Lab</strong><small>Safe simulation sandbox</small></div>
+      </button>
       <nav id="navigation">
         <button class="nav-item active" data-view="dashboard">▦ Dashboard</button>
-        <button class="nav-item" data-view="simulate">▶ Simulate usage</button>
-        <button class="nav-item nav-subitem" data-view="optimized"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/></svg> Optimized UI</button>
+        <details class="nav-detail" open>
+          <summary>▶ Simulate</summary>
+          <button class="nav-item nav-subitem" data-view="optimized"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/></svg> Budget controls review</button>
+          <button class="nav-item nav-subitem" data-view="simulate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4Z"/></svg> Run a guided scenario</button>
+          <button class="nav-item nav-subitem" data-view="custom-event"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg> Run custom event</button>
+        </details>
         <button class="nav-item" data-view="configuration">⚙ Configuration</button>
         <button class="nav-item" data-view="timeline">≡ Timeline & alerts</button>
       </nav>
@@ -101,7 +108,9 @@
             <div id="scenario-outcome" class="scenario-outcome" aria-live="polite"></div>
           </div>
         </article>
+      </section>
 
+      <section id="custom-event" class="view">
         <div class="section-heading"><div><p class="eyebrow">AD HOC TESTING</p><h2>Run a custom event</h2></div><span class="pill">Same-page outcome</span></div>
         <div class="simulation-layout">
           <article class="panel sticky-panel"><p class="eyebrow">NEW EVENT</p><h2>Consume usage</h2><p class="muted">Create a dated usage event and immediately see every affected budget.</p>
