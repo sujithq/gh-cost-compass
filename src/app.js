@@ -1520,7 +1520,7 @@ function navigate(view) {
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === view));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
   $("#global-timeline-bar").classList.toggle("hidden", view === "configuration");
-  $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Optimized UI", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
+  $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Budget controls review", simulate: "Run a guided scenario", "custom-event": "Run custom event", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
   renderAssistantPanel();
 }
 
@@ -1537,6 +1537,14 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
+const appShell = () => document.querySelector(".app-shell");
+function toggleSidebar(force) {
+  const collapsed = typeof force === "boolean" ? force : !appShell().classList.contains("sidebar-collapsed");
+  appShell().classList.toggle("sidebar-collapsed", collapsed);
+  const toggle = document.getElementById("sidebar-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", String(!collapsed));
+}
+$("#sidebar-toggle")?.addEventListener("click", () => toggleSidebar());
 $("#global-scenario-definition").addEventListener("change", (event) => changeScenarioDefinition(event.target.value));
 $("#optimized-scope-type").addEventListener("change", (event) => {
   optimizedScope = { type: event.target.value, id: "" };
