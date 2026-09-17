@@ -1081,6 +1081,8 @@ test("simulation page previews selected steps before explicit execution", async 
   assert.match(app, /No scenarios compatible with/);
   assert.match(app, /reconcileScenarioSelection/);
   assert.match(app, /defaultSetId: defaultScenarioSetId/);
+  assert.match(app, /scenario = materializeScenarioForDefaultSet\(definition, -1\)/);
+  assert.match(app, /saveAndRender\("Scenario reset to its baseline"\)/);
 });
 
 test("toast trimming removes excess notifications synchronously", () => {
