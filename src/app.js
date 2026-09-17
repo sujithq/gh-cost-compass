@@ -1146,14 +1146,18 @@ function renderOptimizedBuckets(replay) {
   // The enterprise-wide pool is presented as a collapsible parent whose total is every licensed
   // seat's contribution (`grandTotal`), with the shared remainder and any cost-center reservations
   // nested underneath as children — reservations partition the same pool, they don't shrink it.
+  // When no cost center in scope has reserved a slice of the pool, there is nothing to subdivide:
+  // render a single flat "Included AI-credit pool" row instead of a tree with a redundant "shared"
+  // child that would just repeat the same total.
   const poolRootKey = "pool-total";
-  const poolExpanded = bucketExpanded(poolRootKey, true);
-  const poolRoot = { stateId: poolRootKey, displayName: "Included AI-credit pool", spent: replay.pool.grandConsumed, amount: replay.pool.grandTotal, remaining: replay.pool.grandRemaining, percent: replay.pool.grandPercent, budgetKind: "pool", aggregate: true, hasChildren: true, expanded: poolExpanded };
-  const sharedPool = { stateId: "pool", displayName: "Shared included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool", parentId: poolRootKey };
   const scopedUserIds = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
   const visibleCostCenterPools = replay.costCenterPoolStates.filter((item) => optimizedScope.type === "enterprise"
     || (optimizedScope.type === "costCenter" && item.costCenterId === optimizedScope.id)
     || [...scopedUserIds].some((userId) => costCenterForUser(scenario, scenario.users.find((user) => user.id === userId))?.id === item.costCenterId));
+  const hasCostCenterPools = visibleCostCenterPools.length > 0;
+  const poolExpanded = hasCostCenterPools && bucketExpanded(poolRootKey, true);
+  const poolRoot = { stateId: poolRootKey, displayName: "Included AI-credit pool", spent: replay.pool.grandConsumed, amount: replay.pool.grandTotal, remaining: replay.pool.grandRemaining, percent: replay.pool.grandPercent, budgetKind: "pool", aggregate: true, hasChildren: hasCostCenterPools, expanded: poolExpanded };
+  const sharedPool = { stateId: "pool", displayName: "Shared included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool", parentId: poolRootKey };
   const costCenterPools = visibleCostCenterPools.map((item) => ({
     ...item,
     budgetKind: "pool",
@@ -1180,7 +1184,7 @@ function renderOptimizedBuckets(replay) {
   const configHost = $("#optimized-scope-config");
   if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
-    { title: includedCreditsTitle, items: poolExpanded ? [poolRoot, sharedPool, ...costCenterPools] : [poolRoot], note: includedCreditsNote },
+    { title: includedCreditsTitle, items: hasCostCenterPools ? (poolExpanded ? [poolRoot, sharedPool, ...costCenterPools] : [poolRoot]) : [poolRoot], note: includedCreditsNote },
     { title: "User-level budgets", items: userBudgets, note: `User-level budgets always stop usage based on total AI-credit value${scopeNote}.` },
     { title: "Budget controls", items: meteredBudgets, note: `Budgets and alerts track paid metered overage after included credits${scopeNote}.` },
   ]);

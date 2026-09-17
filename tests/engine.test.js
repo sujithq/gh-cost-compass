@@ -608,6 +608,17 @@ test("the Included credits panel renders the pool as a collapsible tree with cos
   assert.match(app, /replay\.pool\.licenseBreakdown/);
 });
 
+test("the Included credits pool renders as a single flat row, not a tree, when no cost center reserves a slice of the pool", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  // hasCostCenterPools must gate both the toggle (hasChildren/expanded) on the root row and whether
+  // the shared-pool/cost-center children are even added to the rendered items list — otherwise a
+  // scenario with no cost-center AI credit pool enabled would still show a pointless expand arrow
+  // and a redundant "Shared included AI-credit pool" child that just repeats the same total.
+  assert.match(app, /const hasCostCenterPools = visibleCostCenterPools\.length > 0;/);
+  assert.match(app, /hasChildren: hasCostCenterPools, expanded: poolExpanded/);
+  assert.match(app, /items: hasCostCenterPools \? \(poolExpanded \? \[poolRoot, sharedPool, \.\.\.costCenterPools\] : \[poolRoot\]\) : \[poolRoot\]/);
+});
+
 test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
