@@ -1161,3 +1161,28 @@ test("configuration UI drops simulator-only cost center jargon", async () => {
   assert.match(app, /attributed licenses/);
   assert.match(html, /id="optimized-scope-config"/);
 });
+
+test("guided scenario baselines differ, so switching scenarios must rematerialize the active scenario", () => {
+  const baseline = (id) => materializeScenario(BUILT_IN_SCENARIOS.find((item) => item.id === id), -1);
+  const pooled = baseline("cost-center-pool-blocks");
+  const plain = baseline("budget-health-progression");
+  // The pool scenario enables a cost center AI credit pool in setup; the progression scenario does not.
+  assert.ok(pooled.costCenters.some((item) => item.aiCreditPoolEnabled));
+  assert.notDeepEqual(pooled.costCenters, plain.costCenters);
+});
+
+test("changing the scenario definition rematerializes the scenario before rendering", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const body = app.replace(/\r\n/g, "\n").slice(app.replace(/\r\n/g, "\n").indexOf("function changeScenarioDefinition("));
+  const changeScenarioDefinition = body.slice(0, body.indexOf("\n}\n") + 2);
+  assert.match(changeScenarioDefinition, /selectedScenarioDefinition\(\)/);
+  assert.match(changeScenarioDefinition, /scenario = materializeScenarioForDefaultSet\(definition, -1\)/);
+  // The reassignment must happen before render(), which only replays whatever `scenario` holds.
+  assert.ok(changeScenarioDefinition.indexOf("materializeScenarioForDefaultSet") < changeScenarioDefinition.lastIndexOf("\n  render();"));
+  // Both scenario selectors share the one handler, so neither can go stale.
+  assert.match(app, /\$\("#global-scenario-definition"\)\.addEventListener\("change", \(event\) => changeScenarioDefinition\(event\.target\.value\)\)/);
+  assert.match(app, /\$\("#scenario-definition"\)\.addEventListener\("change", \(event\) => changeScenarioDefinition\(event\.target\.value\)\)/);
+  // Importing a custom scenario selects it, so it must take the same rematerialize-and-render path.
+  assert.match(app, /changeScenarioDefinition\(definitions\.at\(-1\)\.id\)/);
+});
+

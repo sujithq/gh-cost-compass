@@ -1000,6 +1000,11 @@ function changeScenarioDefinition(id) {
   }
   scenarioRun = { definitionId: id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
   latestEventId = null;
+  // render() only replays whatever `scenario` currently holds, so the newly selected definition must be
+  // materialized at its baseline here. Without this the hierarchy, pools, and budgets keep showing the
+  // previously selected scenario while only the title, summary, and timeline change.
+  const definition = selectedScenarioDefinition();
+  if (definition) scenario = materializeScenarioForDefaultSet(definition, -1);
   render();
 }
 
@@ -1473,8 +1478,7 @@ $("#import-scenario-definition").addEventListener("change", async (event) => {
       customScenarioDefinitions.push(definition);
     }
     localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(customScenarioDefinitions));
-    scenarioRun = { definitionId: definitions.at(-1).id, stepIndex: -1, selectedStepIndex: 0, started: false, runAllArmed: false };
-    renderScenarioStudio();
+    changeScenarioDefinition(definitions.at(-1).id);
     showToast(`${definitions.length} scenario definition${definitions.length === 1 ? "" : "s"} imported`);
   } catch (error) {
     showToast(`Scenario import failed: ${error.message}`, { tone: "danger" });
