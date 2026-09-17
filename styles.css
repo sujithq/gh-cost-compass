@@ -54,3 +54,22 @@
 .assistant-drawer .assistant-form{position:sticky;bottom:0;background:var(--panel)}
 .toast-stack{bottom:88px}
 @media(max-width:760px){.assistant-open .app-shell{display:none}.assistant-launcher{right:16px;bottom:16px}.assistant-launcher span{display:none}.assistant-drawer{width:100vw;padding:12px}.assistant-drawer .assistant-panel{min-height:calc(100vh - 24px)}.assistant-form{flex-direction:column;align-items:stretch}.assistant-form button{align-self:auto}}
+
+.assistant-drawer .assistant-panel{gap:18px;padding:24px}
+.assistant-drawer .assistant-header{align-items:flex-start}
+.assistant-drawer .assistant-header h3{font-size:20px;line-height:1.2;letter-spacing:-.01em}
+.assistant-drawer .assistant-header .text-button{font-size:13px;font-weight:700}
+.assistant-status{display:block;max-width:100%;padding:12px 14px;border-radius:18px;background:#f0edff;color:#5643d8;font-size:13px;font-weight:750;line-height:1.45}
+.assistant-prompts{order:3;margin-top:auto;padding-top:12px;border-top:1px solid var(--line)}
+.assistant-prompts button{border-radius:14px;background:#f6f4ff;color:#5947d7;border:1px solid #ded8ff;font-size:12px;font-weight:650;line-height:1.2}
+.assistant-prompts button:disabled{opacity:.55}
+.assistant-form{order:4;padding-top:0;border-top:0}
+.assistant-form textarea{font-size:14px;line-height:1.45}
+.assistant-bubble{border-radius:16px;font-size:15px;line-height:1.5}
+.assistant-bubble strong{font-size:11px;letter-spacing:.04em}
+.assistant-typing-dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.assistant-typing-dots i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;animation:assistant-dot 1s infinite ease-in-out}
+.assistant-typing-dots i:nth-child(2){animation-delay:.15s}.assistant-typing-dots i:nth-child(3){animation-delay:.3s}
+.assistant-stream-caret{display:inline-block;width:7px;height:1em;margin-left:2px;background:var(--accent);vertical-align:-.15em;animation:assistant-caret .8s steps(1) infinite}
+@keyframes assistant-dot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-2px)}}@keyframes assistant-caret{50%{opacity:0}}
+@media(max-width:760px){.assistant-drawer .assistant-panel{padding:20px}.assistant-prompts{margin-top:0}}

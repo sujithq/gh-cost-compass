@@ -145,16 +145,12 @@
         <button id="assistant-collapse" type="button" class="text-button" aria-label="Collapse budget assistant">Collapse</button>
       </div>
       <span id="assistant-status" class="assistant-status">0 included credits remaining</span>
-      <div class="assistant-prompts" aria-label="Example assistant prompts">
-        <button type="button" data-assistant-prompt="Which budget is closest to risk right now?">Closest budget risk</button>
-        <button type="button" data-assistant-prompt="How much included AI credit headroom remains?">Included headroom</button>
-        <button type="button" data-assistant-prompt="Why was the latest usage blocked or accepted?">Latest event outcome</button>
-      </div>
       <div id="assistant-thread" class="assistant-thread" aria-live="polite"></div>
+      <div id="assistant-prompts" class="assistant-prompts" aria-label="Suggested assistant prompts"></div>
       <form id="assistant-form" class="assistant-form">
         <label for="assistant-input" class="sr-only">Ask about budget health</label>
         <textarea id="assistant-input" rows="2" placeholder="Ask a budget-health question..."></textarea>
-        <button type="submit" class="primary">Ask assistant</button>
+        <button id="assistant-submit" type="submit" class="primary">Ask assistant</button>
       </form>
     </article>
   </aside>
