@@ -47,6 +47,28 @@ npm test
 
 Open <http://localhost:4173>.
 
+## Open the canvas app from a Copilot chat/CLI session
+
+If you're working in this repository through a GitHub Copilot app or CLI session that supports
+canvases, you don't need to run `npm start` yourself — just ask your agent to open it, for example:
+
+> Open the Copilot Budget Lab canvas
+
+The agent opens the project-scoped `budget-lab` canvas extension
+(`.github/extensions/budget-lab/`), which starts the same static app on a private loopback server
+and shows it as a side panel. By default the panel opens with the scripted, deterministic
+assistant, identical to `npm start` — nothing changes for other contributors or repositories that
+haven't opted in.
+
+To try the experimental Copilot-backed assistant in that same panel instead, ask:
+
+> Open the Copilot Budget Lab canvas with the Copilot assistant enabled
+
+which asks the agent to pass `assistantBackend: "copilot"` as the canvas input. Each opened panel
+(`instanceId`) remembers its own backend choice, so a scripted instance and a Copilot instance can
+be open side by side. Closing the panel shuts down its private server; reopening it starts a fresh
+one.
+
 The standalone app always uses the scripted, deterministic assistant. The experimental
 Copilot-backed assistant is enabled only when the project-scoped `budget-lab` canvas extension
 opens the app with its `assistantBackend` input explicitly set to `copilot`. That canvas setting
