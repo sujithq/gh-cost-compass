@@ -8,6 +8,112 @@ const GITHUB_DOCS = [
   { title: "Budgets and alerts", url: "https://docs.github.com/en/billing/concepts/budgets-and-alerts" },
 ];
 
+export const ASSISTANT_BACKENDS = Object.freeze({
+  scripted: "scripted",
+  copilot: "copilot",
+});
+
+export function resolveAssistantBackend(search = "") {
+  const configured = new URLSearchParams(search).get("assistantBackend");
+  return configured === ASSISTANT_BACKENDS.copilot ? ASSISTANT_BACKENDS.copilot : ASSISTANT_BACKENDS.scripted;
+}
+
+function renderAssistantInlineMarkdown(value) {
+  return escapeAssistantHtml(value)
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]\n]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+}
+
+function escapeAssistantHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;",
+  })[char]);
+}
+
+export function renderAssistantMarkdown(value) {
+  const lines = String(value ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const html = [];
+  let listType = "";
+  let inCode = false;
+  let codeLines = [];
+
+  const closeList = () => {
+    if (!listType) return;
+    html.push(`</${listType}>`);
+    listType = "";
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.startsWith("```")) {
+      closeList();
+      if (inCode) {
+        html.push(`<pre><code>${escapeAssistantHtml(codeLines.join("\n"))}</code></pre>`);
+        codeLines = [];
+      }
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+    if (!line.trim()) {
+      closeList();
+      continue;
+    }
+
+    const nextLine = lines[index + 1] || "";
+    if (line.includes("|") && /^\s*\|?[\s:-]+(?:\|[\s:-]+)+\|?\s*$/.test(nextLine)) {
+      closeList();
+      const headers = line.replace(/^\||\|$/g, "").split("|");
+      const rows = [];
+      index += 2;
+      while (index < lines.length && lines[index].includes("|") && lines[index].trim()) {
+        rows.push(lines[index].replace(/^\||\|$/g, "").split("|"));
+        index += 1;
+      }
+      index -= 1;
+      html.push(`<div class="assistant-table-wrap"><table><thead><tr>${headers.map((cell) => `<th>${renderAssistantInlineMarkdown(cell.trim())}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderAssistantInlineMarkdown(cell.trim())}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      continue;
+    }
+
+    const heading = /^(#{1,4})\s+(.+)$/.exec(line);
+    if (heading) {
+      closeList();
+      const level = Math.min(heading[1].length + 2, 6);
+      html.push(`<h${level}>${renderAssistantInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const unordered = /^\s*[-*]\s+(.+)$/.exec(line);
+    const ordered = /^\s*\d+\.\s+(.+)$/.exec(line);
+    if (unordered || ordered) {
+      const nextType = unordered ? "ul" : "ol";
+      if (listType !== nextType) {
+        closeList();
+        listType = nextType;
+        html.push(`<${listType}>`);
+      }
+      html.push(`<li>${renderAssistantInlineMarkdown((unordered || ordered)[1])}</li>`);
+      continue;
+    }
+
+    closeList();
+    html.push(`<p>${renderAssistantInlineMarkdown(line)}</p>`);
+  }
+
+  closeList();
+  if (inCode || codeLines.length) html.push(`<pre><code>${escapeAssistantHtml(codeLines.join("\n"))}</code></pre>`);
+  return html.join("");
+}
+
 function asSafeList(items, max = 5) {
   return items.slice(0, max).map((item) => ({
     id: item.stateId,
@@ -224,6 +330,49 @@ export function createAssistantProvider(options = {}) {
         kind: "summary",
         text: `This tenant is ${context.enterprise || "the active enterprise"} on ${context.date || "the current simulation date"}. The shared included AI-credit pool has ${Number(pool.remaining).toLocaleString()} credits left out of ${Number(pool.total).toLocaleString()} (${percent(pool.percent)} consumed). Top budget pressure is ${context.risks[0] ? `${context.risks[0].name} at ${percent(context.risks[0].percent)}` : "currently stable"}.`,
         sources: docs,
+      };
+    },
+  };
+}
+
+export function createCopilotAssistantProvider(options = {}) {
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const endpoint = options.endpoint || "/api/assistant";
+
+  return {
+    async configuration() {
+      if (typeof fetchImpl !== "function") throw new Error("The Copilot assistant backend is not available in this browser.");
+      const response = await fetchImpl(endpoint, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(`Copilot assistant configuration failed with HTTP ${response.status}.`);
+      return response.json();
+    },
+
+    async answer(question, context = {}, settings = {}) {
+      if (typeof fetchImpl !== "function") throw new Error("The Copilot assistant backend is not available in this browser.");
+      const response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, context, settings }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error || `Copilot assistant request failed with HTTP ${response.status}.`);
+      }
+
+      const answer = await response.json();
+      if (!answer || typeof answer.text !== "string" || !answer.text.trim()) {
+        throw new Error("The Copilot assistant returned an invalid response.");
+      }
+
+      const sources = Array.isArray(answer.sources)
+        ? answer.sources.filter((source) => GITHUB_DOCS.some((doc) => doc.url === source?.url)).slice(0, GITHUB_DOCS.length)
+        : [];
+      const draft = answer.draft && validateAssistantDraft(answer.draft).ok ? answer.draft : null;
+      return {
+        kind: typeof answer.kind === "string" ? answer.kind : "copilot",
+        text: answer.text.trim(),
+        sources,
+        ...(draft ? { draft } : {}),
       };
     },
   };

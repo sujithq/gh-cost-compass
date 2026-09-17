@@ -2,7 +2,7 @@ import { DEFAULT_SCENARIO_SET_ID, budgetInScope, budgetStopsUsage, bucketsForEve
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
-import { buildAssistantContext, createAssistantProvider } from "./assistant.js";
+import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend } from "./assistant.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
@@ -18,11 +18,19 @@ let budgetHistoryTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
 let optimizedScope = { type: "enterprise", id: "" };
-const assistantProvider = createAssistantProvider();
+const assistantBackend = resolveAssistantBackend(window.location.search);
+const assistantProvider = assistantBackend === ASSISTANT_BACKENDS.copilot ? createCopilotAssistantProvider() : createAssistantProvider();
+const assistantSettings = { model: "current", optimizedFor: "balance" };
 const assistantThread = [
-  { role: "assistant", text: "Ask about budgets, included headroom, or why the latest event was blocked. I can answer from the current browser state and GitHub billing guidance." },
+  {
+    role: "assistant",
+    text: assistantBackend === ASSISTANT_BACKENDS.copilot
+      ? "Ask about budgets, included headroom, or why the latest event was blocked. Copilot answers from the current simulator state and GitHub billing guidance."
+      : "Ask about budgets, included headroom, or why the latest event was blocked. I can answer from the current browser state and GitHub billing guidance.",
+  },
 ];
 let assistantDrawerOpen = false;
+let assistantFullscreen = false;
 let assistantBusy = false;
 let currentView = "dashboard";
 let lastAssistantQuestion = "";
@@ -476,7 +484,7 @@ function assistantPromptOptions(context) {
 function assistantMessageHtml(message) {
   const body = message.loading
     ? `<p><span>Loading budget data</span><span class="assistant-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></p>`
-    : `<p>${escapeHtml(message.text)}${message.streaming ? `<span class="assistant-stream-caret" aria-hidden="true"></span>` : ""}</p>`;
+    : `<div class="assistant-markdown">${renderAssistantMarkdown(message.text)}${message.streaming ? `<span class="assistant-stream-caret" aria-hidden="true"></span>` : ""}</div>`;
   return `
     <div class="assistant-message assistant-message-${message.role}${message.loading ? " assistant-message-loading" : ""}">
       <div class="assistant-bubble">
@@ -486,6 +494,33 @@ function assistantMessageHtml(message) {
       </div>
     </div>
   `;
+}
+
+async function loadAssistantConfiguration() {
+  if (assistantBackend !== ASSISTANT_BACKENDS.copilot) return;
+  const settings = $("#assistant-model-settings");
+  if (settings) settings.hidden = false;
+  try {
+    const configuration = await assistantProvider.configuration();
+    const model = $("#assistant-model");
+    if (model) {
+      const currentName = configuration.currentModel?.name || configuration.currentModel?.id || "conversation model";
+      model.innerHTML = [
+        `<option value="current">Use conversation model (${escapeHtml(currentName)})</option>`,
+        '<option value="auto">Auto</option>',
+        ...(configuration.models || []).filter((item) => item.id !== "auto").map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`),
+      ].join("");
+      model.value = assistantSettings.model;
+    }
+  } catch (error) {
+    const model = $("#assistant-model");
+    if (model) model.innerHTML = '<option value="current">Model list unavailable</option>';
+  }
+}
+
+function updateAssistantOptimizationControl() {
+  const optimizedFor = $("#assistant-optimized-for");
+  if (optimizedFor) optimizedFor.disabled = assistantSettings.model !== "auto";
 }
 
 function renderAssistantPanel() {
@@ -518,14 +553,27 @@ function renderAssistantPanel() {
   if (drawer) {
     drawer.hidden = !assistantDrawerOpen;
     drawer.setAttribute("aria-hidden", String(!assistantDrawerOpen));
+    drawer.classList.toggle("fullscreen", assistantFullscreen);
+  }
+  const fullscreenToggle = $("#assistant-fullscreen");
+  if (fullscreenToggle) {
+    fullscreenToggle.setAttribute("aria-pressed", String(assistantFullscreen));
+    fullscreenToggle.setAttribute("aria-label", assistantFullscreen ? "Exit full screen" : "Expand budget assistant to full screen");
+    fullscreenToggle.textContent = assistantFullscreen ? "⤡" : "⤢";
   }
   document.body.classList.toggle("assistant-open", assistantDrawerOpen);
 }
 
 function setAssistantDrawerOpen(open) {
   assistantDrawerOpen = open;
+  if (!open) assistantFullscreen = false;
   renderAssistantPanel();
   if (open) $("#assistant-input")?.focus();
+}
+
+function setAssistantFullscreen(full) {
+  assistantFullscreen = full;
+  renderAssistantPanel();
 }
 
 async function streamAssistantMessage(message, text) {
@@ -553,19 +601,26 @@ async function askAssistantQuestion(event) {
   const assistantMessage = { role: "assistant", text: "", loading: true };
   assistantThread.push(assistantMessage);
   renderAssistantPanel();
-  await sleep(ASSISTANT_THINK_DELAY_MS);
-  const answer = assistantProvider.answer(value, context);
-  assistantMessage.loading = false;
-  assistantMessage.streaming = true;
-  renderAssistantPanel();
-  await streamAssistantMessage(assistantMessage, answer.text);
-  assistantMessage.streaming = false;
-  assistantMessage.sources = answer.sources || [];
-  lastAssistantQuestion = value;
-  assistantBusy = false;
-  renderAssistantPanel();
-  if (answer.kind === "draft" && answer.draft) {
-    showToast("Draft proposal ready", { tone: "info", detail: "Validated and marked read-only until explicitly imported." });
+  try {
+    if (assistantBackend === ASSISTANT_BACKENDS.scripted) await sleep(ASSISTANT_THINK_DELAY_MS);
+    const answer = await assistantProvider.answer(value, context, assistantSettings);
+    assistantMessage.loading = false;
+    assistantMessage.streaming = true;
+    renderAssistantPanel();
+    await streamAssistantMessage(assistantMessage, answer.text);
+    assistantMessage.streaming = false;
+    assistantMessage.sources = answer.sources || [];
+    lastAssistantQuestion = value;
+    if (answer.kind === "draft" && answer.draft) {
+      showToast("Draft proposal ready", { tone: "info", detail: "Validated and marked read-only until explicitly imported." });
+    }
+  } catch (error) {
+    assistantMessage.loading = false;
+    assistantMessage.text = `Copilot assistant unavailable: ${error.message}`;
+    assistantMessage.sources = [];
+  } finally {
+    assistantBusy = false;
+    renderAssistantPanel();
   }
 }
 
@@ -1558,6 +1613,14 @@ $("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(sce
 $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
 $("#assistant-launcher")?.addEventListener("click", () => setAssistantDrawerOpen(!assistantDrawerOpen));
 $("#assistant-collapse")?.addEventListener("click", () => setAssistantDrawerOpen(false));
+$("#assistant-fullscreen")?.addEventListener("click", () => setAssistantFullscreen(!assistantFullscreen));
+$("#assistant-model")?.addEventListener("change", (event) => {
+  assistantSettings.model = event.target.value;
+  updateAssistantOptimizationControl();
+});
+$("#assistant-optimized-for")?.addEventListener("change", (event) => {
+  assistantSettings.optimizedFor = event.target.value;
+});
 document.addEventListener("click", (event) => {
   const prompt = event.target.closest("[data-assistant-prompt]");
   if (prompt) {
@@ -1789,4 +1852,5 @@ async function initializeScenarioCatalog() {
 }
 
 $("#budget-effective").value = scenario.simulationDate;
+loadAssistantConfiguration().finally(updateAssistantOptimizationControl);
 initializeScenarioCatalog();
