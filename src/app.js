@@ -588,6 +588,13 @@ function setAssistantFullscreen(full) {
   renderAssistantPanel();
 }
 
+function resizeAssistantInput() {
+  const input = $("#assistant-input");
+  if (!input) return;
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 96)}px`;
+}
+
 async function streamAssistantMessage(message, text) {
   const chunks = String(text).split(/(\s+)/);
   for (const chunk of chunks) {
@@ -610,6 +617,7 @@ async function askAssistantQuestion(event) {
   const latestResult = latestEventId ? replay.results.find((item) => item.eventId === latestEventId) : replay.results.at(-1) || null;
   const context = buildAssistantContext(scenario, replay, { latestResult, selectedScope: optimizedScope });
   input.value = "";
+  resizeAssistantInput();
   const assistantMessage = { role: "assistant", text: "", loading: true };
   assistantThread.push(assistantMessage);
   renderAssistantPanel();
@@ -1668,12 +1676,20 @@ $("#assistant-model")?.addEventListener("change", (event) => {
 $("#assistant-optimized-for")?.addEventListener("change", (event) => {
   assistantSettings.optimizedFor = event.target.value;
 });
+$("#assistant-input")?.addEventListener("input", resizeAssistantInput);
+$("#assistant-input")?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    askAssistantQuestion();
+  }
+});
 document.addEventListener("click", (event) => {
   const prompt = event.target.closest("[data-assistant-prompt]");
   if (prompt) {
     const input = $("#assistant-input");
     if (!input) return;
     input.value = prompt.dataset.assistantPrompt || "";
+    resizeAssistantInput();
     askAssistantQuestion();
     return;
   }

@@ -165,7 +165,10 @@
       <div id="assistant-prompts" class="assistant-prompts" aria-label="Suggested assistant prompts"></div>
       <form id="assistant-form" class="assistant-form">
         <label for="assistant-input" class="sr-only">Ask about budget health</label>
-        <textarea id="assistant-input" rows="2" placeholder="Ask a budget-health question..."></textarea>
+        <div class="assistant-composer">
+          <textarea id="assistant-input" rows="1" placeholder="Ask a budget-health question..."></textarea>
+          <button id="assistant-submit" type="submit" class="assistant-send" aria-label="Ask assistant">↑</button>
+        </div>
         <div class="assistant-composer-footer">
           <div id="assistant-model-settings" class="assistant-model-settings" hidden>
             <select id="assistant-model" aria-label="Assistant model">
@@ -177,7 +180,6 @@
               <option value="intelligence">Intelligence</option>
             </select>
           </div>
-          <button id="assistant-submit" type="submit" class="assistant-send" aria-label="Ask assistant">↑</button>
         </div>
       </form>
     </article>
