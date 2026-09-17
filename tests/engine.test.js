@@ -46,6 +46,31 @@ test("default scenario provides an enterprise-grade synthetic tenant", () => {
   assert.equal(replayScenario(scenario).results.length, 2);
 });
 
+test("enterprise default distributes generated personas and leaves a deterministic unassigned cohort", () => {
+  const scenario = createDefaultScenario();
+  const roleCounts = scenario.users.reduce((counts, user) => {
+    counts[user.role] = (counts[user.role] || 0) + 1;
+    return counts;
+  }, {});
+  const unassignedUsers = scenario.users.filter((user) => user.costCenterId === null);
+  const multiOrganizationUsers = scenario.users.filter((user) => user.organizationIds.length > 1);
+
+  assert.deepEqual(roleCounts, {
+    "Software Engineer": 73,
+    "Project Manager": 27,
+    "Data Scientist": 34,
+    "Security Engineer": 18,
+    "Site Reliability Engineer": 18,
+    "Business Analyst": 16,
+    "UX Designer": 14,
+  });
+  assert.equal(unassignedUsers.length, 15);
+  assert.ok(unassignedUsers.some((user) => user.id === "user-engineer-012"));
+  assert.equal(multiOrganizationUsers.length, 11);
+  assert.ok(multiOrganizationUsers.every((user) => user.organizationIds.includes(user.licenseOrganizationId)));
+  assert.ok(scenario.users.every((user) => scenario.organizations.some((organization) => organization.id === user.licenseOrganizationId)));
+});
+
 test("default scenario sets can load the compact demo tenant", () => {
   assert.ok(defaultScenarioSetOptions.some((item) => item.id === "enterprise"));
   assert.ok(defaultScenarioSetOptions.some((item) => item.id === "compact"));
