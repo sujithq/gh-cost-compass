@@ -488,17 +488,55 @@ function budgetGroupKeyFor(budget) {
   return BUDGET_GROUP_KINDS[budget.scopeType] ? budget.scopeType : "metered";
 }
 
+// User-level budgets (ULBs) are themselves a mix of item types: a named individual, a whole cost
+// center, or every licensed user. They get their own nested disclosure inside the "user" group so
+// each type can be scanned/expanded independently instead of being one long undifferentiated list.
+const USER_BUDGET_SUBGROUP_KINDS = {
+  individual: { label: "Individual budgets" },
+  costCenter: { label: "Cost center-scoped budgets" },
+  universal: { label: "All-user budgets" },
+};
+function userBudgetSubgroupKeyFor(budget) {
+  return USER_BUDGET_SUBGROUP_KINDS[budget.userBudgetType] ? budget.userBudgetType : "individual";
+}
+
+// When a group is expanded, its cards are sorted so the most pressing/largest budgets surface
+// first: highest percent consumed, then largest budget amount, then alphabetically by name.
+function sortBudgetItems(items) {
+  return [...items].sort((a, b) => b.percent - a.percent || b.amount - a.amount || a.name.localeCompare(b.name));
+}
+
 function budgetGroupHtml(key, items) {
   const meta = BUDGET_GROUP_KINDS[key];
   const open = budgetGroupExpanded(key);
   const highestPercent = Math.max(...items.map((item) => item.percent));
   const summary = `${items.length} ${items.length === 1 ? "card" : "cards"} · highest ${percent(highestPercent)}`;
-  return `<div class="budget-group"><button type="button" class="budget-group-toggle" data-budget-group-toggle="${escapeHtml(key)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="budget-group-title">${escapeHtml(meta.label)}</span><span class="budget-group-summary">${summary}</span></button>${open ? `<div class="budget-group-body">${items.map((item) => item.html).join("")}</div>` : ""}</div>`;
+  const body = key === "user" ? userBudgetSubgroupsHtml(items) : sortBudgetItems(items).map((item) => item.html).join("");
+  return `<div class="budget-group"><button type="button" class="budget-group-toggle" data-budget-group-toggle="${escapeHtml(key)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="budget-group-title">${escapeHtml(meta.label)}</span><span class="budget-group-summary">${summary}</span></button>${open ? `<div class="budget-group-body">${body}</div>` : ""}</div>`;
+}
+
+function userBudgetSubgroupsHtml(items) {
+  const subgroups = new Map();
+  for (const item of items) {
+    if (!subgroups.has(item.subKey)) subgroups.set(item.subKey, []);
+    subgroups.get(item.subKey).push(item);
+  }
+  return Object.keys(USER_BUDGET_SUBGROUP_KINDS).map((subKey) => {
+    const subItems = subgroups.get(subKey);
+    if (!subItems || !subItems.length) return "";
+    const meta = USER_BUDGET_SUBGROUP_KINDS[subKey];
+    const groupKey = `user:${subKey}`;
+    const open = budgetGroupExpanded(groupKey);
+    const highestPercent = Math.max(...subItems.map((item) => item.percent));
+    const summary = `${subItems.length} ${subItems.length === 1 ? "card" : "cards"} · highest ${percent(highestPercent)}`;
+    const body = open ? `<div class="budget-group-body budget-subgroup-body">${sortBudgetItems(subItems).map((item) => item.html).join("")}</div>` : "";
+    return `<div class="budget-group budget-subgroup"><button type="button" class="budget-group-toggle" data-budget-group-toggle="${escapeHtml(groupKey)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="budget-group-title">${escapeHtml(meta.label)}</span><span class="budget-group-summary">${summary}</span></button>${body}</div>`;
+  }).join("");
 }
 
 function renderBudgets(replay, currency) {
-  const poolCard = { percent: replay.pool.percent, html: `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-pool">${icon("pool")}Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${percent(replay.pool.percent)}</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>` };
-  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => ({ percent: pool.percent, html: `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-cost-center">${icon("costCenter")}${escapeHtml(pool.displayName)}</h3><p>Included usage controls for cost centers · AI credit pool enabled · ${pool.capMode === "block" ? "Block members at cap" : "Continue as paid overage"}</p></div><span class="percent">${percent(pool.percent)}</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div>${pool.capMode === "allowOverage" && pool.remaining === 0 ? `<div class="pool-route-note">Next accepted usage: paid overage</div>` : ""}</article>` }));
+  const poolCard = { percent: replay.pool.percent, amount: replay.pool.total, name: "Shared included AI-credit pool", html: `<article class="budget-card budget-history-trigger" data-history-id="pool" tabindex="0" role="button" aria-label="View shared included AI-credit pool history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-pool">${icon("pool")}Shared included AI-credit pool</h3><p>All licensed users · resets monthly · not a dollar budget</p></div><span class="percent">${percent(replay.pool.percent)}</span></div><div class="progress ${statusClass(replay.pool.percent)}"><div style="width:${Math.min(100, replay.pool.percent)}%"></div></div><div class="budget-foot"><span>${replay.pool.consumed.toLocaleString()} credits consumed</span><span>${replay.pool.remaining.toLocaleString()} of ${replay.pool.total.toLocaleString()} remaining</span></div></article>` };
+  const costCenterPoolCards = replay.costCenterPoolStates.map((pool) => ({ percent: pool.percent, amount: pool.total, name: pool.displayName, html: `<article class="budget-card included-pool-card budget-history-trigger" data-history-id="${escapeHtml(pool.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(pool.displayName)} history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-cost-center">${icon("costCenter")}${escapeHtml(pool.displayName)}</h3><p>Included usage controls for cost centers · AI credit pool enabled · ${pool.capMode === "block" ? "Block members at cap" : "Continue as paid overage"}</p></div><span class="percent">${percent(pool.percent)}</span></div><div class="progress ${statusClass(pool.percent)}"><div style="width:${Math.min(100, pool.percent)}%"></div></div><div class="budget-foot"><span>${pool.consumed.toLocaleString()} credits consumed</span><span>${pool.remaining.toLocaleString()} of ${pool.total.toLocaleString()} remaining</span></div>${pool.capMode === "allowOverage" && pool.remaining === 0 ? `<div class="pool-route-note">Next accepted usage: paid overage</div>` : ""}</article>` }));
   const prioritized = replay.budgetStates.filter((budget) => budget.spent > 0 || budget.triggered.length);
   const prioritizedIds = new Set(prioritized.map((budget) => budget.stateId));
   const visibleBudgets = [...prioritized, ...replay.budgetStates.filter((budget) => !prioritizedIds.has(budget.stateId))].slice(0, MAX_DASHBOARD_BUDGET_CARDS);
@@ -513,7 +551,7 @@ function renderBudgets(replay, currency) {
     const html = `<article class="budget-card budget-history-trigger" data-history-id="${escapeHtml(budget.stateId)}" tabindex="0" role="button" aria-label="View ${escapeHtml(budget.displayName)} history"><div class="budget-top"><div><h3 class="dashboard-card-title dashboard-card-${colorClass}">${icon(iconName)}${escapeHtml(budget.displayName)}</h3><p>Budget Type: ${escapeHtml(budgetTypeLabel(budget))} · Budget scope: ${escapeHtml(scope)} · ${basis} · ${escapeHtml(budgetStopLabel(budget))}</p></div><span class="percent">${percent(budget.percent)}</span></div><div class="progress ${statusClass(budget.percent)}"><div style="width:${Math.min(100, budget.percent)}%"></div></div><div class="budget-foot"><span>${money(budget.spent, "USD")} used</span><span>${money(budget.remaining, "USD")} remaining of ${money(budget.amount, "USD")}</span></div></article>`;
     const groupKey = budgetGroupKeyFor(budget);
     if (!groups.has(groupKey)) groups.set(groupKey, []);
-    groups.get(groupKey).push({ percent: budget.percent, html });
+    groups.get(groupKey).push({ percent: budget.percent, amount: budget.amount, name: budget.displayName, subKey: isUlb ? userBudgetSubgroupKeyFor(budget) : undefined, html });
   }
   const groupsHtml = Object.keys(BUDGET_GROUP_KINDS).map((key) => (groups.has(key) && groups.get(key).length ? budgetGroupHtml(key, groups.get(key)) : "")).join("");
   const hiddenNotice = hiddenCount > 0 ? `<div class="empty">${hiddenCount} lower-activity budget controls are hidden on the dashboard. They remain active in simulation and export data.</div>` : "";

@@ -740,6 +740,30 @@ test("the dashboard budget grid groups cards by type, collapsed by default", asy
   assert.match(css, /\.budget-group-body\{/);
 });
 
+test("user-level budgets are sub-grouped by type and sorted by percent, amount, then name when expanded", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // A ULB is an individual person, a whole cost center, or every licensed user; these are
+  // different enough item types that the "User-level budgets" group nests its own disclosures
+  // per sub-type instead of dumping them into one undifferentiated list.
+  assert.match(app, /const USER_BUDGET_SUBGROUP_KINDS = \{/);
+  for (const label of ["Individual budgets", "Cost center-scoped budgets", "All-user budgets"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  assert.match(app, /function userBudgetSubgroupKeyFor\(budget\)/);
+  assert.match(app, /function userBudgetSubgroupsHtml\(items\)/);
+  assert.match(app, /const groupKey = `user:\$\{subKey\}`;/);
+  // Sub-groups nest inside the "user" group's body instead of a flat card list.
+  assert.match(app, /const body = key === "user" \? userBudgetSubgroupsHtml\(items\) : sortBudgetItems\(items\)\.map\(\(item\) => item\.html\)\.join\(""\);/);
+  // Whenever a group or sub-group is open, its cards must be sorted by highest percent first,
+  // then largest budget amount, then alphabetically - never left in arbitrary replay order.
+  assert.match(app, /function sortBudgetItems\(items\) \{/);
+  assert.match(app, /b\.percent - a\.percent \|\| b\.amount - a\.amount \|\| a\.name\.localeCompare\(b\.name\)/);
+  assert.match(app, /subKey: isUlb \? userBudgetSubgroupKeyFor\(budget\) : undefined/);
+  assert.match(css, /\.budget-subgroup\{/);
+});
+
 test("the hierarchy tree stays usable at enterprise scale", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
