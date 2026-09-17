@@ -500,7 +500,7 @@ function assistantMessageHtml(message) {
   return `
     <div class="assistant-message assistant-message-${message.role}${message.loading ? " assistant-message-loading" : ""}">
       <div class="assistant-bubble">
-        <strong>${message.role === "assistant" ? "Assistant" : "You"}</strong>
+        <strong class="assistant-message-role">${message.role === "assistant" ? "Assistant" : "You"}</strong>
         ${body}
         ${message.sources?.length && !message.loading && !message.streaming ? `<div class="assistant-sources">${message.sources.map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a>`).join("")}</div>` : ""}
       </div>
