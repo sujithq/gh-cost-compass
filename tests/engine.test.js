@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
@@ -526,8 +526,12 @@ test("zero-dollar AI-credit budget blocks metered usage even when configured ale
   scenario.budgets.find((item) => item.id === "metered-product-org").amount = 0;
   scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
+  const zeroDollarBudget = scenario.budgets.find((item) => item.id === "metered-product-org");
+  assert.equal(budgetStopsUsage(scenario, zeroDollarBudget), true);
   assert.equal(replay.results[0].status, "blocked");
   assert.match(replay.results[0].reason, /Stop usage when budget limit is reached/);
+  const budgetCheck = replay.results[0].controlEvaluations.find((item) => item.control === "Budgets and alerts");
+  assert.ok(budgetCheck.configuration.some((item) => item.label === "Stop usage when budget limit is reached" && item.value === "Enabled"));
 });
 
 test("a mid-month budget ignores usage before its effective date", () => {
@@ -649,10 +653,11 @@ test("dashboard includes an accessible budget history dialog", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(html, /id="budget-history-modal"/);
   assert.match(html, /role="dialog" aria-modal="true"/);
-  assert.match(app, /data-history-id="pool"/);
-  assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
+  assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"/);
+  assert.match(app, /budgetRowHtml\(\{ stateId: "pool", kind: "shared-pool"/);
+  assert.match(app, /budgetRowHtml\(\{ stateId: budget\.stateId, kind: "budget"/);
   assert.match(app, /money, normalizeScenario, percent, replayScenario/);
-  for (const callSite of ["percent(replay.pool.percent)", "percent(pool.percent)", "percent(budget.percent)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
+  for (const callSite of ["percent(replay.pool.percent)", "percent(percentValue)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
     assert.match(app, new RegExp(callSite.replaceAll("(", "\\(").replaceAll(")", "\\)")));
   }
   assert.match(app, /Math\.min\(100, item\.percent\)/);
@@ -800,7 +805,7 @@ test("cost-center-scoped user-level budgets use the cost-center icon, not the pe
   assert.match(app, /const colorClass = isUlb \? \(budget\.userBudgetType === "costCenter" \? "cost-center" : "user"\) : /);
 });
 
-test("the dashboard budget grid groups cards by type, collapsed by default", async () => {
+test("the dashboard budget health view uses compact sections with the shared pool as its first row", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
@@ -808,63 +813,51 @@ test("the dashboard budget grid groups cards by type, collapsed by default", asy
   for (const label of ["Included AI-credit pools", "Enterprise budgets", "Organization budgets", "Cost center budgets", "Repository budgets", "User-level budgets", "Other budgets"]) {
     assert.match(app, new RegExp(`label: "${label}"`));
   }
-  // Groups must default to collapsed so an enterprise with many configured budgets isn't a wall of
-  // open cards; only a group an admin has explicitly toggled should stay open across re-renders.
-  assert.match(app, /function budgetGroupExpanded\(key, fallback = false\)/);
+  assert.match(app, /function budgetRowHtml\(/);
+  assert.match(app, /function budgetSectionHtml\(/);
   assert.match(app, /function budgetGroupKeyFor\(budget\)/);
-  assert.match(app, /data-budget-group-toggle="\$\{escapeHtml\(key\)\}" aria-expanded="\$\{open\}"/);
-  assert.match(app, /\$\{open \? `<div class="budget-group-body">/);
-  // The pool card and cost-center pools group under the same "pool" key as any other budget type.
-  assert.match(app, /const groups = new Map\(\[\["pool", \[poolCard, \.\.\.costCenterPoolCards\]\]\]\);/);
-  // Clicking a group's toggle button must flip its expansion state and re-render just the grid.
-  assert.match(app, /const budgetGroupToggle = event\.target\.closest\("\[data-budget-group-toggle\]"\);/);
-  assert.match(app, /budgetGroupExpansion\.set\(key, !open\);/);
-  assert.match(app, /renderBudgets\(replayScenario\(scenario\), scenario\.enterprise\.currency\);/);
-  assert.match(css, /\.budget-group-toggle\{/);
-  assert.match(css, /\.budget-group-body\{/);
+  // Object key order renders the pool section first, and this array fixes the shared pool ahead of
+  // every cost-center reservation within that first section.
+  assert.match(app, /pool: \{ label: "Included AI-credit pools"/);
+  assert.match(app, /data-budget-row-kind="\$\{escapeHtml\(kind\)\}"/);
+  assert.match(app, /kind: "shared-pool"/);
+  assert.match(app, /const groups = new Map\(\[\["pool", \[poolRow, \.\.\.costCenterPoolRows\]\]\]\);/);
+  assert.match(app, /const orderedItems = key === "pool" \? items : sortBudgetItems\(items\);/);
+  assert.doesNotMatch(app, /data-budget-group-toggle/);
+  assert.match(app, /<h3><button type="button" class="budget-row-title budget-history-trigger"/);
+  assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"[^>]*>\$\{escapeHtml\(name\)\}<\/button><\/h3>/);
+  assert.doesNotMatch(app, /budget-row-action/);
+  assert.doesNotMatch(app, /class="budget-row budget-history-trigger"/);
+  assert.match(app, /role="progressbar"/);
+  assert.match(css, /\.budget-section\{/);
+  assert.match(css, /\.budget-row\{display:grid;/);
 });
 
-test("user-level budgets are sub-grouped by type and sorted by percent, amount, then name when expanded", async () => {
+test("budget rows stay grouped by scope and sort by percent, amount, then name", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
-  // A ULB is an individual person, a whole cost center, or every licensed user; these are
-  // different enough item types that the "User-level budgets" group nests its own disclosures
-  // per sub-type instead of dumping them into one undifferentiated list.
-  assert.match(app, /const USER_BUDGET_SUBGROUP_KINDS = \{/);
-  for (const label of ["Individual budgets", "Cost center-scoped budgets", "All-user budgets"]) {
-    assert.match(app, new RegExp(`label: "${label}"`));
-  }
-  assert.match(app, /function userBudgetSubgroupKeyFor\(budget\)/);
-  assert.match(app, /function userBudgetSubgroupsHtml\(items\)/);
-  assert.match(app, /const groupKey = `user:\$\{subKey\}`;/);
-  // Sub-groups nest inside the "user" group's body instead of a flat card list.
-  assert.match(app, /const body = key === "user" \? userBudgetSubgroupsHtml\(items\) : sortBudgetItems\(items\)\.map\(\(item\) => item\.html\)\.join\(""\);/);
-  // Whenever a group or sub-group is open, its cards must be sorted by highest percent first,
-  // then largest budget amount, then alphabetically - never left in arbitrary replay order.
   assert.match(app, /function sortBudgetItems\(items\) \{/);
   assert.match(app, /b\.percent - a\.percent \|\| b\.amount - a\.amount \|\| a\.name\.localeCompare\(b\.name\)/);
-  assert.match(app, /subKey: isUlb \? userBudgetSubgroupKeyFor\(budget\) : undefined/);
-  assert.match(css, /\.budget-subgroup\{/);
+  assert.match(app, /const groupKey = budgetGroupKeyFor\(budget\);/);
+  assert.match(app, /Object\.keys\(BUDGET_GROUP_KINDS\).*budgetSectionHtml/);
+  assert.match(app, /for \(const budget of replay\.budgetStates\)/);
+  assert.match(app, /const BUDGET_SECTION_PAGE_SIZE = 8;/);
+  assert.match(app, /orderedItems\.slice\(0, BUDGET_SECTION_PAGE_SIZE\)/);
+  assert.match(app, /data-budget-section-more=/);
+  assert.match(app, /budgetSectionExpansion\.add\(key\)/);
+  assert.match(app, /money\(budget\.spent, "USD"\)/);
+  assert.match(app, /budgetStopsUsage\(scenario, budget, product\) \? "Yes" : "No"/);
 });
 
-test("single-card budget groups shrink to their item's column so multi-item groups get more room", async () => {
-  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+test("budget health rows use stable desktop columns and responsive narrow layouts", async () => {
   const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
-  // The "Included AI-credit pools" group (and any other group with exactly one card, such as an
-  // enterprise with no cost-center pools) should not stretch across the full grid width; it gets
-  // a "solo" modifier so it only occupies a single column, leaving the rest of the row free for
-  // groups that actually need it.
-  assert.match(app, /const soloClass = items\.length === 1 \? " budget-group-solo" : "";/);
-  assert.match(app, /<div class="budget-group\$\{soloClass\}">/);
-  // Groups default to spanning the full grid row; only solo (single-card) groups are constrained
-  // back down to a single column.
-  assert.match(css, /\.budget-group\{grid-column:1\/-1;/);
-  assert.match(css, /\.budget-group-solo\{grid-column:span 1\}/);
-  // With the freed-up row width, the expanded user-level sub-groups render three columns of cards
-  // instead of two.
-  assert.match(css, /\.budget-subgroup-body\{grid-template-columns:repeat\(3,1fr\);/);
+  assert.match(css, /\.budget-grid\{container-type:inline-size\}/);
+  assert.match(css, /grid-template-areas:"identity detail stop meter"/);
+  assert.match(css, /\.budget-row-title\{/);
+  assert.match(css, /\.budget-row-meter \.progress\{height:5px/);
+  assert.match(css, /@container \(max-width:820px\)/);
+  assert.match(css, /@container \(max-width:520px\)/);
 });
 
 test("the hierarchy tree stays usable at enterprise scale", async () => {
