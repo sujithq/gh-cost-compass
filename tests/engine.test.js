@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
@@ -606,8 +606,12 @@ test("zero-dollar AI-credit budget blocks metered usage even when configured ale
   scenario.budgets.find((item) => item.id === "metered-product-org").amount = 0;
   scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
+  const zeroDollarBudget = scenario.budgets.find((item) => item.id === "metered-product-org");
+  assert.equal(budgetStopsUsage(scenario, zeroDollarBudget), true);
   assert.equal(replay.results[0].status, "blocked");
   assert.match(replay.results[0].reason, /Stop usage when budget limit is reached/);
+  const budgetCheck = replay.results[0].controlEvaluations.find((item) => item.control === "Budgets and alerts");
+  assert.ok(budgetCheck.configuration.some((item) => item.label === "Stop usage when budget limit is reached" && item.value === "Enabled"));
 });
 
 test("a mid-month budget ignores usage before its effective date", () => {
@@ -729,10 +733,11 @@ test("dashboard includes an accessible budget history dialog", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(html, /id="budget-history-modal"/);
   assert.match(html, /role="dialog" aria-modal="true"/);
-  assert.match(app, /data-history-id="pool"/);
-  assert.match(app, /data-history-id="\$\{escapeHtml\(budget\.stateId\)\}"/);
+  assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"/);
+  assert.match(app, /budgetRowHtml\(\{ stateId: "pool", kind: "shared-pool"/);
+  assert.match(app, /budgetRowHtml\(\{ stateId: budget\.stateId, kind: "budget"/);
   assert.match(app, /money, normalizeScenario, percent, replayScenario/);
-  for (const callSite of ["percent(replay.pool.percent)", "percent(pool.percent)", "percent(budget.percent)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
+  for (const callSite of ["percent(replay.pool.percent)", "percent(percentValue)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
     assert.match(app, new RegExp(callSite.replaceAll("(", "\\(").replaceAll(")", "\\)")));
   }
   assert.match(app, /Math\.min\(100, item\.percent\)/);
@@ -789,6 +794,7 @@ test("optimized UI hierarchy nodes double as clickable scope selectors", async (
 test("scenario timeline lives in the app header so it scrubs every page, not just the optimized subpage", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
   const simulateIndex = html.indexOf('data-view="simulate"');
   const optimizedIndex = html.indexOf('data-view="optimized"');
   assert.ok(simulateIndex > -1 && optimizedIndex > simulateIndex, "Optimized UI nav item should come after Simulate usage");
@@ -809,6 +815,7 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);
   assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
+  assert.match(styles, /\.global-timeline-bar\{position:static\}/);
 });
 
 test("assistant is available globally as a collapsible side panel", async () => {
@@ -888,6 +895,72 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   // Organization and cost-center glyphs were previously near-identical briefcases.
   const paths = Object.fromEntries([...app.matchAll(/^\s{2}(enterprise|organization|costCenter|user|repo): '(.+)',$/gm)].map((match) => [match[1], match[2]]));
   assert.equal(new Set(Object.values(paths)).size, 5);
+});
+
+test("cost-center-scoped user-level budgets use the cost-center icon, not the person icon", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  // A ULB's budgetKind is always "user", but userBudgetType distinguishes an individual person
+  // from a whole cost center; the icon/color helpers must branch on userBudgetType so a
+  // cost-center-wide ULB doesn't render as if it were a single named person.
+  assert.match(app, /if \(item\.userBudgetType === "costCenter"\) return \{ name: "costCenter", color: "cost-center", label: "Cost center-level budget" \};/);
+  assert.match(app, /if \(budget\.budgetKind === "user"\) return budget\.userBudgetType === "costCenter" \? "costCenter" : "user";/);
+  assert.match(app, /const colorClass = isUlb \? \(budget\.userBudgetType === "costCenter" \? "cost-center" : "user"\) : /);
+});
+
+test("the dashboard budget health view uses compact sections with the shared pool as its first row", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /const BUDGET_GROUP_KINDS = \{/);
+  for (const label of ["Included AI-credit pools", "Enterprise budgets", "Organization budgets", "Cost center budgets", "Repository budgets", "User-level budgets", "Other budgets"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  assert.match(app, /function budgetRowHtml\(/);
+  assert.match(app, /function budgetSectionHtml\(/);
+  assert.match(app, /function budgetGroupKeyFor\(budget\)/);
+  // Object key order renders the pool section first, and this array fixes the shared pool ahead of
+  // every cost-center reservation within that first section.
+  assert.match(app, /pool: \{ label: "Included AI-credit pools"/);
+  assert.match(app, /data-budget-row-kind="\$\{escapeHtml\(kind\)\}"/);
+  assert.match(app, /kind: "shared-pool"/);
+  assert.match(app, /const groups = new Map\(\[\["pool", \[poolRow, \.\.\.costCenterPoolRows\]\]\]\);/);
+  assert.match(app, /const orderedItems = key === "pool" \? items : sortBudgetItems\(items\);/);
+  assert.doesNotMatch(app, /data-budget-group-toggle/);
+  assert.match(app, /<h3><button type="button" class="budget-row-title budget-history-trigger"/);
+  assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"[^>]*>\$\{escapeHtml\(name\)\}<\/button><\/h3>/);
+  assert.doesNotMatch(app, /budget-row-action/);
+  assert.doesNotMatch(app, /class="budget-row budget-history-trigger"/);
+  assert.match(app, /role="progressbar"/);
+  assert.match(css, /\.budget-section\{/);
+  assert.match(css, /\.budget-row\{display:grid;/);
+});
+
+test("budget rows stay grouped by scope and sort by percent, amount, then name", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.match(app, /function sortBudgetItems\(items\) \{/);
+  assert.match(app, /b\.percent - a\.percent \|\| b\.amount - a\.amount \|\| a\.name\.localeCompare\(b\.name\)/);
+  assert.match(app, /const groupKey = budgetGroupKeyFor\(budget\);/);
+  assert.match(app, /Object\.keys\(BUDGET_GROUP_KINDS\).*budgetSectionHtml/);
+  assert.match(app, /for \(const budget of replay\.budgetStates\)/);
+  assert.match(app, /const BUDGET_SECTION_PAGE_SIZE = 8;/);
+  assert.match(app, /orderedItems\.slice\(0, BUDGET_SECTION_PAGE_SIZE\)/);
+  assert.match(app, /data-budget-section-more=/);
+  assert.match(app, /budgetSectionExpansion\.add\(key\)/);
+  assert.match(app, /money\(budget\.spent, "USD"\)/);
+  assert.match(app, /budgetStopsUsage\(scenario, budget, product\) \? "Yes" : "No"/);
+});
+
+test("budget health rows use stable desktop columns and responsive narrow layouts", async () => {
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.budget-grid\{container-type:inline-size\}/);
+  assert.match(css, /grid-template-areas:"identity detail stop meter"/);
+  assert.match(css, /\.budget-row-title\{/);
+  assert.match(css, /\.budget-row-meter \.progress\{height:5px/);
+  assert.match(css, /@container \(max-width:820px\)/);
+  assert.match(css, /@container \(max-width:520px\)/);
 });
 
 test("the hierarchy tree stays usable at enterprise scale", async () => {
