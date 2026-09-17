@@ -696,6 +696,12 @@ test("future events remain scheduled until the clock advances", () => {
   assert.equal(replayScenario(scenario).results.length, 1);
 });
 
+test("canvas-hosted UI keeps the native simulation date visible", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /<meta name="color-scheme" content="light">/);
+  assert.match(html, /<input id="simulation-date" type="date">/);
+});
+
 test("configuration help exposes impact regions and official GitHub citations", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   for (const id of ["enterprise-impact", "cost-center-impact", "user-impact", "budget-impact"]) assert.match(html, new RegExp(`id="${id}"`));
