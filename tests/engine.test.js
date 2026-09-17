@@ -875,6 +875,7 @@ test("custom usage events have a dedicated Simulate subpage", async () => {
 test("assistant is available globally as a collapsible side panel", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
   const extension = await readFile(new URL("../.github/extensions/budget-lab/extension.mjs", import.meta.url), "utf8");
 
   assert.doesNotMatch(html, /data-view="assistant"/);
@@ -887,9 +888,12 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.match(html, /id="assistant-model-settings"/);
   assert.match(html, /id="assistant-model"/);
   assert.match(html, /id="assistant-optimized-for"/);
+  assert.match(html, /class="assistant-composer"/);
+  assert.match(html, /id="assistant-input" rows="1"/);
   assert.ok(html.indexOf('id="assistant-prompts"') > html.indexOf('id="assistant-thread"'), "assistant prompt pills should sit directly above the input area");
   assert.ok(html.indexOf('id="assistant-prompts"') < html.indexOf('id="assistant-form"'), "assistant prompt pills should sit directly above the input area");
-  assert.ok(html.indexOf('id="assistant-model-settings"') > html.indexOf('id="assistant-form"'), "model settings should be part of the composer, below the textarea");
+  assert.ok(html.indexOf('id="assistant-submit"') > html.indexOf('id="assistant-input"'), "send button should be embedded in the composer after the input");
+  assert.ok(html.indexOf('id="assistant-model-settings"') > html.indexOf('class="assistant-composer"'), "model settings should stay in the compact composer area");
   assert.match(html, /placeholder="Ask a budget-health question\.\.\."/);
   assert.match(html, /id="assistant-submit"/);
   assert.match(html, /class="assistant-send"/);
@@ -905,6 +909,7 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.match(app, /ASSISTANT_STREAM_INTERVAL_MS/);
   assert.match(app, /function setAssistantDrawerOpen\(open\)/);
   assert.match(app, /function setAssistantFullscreen\(full\)/);
+  assert.match(app, /function resizeAssistantInput\(\)/);
   assert.match(app, /function assistantPromptOptions\(context\)/);
   assert.match(app, /function assistantMessageHtml\(message\)/);
   assert.match(app, /Loading budget data/);
@@ -923,7 +928,12 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.match(app, /#assistant-launcher"\)\?\.addEventListener\("click"/);
   assert.match(app, /#assistant-collapse"\)\?\.addEventListener\("click"/);
   assert.match(app, /#assistant-fullscreen"\)\?\.addEventListener\("click", \(\) => setAssistantFullscreen\(!assistantFullscreen\)\)/);
+  assert.match(app, /#assistant-input"\)\?\.addEventListener\("input", resizeAssistantInput\)/);
+  assert.match(app, /event\.key === "Enter" && !event\.shiftKey/);
   assert.match(app, /\[data-assistant-prompt\]/);
+  assert.match(styles, /\.assistant-composer\{/);
+  assert.match(styles, /\.assistant-form \.assistant-composer textarea/);
+  assert.match(styles, /\.assistant-form \.assistant-send\{position:absolute/);
   assert.match(extension, /enum: \["scripted", "copilot"\]/);
   assert.match(extension, /ctx\.input\?\.assistantBackend === "scripted" \? "scripted" : "copilot"/);
   assert.match(extension, /session\.sendAndWait/);
