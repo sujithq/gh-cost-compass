@@ -47,11 +47,32 @@ npm test
 
 Open <http://localhost:4173>.
 
-The standalone app always uses the scripted, deterministic assistant. The experimental
-Copilot-backed assistant is enabled only when the project-scoped `budget-lab` canvas extension
-opens the app with its `assistantBackend` input explicitly set to `copilot`. That canvas setting
-also defaults to `scripted`. Ordinary `npm start` does not load the Copilot SDK or call an LLM.
-The canvas extension lives under `.github/extensions/budget-lab/` and uses a loopback-only
+## Open the canvas app from a Copilot chat/CLI session
+
+If you're working in this repository through a GitHub Copilot app or CLI session that supports
+canvases, you don't need to run `npm start` yourself — just ask your agent to open it, for example:
+
+> Open the Copilot Budget Lab canvas
+
+The agent opens the project-scoped `budget-lab` canvas extension
+(`.github/extensions/budget-lab/`), which starts the same static app on a private loopback server
+and shows it as a side panel. **By default the canvas panel uses the live Copilot-backed
+assistant** (see below) — this is different from `npm start`, which always uses the scripted,
+deterministic assistant and never loads the Copilot SDK.
+
+To open a canvas panel with the scripted assistant instead (for example, to compare behavior or
+avoid using a live model), ask:
+
+> Open the Copilot Budget Lab canvas with the scripted assistant
+
+which asks the agent to pass `assistantBackend: "scripted"` as the canvas input. Each opened panel
+(`instanceId`) remembers its own backend choice, so a Copilot instance and a scripted instance can
+be open side by side. Closing the panel shuts down its private server; reopening it starts a fresh
+one.
+
+Only the canvas defaults to Copilot. The standalone app (`npm start`) always uses the scripted,
+deterministic assistant regardless of this setting, and does not load the Copilot SDK or call an
+LLM. The canvas extension lives under `.github/extensions/budget-lab/` and uses a loopback-only
 endpoint to pass the existing compact assistant context to the active Copilot session. If that
 backend is unavailable, the canvas assistant reports an explicit error rather than silently
 falling back to a scripted answer.
