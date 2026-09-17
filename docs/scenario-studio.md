@@ -27,7 +27,7 @@ The `enterprise-251` reusable environment is the scale fixture for issue #17. It
 
 The walkthrough's compact executable outcomes live in `docs/enterprise-251-walkthrough.golden.json`. They intentionally record only event status, included/metered quantities, cost, changed budget state keys, alerts, and pool totals rather than snapshotting the complete environment or replay object.
 
-The normal test suite also enforces Node CPU-time p95 budgets of less than 50 ms for one materialize-and-replay pass and less than 100 ms for the four-pass sequence used by Scenario Studio. CPU time keeps the contract deterministic on shared runners by excluding unrelated process scheduling stalls.
+The normal test suite also enforces warmed, batched Node CPU-time p95 budgets of less than 50 ms for one materialize-and-replay pass and less than 100 ms for the four-pass sequence used by Scenario Studio. CPU time excludes unrelated process scheduling stalls, warm-up excludes one-time catalog/JIT startup, and small sample batches prevent a single garbage-collection pause from dominating a cross-version interaction measurement.
 
 ## Definition format
 

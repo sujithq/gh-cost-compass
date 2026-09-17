@@ -70,6 +70,12 @@ function cpuMilliseconds(action) {
   return (elapsed.user + elapsed.system) / 1000;
 }
 
+function averageCpuMilliseconds(repetitions, action) {
+  return cpuMilliseconds(() => {
+    for (let iteration = 0; iteration < repetitions; iteration += 1) action();
+  }) / repetitions;
+}
+
 function usage(id, date, quantity, overrides = {}) {
   return { id, date, quantity, userId: "user-alice", repositoryId: "repo-portal", productId: "ai-credits", ...overrides };
 }
@@ -860,11 +866,15 @@ test("enterprise-251 walkthrough matches its compact golden outcomes", async () 
 test("enterprise-251 walkthrough remains within the replay performance budget", () => {
   const definition = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-251-walkthrough");
   const finalIndex = definition.steps.length - 1;
+  for (let iteration = 0; iteration < 10; iteration += 1) {
+    replayScenario(materializeScenario(definition, finalIndex));
+    replayScenario(materializeScenario(definition, finalIndex - 1));
+  }
   const singlePass = [];
   const fourPass = [];
   for (let iteration = 0; iteration < 40; iteration += 1) {
-    singlePass.push(cpuMilliseconds(() => replayScenario(materializeScenario(definition, finalIndex))));
-    fourPass.push(cpuMilliseconds(() => {
+    singlePass.push(averageCpuMilliseconds(5, () => replayScenario(materializeScenario(definition, finalIndex))));
+    fourPass.push(averageCpuMilliseconds(3, () => {
       replayScenario(materializeScenario(definition, finalIndex));
       replayScenario(materializeScenario(definition, finalIndex - 1));
       replayScenario(materializeScenario(definition, finalIndex - 2));

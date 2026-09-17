@@ -13,6 +13,7 @@ const AI_CREDIT_PRICE = 0.01;
 const INCLUDED_CREDITS = { business: 1900, enterprise: 3900 };
 const SEAT_PRICE = { business: 19, enterprise: 39 };
 let activeCostCenterCache;
+let activeReplayIndexes;
 
 export function monthKey(date) {
   return String(date).slice(0, 7);
@@ -104,7 +105,8 @@ export function costCenterForUser(scenario, user) {
 }
 
 function costCenterForEvent(scenario, event, product) {
-  const user = scenario.users.find((item) => item.id === event.userId);
+  const user = activeReplayIndexes?.get(scenario)?.users.get(event.userId)
+    || scenario.users.find((item) => item.id === event.userId);
   if (product?.billingMode === "metered") {
     const repositoryCostCenter = scenario.costCenters.find((item) => item.repositoryIds.includes(event.repositoryId));
     if (repositoryCostCenter) return repositoryCostCenter;
@@ -113,8 +115,9 @@ function costCenterForEvent(scenario, event, product) {
 }
 
 function matchesScope(budget, event, scenario, product) {
-  const user = scenario.users.find((item) => item.id === event.userId);
-  const repo = scenario.repositories.find((item) => item.id === event.repositoryId);
+  const indexes = activeReplayIndexes?.get(scenario);
+  const user = indexes?.users.get(event.userId) || scenario.users.find((item) => item.id === event.userId);
+  const repo = indexes?.repositories.get(event.repositoryId) || scenario.repositories.find((item) => item.id === event.repositoryId);
   const costCenter = costCenterForEvent(scenario, event, product);
   if (!user || !isActive(budget, event.date) || budget.productId !== product?.id) return false;
   switch (budget.scopeType) {
@@ -295,6 +298,11 @@ export function describeScope(scenario, budget) {
 
 function replayScenarioInternal(scenario) {
   normalizeScenario(scenario);
+  activeReplayIndexes.set(scenario, {
+    users: new Map(scenario.users.map((item) => [item.id, item])),
+    repositories: new Map(scenario.repositories.map((item) => [item.id, item])),
+    products: new Map(scenario.products.map((item) => [item.id, item])),
+  });
   const states = new Map();
   const pools = new Map();
   const costCenterPools = new Map();
@@ -305,8 +313,17 @@ function replayScenarioInternal(scenario) {
 
   for (const event of orderedEvents) {
     const effectiveScenario = eventScenario(scenario, event);
-    const product = effectiveScenario.products.find((item) => item.id === event.productId);
-    const user = effectiveScenario.users.find((item) => item.id === event.userId);
+    let indexes = activeReplayIndexes.get(effectiveScenario);
+    if (!indexes) {
+      indexes = {
+        users: new Map(effectiveScenario.users.map((item) => [item.id, item])),
+        repositories: new Map(effectiveScenario.repositories.map((item) => [item.id, item])),
+        products: new Map(effectiveScenario.products.map((item) => [item.id, item])),
+      };
+      activeReplayIndexes.set(effectiveScenario, indexes);
+    }
+    const product = indexes.products.get(event.productId);
+    const user = indexes.users.get(event.userId);
     const quantity = Number(event.quantity);
     const period = monthKey(event.date);
     const isAi = product?.billingMode === "aiCredits";
@@ -473,11 +490,14 @@ function replayScenarioInternal(scenario) {
 
 export function replayScenario(scenario) {
   const previousCache = activeCostCenterCache;
+  const previousIndexes = activeReplayIndexes;
   activeCostCenterCache = new WeakMap();
+  activeReplayIndexes = new WeakMap();
   try {
     return replayScenarioInternal(scenario);
   } finally {
     activeCostCenterCache = previousCache;
+    activeReplayIndexes = previousIndexes;
   }
 }
 
