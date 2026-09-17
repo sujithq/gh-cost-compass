@@ -222,6 +222,25 @@ export function costCenterIncludedPoolFor(scenario, costCenterId, atDate = scena
   }, 0);
 }
 
+// The enterprise-wide included AI-credit pool is funded by every licensed seat, whether or not a
+// cost center has since reserved a slice of it for itself. This groups seat contributions by plan so
+// the UI can explain the grand total as "X credits from N Enterprise licenses + Y from M Business
+// licenses" instead of showing a bare number.
+export function includedPoolLicenseBreakdown(scenario, atDate = scenario.simulationDate) {
+  normalizeScenario(scenario);
+  const totals = new Map();
+  for (const user of scenario.users) {
+    const contribution = userPoolContribution(user, atDate, scenario);
+    if (!contribution) continue;
+    const plan = user.licensePlan;
+    const entry = totals.get(plan) || { plan, seatCount: 0, credits: 0 };
+    entry.seatCount += 1;
+    entry.credits += contribution;
+    totals.set(plan, entry);
+  }
+  return [...totals.values()].sort((a, b) => b.credits - a.credits);
+}
+
 function includedPoolUsers(scenario, costCenter = null) {
   return scenario.users.filter((user) => {
     const userCostCenter = costCenterForUser(scenario, user);
@@ -458,7 +477,17 @@ export function replayScenario(scenario) {
     };
   });
 
-  return { results, alerts, budgetStates, costCenterPoolStates, period: selectedPeriod, pool: { stateId: `enterprise:${selectedPeriod}`, total: effectivePoolTotal, consumed, remaining: Math.max(0, effectivePoolTotal - consumed), percent: effectivePoolTotal ? consumed / effectivePoolTotal * 100 : 100, meteredCost } };
+  // The grand total always reflects every licensed seat's contribution, even seats attributed to a
+  // cost center that has reserved (partitioned) its own slice of the pool below. `total`/`consumed`
+  // above stay the shared-remainder pool other code and tests rely on; these `grand*` fields are
+  // additive so the UI can show "the whole pool" while the reservation math is unaffected.
+  const licenseBreakdown = includedPoolLicenseBreakdown(scenario, scenario.simulationDate);
+  const grandTotal = licenseBreakdown.reduce((sum, entry) => sum + entry.credits, 0);
+  const grandConsumed = consumed + costCenterPoolStates.filter((item) => item.enabled).reduce((sum, item) => sum + item.consumed, 0);
+  const grandRemaining = Math.max(0, grandTotal - grandConsumed);
+  const grandPercent = grandTotal ? grandConsumed / grandTotal * 100 : 100;
+
+  return { results, alerts, budgetStates, costCenterPoolStates, period: selectedPeriod, pool: { stateId: `enterprise:${selectedPeriod}`, total: effectivePoolTotal, consumed, remaining: Math.max(0, effectivePoolTotal - consumed), percent: effectivePoolTotal ? consumed / effectivePoolTotal * 100 : 100, meteredCost, grandTotal, grandConsumed, grandRemaining, grandPercent, licenseBreakdown } };
 }
 
 // Re-runs replayScenario as if only events up to and including eventId had happened yet, using the

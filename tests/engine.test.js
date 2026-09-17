@@ -392,6 +392,26 @@ test("enabled cost-center AI credit pools partition included credits from the en
   assert.equal(replay.results[0].poolType, "costCenter");
 });
 
+test("the grand total included AI-credit pool stays whole even after a cost center reserves a slice", () => {
+  // A cost-center pool reservation partitions the enterprise pool, it doesn't shrink it: the grand
+  // total must always equal every seat's contribution, and grand consumption must roll up both the
+  // shared remainder and any reserved cost-center pools.
+  const scenario = createDefaultScenario("compact");
+  scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled = true;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("pool", "2026-09-15", 1000)];
+  const replay = replayScenario(scenario);
+  assert.equal(replay.pool.total, 1900);
+  assert.equal(replay.pool.grandTotal, 5800);
+  assert.equal(replay.pool.grandConsumed, 1000);
+  assert.equal(replay.pool.grandRemaining, 4800);
+  assert.ok(Math.abs(replay.pool.grandPercent - (1000 / 5800) * 100) < 1e-9);
+  const breakdown = replay.pool.licenseBreakdown;
+  assert.equal(breakdown.reduce((sum, entry) => sum + entry.credits, 0), 5800);
+  assert.deepEqual(breakdown.find((entry) => entry.plan === "enterprise"), { plan: "enterprise", seatCount: 1, credits: 3900 });
+  assert.deepEqual(breakdown.find((entry) => entry.plan === "business"), { plan: "business", seatCount: 1, credits: 1900 });
+});
+
 test("cost-center AI credit pool can block at its included cap", () => {
   const scenario = createDefaultScenario("compact");
   Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "block" });
@@ -607,6 +627,29 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
   assert.match(app, /next accepted usage uses paid overage/);
+});
+
+test("the Included credits panel renders the pool as a collapsible tree with cost-center reservations nested underneath", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(app, /data-bucket-toggle="\$\{escapeHtml\(item\.stateId\)\}"/);
+  assert.match(app, /closest\("\[data-bucket-toggle\]"\)/);
+  assert.match(app, /bucket-children/);
+  assert.match(app, /Included AI-credit pool/);
+  assert.match(app, /Shared included AI-credit pool/);
+  assert.match(app, /total AI credits come from/);
+  assert.match(app, /replay\.pool\.grandTotal/);
+  assert.match(app, /replay\.pool\.licenseBreakdown/);
+});
+
+test("the Included credits pool renders as a single flat row, not a tree, when no cost center reserves a slice of the pool", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  // hasCostCenterPools must gate both the toggle (hasChildren/expanded) on the root row and whether
+  // the shared-pool/cost-center children are even added to the rendered items list — otherwise a
+  // scenario with no cost-center AI credit pool enabled would still show a pointless expand arrow
+  // and a redundant "Shared included AI-credit pool" child that just repeats the same total.
+  assert.match(app, /const hasCostCenterPools = visibleCostCenterPools\.length > 0;/);
+  assert.match(app, /hasChildren: hasCostCenterPools, expanded: poolExpanded/);
+  assert.match(app, /items: hasCostCenterPools \? \(poolExpanded \? \[poolRoot, sharedPool, \.\.\.costCenterPools\] : \[poolRoot\]\) : \[poolRoot\]/);
 });
 
 test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {
@@ -1172,3 +1215,28 @@ test("configuration UI drops simulator-only cost center jargon", async () => {
   assert.match(app, /attributed licenses/);
   assert.match(html, /id="optimized-scope-config"/);
 });
+
+test("guided scenario baselines differ, so switching scenarios must rematerialize the active scenario", () => {
+  const baseline = (id) => materializeScenario(BUILT_IN_SCENARIOS.find((item) => item.id === id), -1);
+  const pooled = baseline("cost-center-pool-blocks");
+  const plain = baseline("budget-health-progression");
+  // The pool scenario enables a cost center AI credit pool in setup; the progression scenario does not.
+  assert.ok(pooled.costCenters.some((item) => item.aiCreditPoolEnabled));
+  assert.notDeepEqual(pooled.costCenters, plain.costCenters);
+});
+
+test("changing the scenario definition rematerializes the scenario before rendering", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const body = app.replace(/\r\n/g, "\n").slice(app.replace(/\r\n/g, "\n").indexOf("function changeScenarioDefinition("));
+  const changeScenarioDefinition = body.slice(0, body.indexOf("\n}\n") + 2);
+  assert.match(changeScenarioDefinition, /scenarioDefinitions\(\)\.find\(\(item\) => item\.id === id\)/);
+  assert.match(changeScenarioDefinition, /scenario = materializeScenarioForDefaultSet\(definition, -1\)/);
+  // The reassignment must happen before the render, which only replays whatever `scenario` holds.
+  assert.ok(changeScenarioDefinition.indexOf("materializeScenarioForDefaultSet") < changeScenarioDefinition.lastIndexOf("saveAndRender("));
+  // Both scenario selectors share the one handler, so neither can go stale.
+  assert.match(app, /\$\("#global-scenario-definition"\)\.addEventListener\("change", \(event\) => changeScenarioDefinition\(event\.target\.value\)\)/);
+  assert.match(app, /\$\("#scenario-definition"\)\.addEventListener\("change", \(event\) => changeScenarioDefinition\(event\.target\.value\)\)/);
+  // Importing a custom scenario selects it, so it must take the same rematerialize-and-render path.
+  assert.match(app, /changeScenarioDefinition\(definitions\.at\(-1\)\.id\)/);
+});
+
