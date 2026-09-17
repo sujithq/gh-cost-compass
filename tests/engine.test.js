@@ -359,6 +359,26 @@ test("enabled cost-center AI credit pools partition included credits from the en
   assert.equal(replay.results[0].poolType, "costCenter");
 });
 
+test("the grand total included AI-credit pool stays whole even after a cost center reserves a slice", () => {
+  // A cost-center pool reservation partitions the enterprise pool, it doesn't shrink it: the grand
+  // total must always equal every seat's contribution, and grand consumption must roll up both the
+  // shared remainder and any reserved cost-center pools.
+  const scenario = createDefaultScenario("compact");
+  scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled = true;
+  scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
+  scenario.events = [usage("pool", "2026-09-15", 1000)];
+  const replay = replayScenario(scenario);
+  assert.equal(replay.pool.total, 1900);
+  assert.equal(replay.pool.grandTotal, 5800);
+  assert.equal(replay.pool.grandConsumed, 1000);
+  assert.equal(replay.pool.grandRemaining, 4800);
+  assert.ok(Math.abs(replay.pool.grandPercent - (1000 / 5800) * 100) < 1e-9);
+  const breakdown = replay.pool.licenseBreakdown;
+  assert.equal(breakdown.reduce((sum, entry) => sum + entry.credits, 0), 5800);
+  assert.deepEqual(breakdown.find((entry) => entry.plan === "enterprise"), { plan: "enterprise", seatCount: 1, credits: 3900 });
+  assert.deepEqual(breakdown.find((entry) => entry.plan === "business"), { plan: "business", seatCount: 1, credits: 1900 });
+});
+
 test("cost-center AI credit pool can block at its included cap", () => {
   const scenario = createDefaultScenario("compact");
   Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "block" });
@@ -574,6 +594,18 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
   assert.match(app, /next accepted usage uses paid overage/);
+});
+
+test("the Included credits panel renders the pool as a collapsible tree with cost-center reservations nested underneath", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(app, /data-bucket-toggle="\$\{escapeHtml\(item\.stateId\)\}"/);
+  assert.match(app, /closest\("\[data-bucket-toggle\]"\)/);
+  assert.match(app, /bucket-children/);
+  assert.match(app, /Included AI-credit pool/);
+  assert.match(app, /Shared included AI-credit pool/);
+  assert.match(app, /total AI credits come from/);
+  assert.match(app, /replay\.pool\.grandTotal/);
+  assert.match(app, /replay\.pool\.licenseBreakdown/);
 });
 
 test("optimized UI hierarchy nodes double as clickable scope selectors", async () => {

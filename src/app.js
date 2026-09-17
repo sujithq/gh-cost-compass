@@ -565,6 +565,14 @@ const hierarchyFilters = new Map();
 function hierarchyExpanded(key, fallback) {
   return hierarchyExpansion.has(key) ? hierarchyExpansion.get(key) : fallback;
 }
+
+// Tracks whether the "Included credits" pool tree (the total pool row and its shared-pool/cost-center
+// reservation children) is expanded, independent of the hierarchy tree above — defaults to expanded so
+// the panel keeps showing every reservation unless an admin deliberately collapses it.
+const bucketExpansion = new Map();
+function bucketExpanded(key, fallback = true) {
+  return bucketExpansion.has(key) ? bucketExpansion.get(key) : fallback;
+}
 function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "") {
   const meta = HIERARCHY_KINDS[kind];
   return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small></div></div>`;
@@ -991,15 +999,17 @@ function renderGlobalScenarioHeader(definition, definitions) {
 }
 
 function bucketRowDetail(item) {
+  // Pool rows (including the rolled-up total pool) report credits regardless of whether they also
+  // happen to be an aggregate; check this first so the pool wording wins over the per-user aggregate
+  // wording below.
+  if (item.budgetKind === "pool") return `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} included credits`;
   // Aggregate rows stand in for many per-user budget states, so they report the spread across those
   // users instead of a single budget's stop behavior.
   if (item.aggregate) {
     const breaching = item.breachingCount ? ` · ${item.breachingCount} over threshold` : "";
     return `${item.userCount} users · highest ${percent(item.percent)}${breaching} · ${money(item.spent, "USD")} of ${money(item.amount, "USD")} combined`;
   }
-  return item.budgetKind === "pool"
-    ? `${item.spent.toLocaleString()} of ${item.amount.toLocaleString()} included credits`
-    : `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${budgetStopLabel(item)}`;
+  return `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${budgetStopLabel(item)}`;
 }
 
 function bucketRowHtml(item) {
@@ -1008,15 +1018,41 @@ function bucketRowHtml(item) {
   const labels = { "cost-center": "Cost center", enterprise: "Enterprise", user: "ULB", metered: "Metered" };
   const icons = { "cost-center": "costCenter", enterprise: "enterprise", user: "hardStop", metered: "alertOnly" };
   const label = labels[type];
+  const rowClass = `bucket-row bucket-row-${type}${item.parentId ? " bucket-row-nested" : ""}`;
   const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${percent(item.percent)}</b>`;
-  // Aggregate rows stand in for many per-user budget states, so there is no single state whose audit
-  // trail could be opened; render them as static rows rather than budget-history triggers.
-  if (item.aggregate) return `<div class="bucket-row bucket-row-${type} aggregate" data-history-id="${escapeHtml(item.stateId)}">${body}</div>`;
-  return `<button type="button" class="bucket-row bucket-row-${type} budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}">${body}</button>`;
+  // Aggregate rows stand in for many per-user budget states (or the rolled-up total pool), so there
+  // is no single state whose audit trail could be opened; render them as static rows rather than
+  // budget-history triggers.
+  const row = item.aggregate
+    ? `<div class="${rowClass} aggregate" data-history-id="${escapeHtml(item.stateId)}">${body}</div>`
+    : `<button type="button" class="${rowClass} budget-history-trigger" data-history-id="${escapeHtml(item.stateId)}">${body}</button>`;
+  if (!item.hasChildren) return row;
+  // The expand/collapse toggle sits next to the row rather than inside it — the row itself may still
+  // be a clickable history trigger (or an aggregate div), and nesting an interactive toggle inside
+  // another interactive element would be invalid markup.
+  const toggleVerb = item.expanded ? "Collapse" : "Expand";
+  return `<div class="bucket-tree-row"><button type="button" class="bucket-tree-toggle" data-bucket-toggle="${escapeHtml(item.stateId)}" aria-expanded="${item.expanded}"><span aria-hidden="true">${item.expanded ? "▾" : "▸"}</span><span class="sr-only">${toggleVerb} ${escapeHtml(item.displayName)}</span></button>${row}</div>`;
+}
+
+// Renders a group's items as a shallow tree: top-level rows (no parentId) followed by their children
+// nested in a `.bucket-children` wrapper immediately below, but only when the parent is expanded —
+// collapsed children are omitted from `group.items` entirely by the caller so they never reach here.
+function bucketGroupTreeHtml(items) {
+  const byParent = new Map();
+  items.forEach((item) => {
+    const key = item.parentId || null;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(item);
+  });
+  const renderLevel = (parentId) => (byParent.get(parentId) || []).map((item) => {
+    const children = item.hasChildren && item.expanded ? renderLevel(item.stateId) : "";
+    return bucketRowHtml(item) + (children ? `<div class="bucket-children">${children}</div>` : "");
+  }).join("");
+  return renderLevel(null);
 }
 
 function bucketGroupHtml(group) {
-  return `<section class="bucket-group" data-bucket-group="${escapeHtml(group.title)}"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${group.items.map(bucketRowHtml).join("") || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`;
+  return `<section class="bucket-group" data-bucket-group="${escapeHtml(group.title)}"><h4>${escapeHtml(group.title)}</h4><p>${escapeHtml(group.note)}</p>${bucketGroupTreeHtml(group.items) || `<div class="empty compact-empty">No matching buckets in this scope.</div>`}</section>`;
 }
 
 // Diffing keeps existing DOM nodes (and their in-flight CSS width transition) in place whenever the
@@ -1107,7 +1143,13 @@ function scopeConfigurationHtml(config) {
 function renderOptimizedBuckets(replay) {
   const scopeItems = scopeOptionsFor(optimizedScope.type);
   const inScope = (item) => budgetInScope(scenario, item, optimizedScope);
-  const pool = { stateId: "pool", displayName: "Included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool" };
+  // The enterprise-wide pool is presented as a collapsible parent whose total is every licensed
+  // seat's contribution (`grandTotal`), with the shared remainder and any cost-center reservations
+  // nested underneath as children — reservations partition the same pool, they don't shrink it.
+  const poolRootKey = "pool-total";
+  const poolExpanded = bucketExpanded(poolRootKey, true);
+  const poolRoot = { stateId: poolRootKey, displayName: "Included AI-credit pool", spent: replay.pool.grandConsumed, amount: replay.pool.grandTotal, remaining: replay.pool.grandRemaining, percent: replay.pool.grandPercent, budgetKind: "pool", aggregate: true, hasChildren: true, expanded: poolExpanded };
+  const sharedPool = { stateId: "pool", displayName: "Shared included AI-credit pool", spent: replay.pool.consumed, amount: replay.pool.total, remaining: replay.pool.remaining, percent: replay.pool.percent, budgetKind: "pool", parentId: poolRootKey };
   const scopedUserIds = new Set(usersInScope(scenario, optimizedScope).map((user) => user.id));
   const visibleCostCenterPools = replay.costCenterPoolStates.filter((item) => optimizedScope.type === "enterprise"
     || (optimizedScope.type === "costCenter" && item.costCenterId === optimizedScope.id)
@@ -1117,6 +1159,7 @@ function renderOptimizedBuckets(replay) {
     budgetKind: "pool",
     spent: item.consumed,
     amount: item.total,
+    parentId: poolRootKey,
     routeNote: item.capMode === "block" ? "Blocks at cap." : item.remaining === 0 ? "At cap · next accepted usage uses paid overage." : "Included credits available before paid overage.",
   }));
   const scopedUserBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
@@ -1130,10 +1173,14 @@ function renderOptimizedBuckets(replay) {
     const scopedConsumed = replay.results.filter((item) => item.status === "accepted" && item.date.startsWith(replay.period) && scopedUsers.has(item.userId)).reduce((sum, item) => sum + item.includedQuantity, 0);
     poolNote = `This scope contributed ${Math.round(scopedContribution).toLocaleString()} credits and has drawn ${scopedConsumed.toLocaleString()} from the shared pool.`;
   }
+  const planLabels = { business: "Business", enterprise: "Enterprise" };
+  const breakdownText = replay.pool.licenseBreakdown.map((entry) => `${Math.round(entry.credits).toLocaleString()} from ${entry.seatCount} ${planLabels[entry.plan] || entry.plan} license${entry.seatCount === 1 ? "" : "s"}`).join(" + ");
+  const includedCreditsTitle = `Included credits · ${Math.round(replay.pool.grandTotal).toLocaleString()} total AI credits`;
+  const includedCreditsNote = `${Math.round(replay.pool.grandTotal).toLocaleString()} total AI credits come from ${breakdownText || "0 licensed seats"}. ${poolNote}`;
   const configHost = $("#optimized-scope-config");
   if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
-    { title: "Included credits", items: [pool, ...costCenterPools], note: poolNote },
+    { title: includedCreditsTitle, items: poolExpanded ? [poolRoot, sharedPool, ...costCenterPools] : [poolRoot], note: includedCreditsNote },
     { title: "User-level budgets", items: userBudgets, note: `User-level budgets always stop usage based on total AI-credit value${scopeNote}.` },
     { title: "Budget controls", items: meteredBudgets, note: `Budgets and alerts track paid metered overage after included credits${scopeNote}.` },
   ]);
@@ -1289,6 +1336,17 @@ document.addEventListener("click", (event) => {
   const collapseAll = event.target.closest("[data-tree-collapse]");
   if (expandAll || collapseAll) {
     setHierarchyExpansionForHost((expandAll || collapseAll).dataset.treeExpand || (expandAll || collapseAll).dataset.treeCollapse, Boolean(expandAll));
+    return;
+  }
+  // Same "toggle chrome before history trigger" ordering as the hierarchy tree above: the pool
+  // row's expand/collapse arrow sits beside a clickable/aggregate row, so it must be caught first.
+  const bucketToggle = event.target.closest("[data-bucket-toggle]");
+  if (bucketToggle) {
+    const key = bucketToggle.dataset.bucketToggle;
+    const open = bucketToggle.getAttribute("aria-expanded") === "true";
+    bucketExpansion.set(key, !open);
+    renderOptimizedBuckets(replayScenario(scenario));
+    document.querySelector(`[data-bucket-toggle="${CSS.escape(key)}"]`)?.focus();
     return;
   }
   const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
