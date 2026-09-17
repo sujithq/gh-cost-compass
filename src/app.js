@@ -2,6 +2,7 @@ import { DEFAULT_SCENARIO_SET_ID, budgetInScope, bucketsForEvent, costCenterForU
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
+import { buildAssistantContext, createAssistantProvider } from "./assistant.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
@@ -17,9 +18,20 @@ let budgetHistoryTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
 let optimizedScope = { type: "enterprise", id: "" };
+const assistantProvider = createAssistantProvider();
+const assistantThread = [
+  { role: "assistant", text: "Ask about budgets, included headroom, or why the latest event was blocked. I can answer from the current browser state and GitHub billing guidance." },
+];
+let assistantDrawerOpen = false;
+let assistantBusy = false;
+let currentView = "dashboard";
+let lastAssistantQuestion = "";
+const ASSISTANT_THINK_DELAY_MS = 1100;
+const ASSISTANT_STREAM_INTERVAL_MS = 24;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const groupBy = (items, keyFor) => items.reduce((groups, item) => {
   const key = keyFor(item);
   groups.set(key, [...(groups.get(key) || []), item]);
@@ -417,6 +429,142 @@ function runScenarioToStep(stepIndex, message) {
   }
 }
 
+function assistantPromptOptions(context) {
+  const latestStatus = context.latestResult?.status || "event";
+  const pressure = context.risks[0]?.name || "the top budget";
+  const promptsByView = {
+    dashboard: [
+      ["Closest budget risk", "Which budget is closest to risk right now?"],
+      ["Included headroom", "How much included AI credit headroom remains?"],
+      ["Summarize health", "Summarize the current budget health."],
+    ],
+    simulate: [
+      ["Latest outcome", `Why was the latest usage ${latestStatus === "blocked" ? "blocked" : "accepted"}?`],
+      ["Next test", `What should I inspect next for ${pressure}?`],
+      ["Draft scenario", "Draft a scenario proposal for this budget-health behavior."],
+    ],
+    optimized: [
+      ["Explain scope", "Explain the selected scope's budget health."],
+      ["Bucket pressure", "Which credit bucket or budget is under the most pressure?"],
+      ["Included headroom", "How much included AI credit headroom remains?"],
+    ],
+    configuration: [
+      ["Risky setting", "Which configuration setting creates the most budget risk?"],
+      ["Stop usage", "How do stop-usage budgets affect this setup?"],
+      ["Draft validation", "Draft a safe scenario proposal for these settings."],
+    ],
+    timeline: [
+      ["Alert summary", "Summarize the triggered alerts and latest event."],
+      ["Latest outcome", `Why was the latest usage ${latestStatus === "blocked" ? "blocked" : "accepted"}?`],
+      ["Top risk", "Which budget should I inspect first?"],
+    ],
+  };
+  const options = promptsByView[currentView] || promptsByView.dashboard;
+  if (/draft|scenario/i.test(lastAssistantQuestion)) {
+    return [["Validate draft", "What would need validation before importing that draft?"], ...options.slice(0, 2)];
+  }
+  if (/risk|budget/i.test(lastAssistantQuestion)) {
+    return [["Explain why", `Why is ${pressure} the closest pressure point?`], ...options.slice(0, 2)];
+  }
+  return options;
+}
+
+function assistantMessageHtml(message) {
+  const body = message.loading
+    ? `<p><span>Loading budget data</span><span class="assistant-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></p>`
+    : `<p>${escapeHtml(message.text)}${message.streaming ? `<span class="assistant-stream-caret" aria-hidden="true"></span>` : ""}</p>`;
+  return `
+    <div class="assistant-message assistant-message-${message.role}${message.loading ? " assistant-message-loading" : ""}">
+      <div class="assistant-bubble">
+        <strong>${message.role === "assistant" ? "Assistant" : "You"}</strong>
+        ${body}
+        ${message.sources?.length && !message.loading && !message.streaming ? `<div class="assistant-sources">${message.sources.map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a>`).join("")}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderAssistantPanel() {
+  const container = $("#assistant-thread");
+  if (!container) return;
+  const replay = replayScenario(scenario);
+  const latestResult = latestEventId ? replay.results.find((item) => item.eventId === latestEventId) : replay.results.at(-1) || null;
+  const context = buildAssistantContext(scenario, replay, { latestResult, selectedScope: optimizedScope });
+  container.innerHTML = assistantThread.map(assistantMessageHtml).join("");
+  container.scrollTop = container.scrollHeight;
+  const prompts = $("#assistant-prompts");
+  if (prompts) {
+    prompts.innerHTML = assistantPromptOptions(context).map(([label, prompt]) => `<button type="button" data-assistant-prompt="${escapeHtml(prompt)}" ${assistantBusy ? "disabled" : ""}>${escapeHtml(label)}</button>`).join("");
+  }
+  const status = $("#assistant-status");
+  if (status) {
+    status.textContent = `${Number(context.includedPool?.remaining ?? 0).toLocaleString()} included credits remaining · ${context.risks.length ? `${context.risks[0].name} is the closest budget pressure` : "No current budget pressure"}`;
+  }
+  const input = $("#assistant-input");
+  if (input) input.disabled = assistantBusy;
+  const submit = $("#assistant-submit");
+  if (submit) submit.disabled = assistantBusy;
+  const launcher = $("#assistant-launcher");
+  if (launcher) {
+    launcher.setAttribute("aria-expanded", String(assistantDrawerOpen));
+    launcher.classList.toggle("assistant-launcher-open", assistantDrawerOpen);
+    launcher.hidden = assistantDrawerOpen;
+  }
+  const drawer = $("#assistant-drawer");
+  if (drawer) {
+    drawer.hidden = !assistantDrawerOpen;
+    drawer.setAttribute("aria-hidden", String(!assistantDrawerOpen));
+  }
+  document.body.classList.toggle("assistant-open", assistantDrawerOpen);
+}
+
+function setAssistantDrawerOpen(open) {
+  assistantDrawerOpen = open;
+  renderAssistantPanel();
+  if (open) $("#assistant-input")?.focus();
+}
+
+async function streamAssistantMessage(message, text) {
+  const chunks = String(text).split(/(\s+)/);
+  for (const chunk of chunks) {
+    message.text += chunk;
+    renderAssistantPanel();
+    await sleep(ASSISTANT_STREAM_INTERVAL_MS);
+  }
+}
+
+async function askAssistantQuestion(event) {
+  if (event) event.preventDefault();
+  if (assistantBusy) return;
+  const input = $("#assistant-input");
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return;
+  assistantBusy = true;
+  assistantThread.push({ role: "user", text: value });
+  const replay = replayScenario(scenario);
+  const latestResult = latestEventId ? replay.results.find((item) => item.eventId === latestEventId) : replay.results.at(-1) || null;
+  const context = buildAssistantContext(scenario, replay, { latestResult, selectedScope: optimizedScope });
+  input.value = "";
+  const assistantMessage = { role: "assistant", text: "", loading: true };
+  assistantThread.push(assistantMessage);
+  renderAssistantPanel();
+  await sleep(ASSISTANT_THINK_DELAY_MS);
+  const answer = assistantProvider.answer(value, context);
+  assistantMessage.loading = false;
+  assistantMessage.streaming = true;
+  renderAssistantPanel();
+  await streamAssistantMessage(assistantMessage, answer.text);
+  assistantMessage.streaming = false;
+  assistantMessage.sources = answer.sources || [];
+  lastAssistantQuestion = value;
+  assistantBusy = false;
+  renderAssistantPanel();
+  if (answer.kind === "draft" && answer.draft) {
+    showToast("Draft proposal ready", { tone: "info", detail: "Validated and marked read-only until explicitly imported." });
+  }
+}
+
 function render() {
   const replay = replayScenario(scenario);
   const currency = scenario.enterprise.currency;
@@ -435,6 +583,7 @@ function render() {
   renderConfiguration();
   renderImpactPreviews();
   renderTimeline(replay, currency);
+  renderAssistantPanel();
   if (latestEventId) renderResult(replay, currency);
   announceSimulationFeedback(replay);
 }
@@ -1324,10 +1473,12 @@ function renderResult(replay, currency) {
 }
 
 function navigate(view) {
+  currentView = view;
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === view));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
   $("#global-timeline-bar").classList.toggle("hidden", view === "configuration");
   $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Optimized UI", simulate: "Simulate usage", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
+  renderAssistantPanel();
 }
 
 function addDays(value, days) {
@@ -1354,7 +1505,17 @@ $("#optimized-scope").addEventListener("change", (event) => {
 });
 $("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
+$("#assistant-launcher")?.addEventListener("click", () => setAssistantDrawerOpen(!assistantDrawerOpen));
+$("#assistant-collapse")?.addEventListener("click", () => setAssistantDrawerOpen(false));
 document.addEventListener("click", (event) => {
+  const prompt = event.target.closest("[data-assistant-prompt]");
+  if (prompt) {
+    const input = $("#assistant-input");
+    if (!input) return;
+    input.value = prompt.dataset.assistantPrompt || "";
+    askAssistantQuestion();
+    return;
+  }
   // Tree chrome is checked before scope selection so that clicking a disclosure arrow inside a
   // clickable scope node only collapses the branch instead of also changing the inspected scope.
   const treeToggle = event.target.closest("[data-tree-toggle]");
@@ -1499,6 +1660,7 @@ $("#usage-form").addEventListener("submit", (event) => {
   if (usage.date > scenario.simulationDate) scenario.simulationDate = usage.date;
   saveAndRender("Usage event simulated");
 });
+$("#assistant-form").addEventListener("submit", (event) => { askAssistantQuestion(event); });
 ["#usage-user", "#usage-repository", "#usage-product", "#usage-date"].forEach((selector) => $(selector).addEventListener("change", () => { renderSelectors(); renderApplicableControls(replayScenario(scenario), scenario.enterprise.currency); }));
 
 $("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.paidAiUsage = $("#paid-ai-usage").checked; scenario.enterprise.seatCreditPolicy = $("#seat-credit-policy").value || "prorated"; saveAndRender("Enterprise saved"); });

@@ -6,6 +6,7 @@ import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenari
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
 import { trimToastStack } from "../src/toast-stack.js";
+import { buildAssistantContext, createAssistantProvider, validateAssistantDraft } from "../src/assistant.js";
 
 async function fileFetch(url) {
   try {
@@ -31,6 +32,50 @@ function poolTotalFor(scenario, date = "2026-09-15") {
 function quantityWithOverage(scenario, overage = 200, date = "2026-09-15") {
   return poolTotalFor(scenario, date) + overage;
 }
+
+test("assistant context summarizes the live budget health for the current simulation state", () => {
+  const scenario = createDefaultScenario("compact");
+  scenario.events = [usage("assistant-check", "2026-09-15", 200, { userId: "user-alice" })];
+  const replay = replayScenario(scenario);
+  const latestResult = replay.results.at(-1);
+  const context = buildAssistantContext(scenario, replay, { latestResult, selectedScope: { type: "enterprise", id: scenario.enterprise.id } });
+
+  assert.equal(context.enterprise, scenario.enterprise.name);
+  assert.equal(context.includedPool.total, replay.pool.total);
+  assert.ok(context.risks.length > 0 || !context.risks.length);
+  assert.ok(context.docs.some((doc) => doc.title.includes("budgets")));
+  assert.equal(context.latestResult.status, latestResult.status);
+  assert.ok(context.latestResult.controlEvaluations.length > 0);
+  assert.match(context.riskOverview, /at .*\(|No active budget/);
+});
+
+test("assistant provider returns grounded summaries and safe read-only draft scenarios", () => {
+  const scenario = createDefaultScenario("compact");
+  scenario.events = [usage("assistant-check", "2026-09-15", 200, { userId: "user-alice" })];
+  const replay = replayScenario(scenario);
+  const context = buildAssistantContext(scenario, replay, { latestResult: replay.results.at(-1), selectedScope: { type: "enterprise", id: scenario.enterprise.id } });
+  const provider = createAssistantProvider();
+
+  const explanation = provider.answer("Why was the latest event blocked or accepted?", context);
+  assert.equal(explanation.kind, "explanation");
+  assert.match(explanation.text, /Settings evaluated/);
+  assert.match(explanation.text, /Stop usage|Eligible pool|Budget Type/);
+
+  const riskExplanation = provider.answer(`Why is ${context.risks[0].name} the closest pressure point?`, context);
+  assert.equal(riskExplanation.kind, "risk-explanation");
+  assert.match(riskExplanation.text, /settings that make that true/i);
+  assert.match(riskExplanation.text, /amount:|threshold alerts:|current usage:/);
+
+  const summary = provider.answer("How much included headroom remains?", context);
+  assert.equal(summary.kind, "summary");
+  assert.match(summary.text, /included AI credits remaining|headroom/i);
+
+  const draft = provider.answer("Draft a scenario proposal for budget health", context);
+  assert.equal(draft.kind, "draft");
+  assert.equal(draft.draft.version, 1);
+  assert.equal(validateAssistantDraft(draft.draft).ok, true);
+  assert.ok(draft.text.includes("read-only"));
+});
 
 test("default scenario provides an enterprise-grade synthetic tenant", () => {
   const scenario = createDefaultScenario();
@@ -684,6 +729,43 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);
   assert.match(app, /#global-timeline-bar"\)\.classList\.toggle\("hidden"/);
+});
+
+test("assistant is available globally as a collapsible side panel", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.doesNotMatch(html, /data-view="assistant"/);
+  assert.match(html, /id="assistant-launcher"/);
+  assert.match(html, /aria-controls="assistant-drawer"/);
+  assert.match(html, /id="assistant-drawer"/);
+  assert.match(html, /id="assistant-collapse"/);
+  assert.match(html, /id="assistant-prompts"/);
+  assert.ok(html.indexOf('id="assistant-prompts"') > html.indexOf('id="assistant-thread"'), "assistant prompt pills should sit directly above the input area");
+  assert.ok(html.indexOf('id="assistant-prompts"') < html.indexOf('id="assistant-form"'), "assistant prompt pills should sit directly above the input area");
+  assert.match(html, /placeholder="Ask a budget-health question\.\.\."/);
+  assert.match(html, /id="assistant-submit"/);
+  assert.ok(html.indexOf('id="assistant-drawer"') > html.indexOf("</main>"), "assistant drawer should sit outside page views");
+
+  assert.match(app, /let assistantDrawerOpen = false/);
+  assert.match(app, /let assistantBusy = false/);
+  assert.match(app, /let currentView = "dashboard"/);
+  assert.match(app, /ASSISTANT_THINK_DELAY_MS/);
+  assert.match(app, /ASSISTANT_STREAM_INTERVAL_MS/);
+  assert.match(app, /function setAssistantDrawerOpen\(open\)/);
+  assert.match(app, /function assistantPromptOptions\(context\)/);
+  assert.match(app, /function assistantMessageHtml\(message\)/);
+  assert.match(app, /Loading budget data/);
+  assert.match(app, /assistant-typing-dots/);
+  assert.match(app, /assistant-stream-caret/);
+  assert.match(app, /async function streamAssistantMessage/);
+  assert.match(app, /currentView = view/);
+  assert.match(app, /function navigate\(view\)[\s\S]*renderAssistantPanel\(\);/);
+  assert.match(app, /document\.body\.classList\.toggle\("assistant-open", assistantDrawerOpen\)/);
+  assert.match(app, /launcher\.hidden = assistantDrawerOpen/);
+  assert.match(app, /#assistant-launcher"\)\?\.addEventListener\("click"/);
+  assert.match(app, /#assistant-collapse"\)\?\.addEventListener\("click"/);
+  assert.match(app, /\[data-assistant-prompt\]/);
 });
 
 test("hierarchy nodes name their own entity type and share one icon set across pages", async () => {
