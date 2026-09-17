@@ -6,7 +6,7 @@ import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenari
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
 import { trimToastStack } from "../src/toast-stack.js";
-import { buildAssistantContext, createAssistantProvider, validateAssistantDraft } from "../src/assistant.js";
+import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend, validateAssistantDraft } from "../src/assistant.js";
 
 async function fileFetch(url) {
   try {
@@ -75,6 +75,86 @@ test("assistant provider returns grounded summaries and safe read-only draft sce
   assert.equal(draft.draft.version, 1);
   assert.equal(validateAssistantDraft(draft.draft).ok, true);
   assert.ok(draft.text.includes("read-only"));
+});
+
+test("assistant backend stays scripted unless Copilot is explicitly selected", () => {
+  assert.equal(resolveAssistantBackend(""), ASSISTANT_BACKENDS.scripted);
+  assert.equal(resolveAssistantBackend("?assistantBackend=unknown"), ASSISTANT_BACKENDS.scripted);
+  assert.equal(resolveAssistantBackend("?assistantBackend=copilot"), ASSISTANT_BACKENDS.copilot);
+});
+
+test("Copilot assistant provider posts bounded context and validates its response", async () => {
+  const requests = [];
+  const provider = createCopilotAssistantProvider({
+    endpoint: "/test/assistant",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          kind: "copilot",
+          text: " The included pool remains healthy. ",
+          sources: [
+            { title: "Allowed", url: "https://docs.github.com/en/billing/concepts/budgets-and-alerts" },
+            { title: "Untrusted", url: "https://example.com/untrusted" },
+          ],
+        }),
+      };
+    },
+  });
+
+  const answer = await provider.answer("Summarize health", { includedPool: { remaining: 100 } }, { model: "auto", optimizedFor: "intelligence" });
+  assert.equal(requests[0].url, "/test/assistant");
+  assert.equal(requests[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    question: "Summarize health",
+    context: { includedPool: { remaining: 100 } },
+    settings: { model: "auto", optimizedFor: "intelligence" },
+  });
+  assert.equal(answer.text, "The included pool remains healthy.");
+  assert.equal(answer.sources.length, 1);
+});
+
+test("assistant Markdown renders common model output without allowing raw HTML", () => {
+  const markdown = [
+    "## Executive answer",
+    "**Alice** has `$10` remaining.",
+    "",
+    "- Inspect the next event",
+    "- Review the [GitHub budget docs](https://docs.github.com/en/billing/concepts/budgets-and-alerts)",
+    "",
+    "| Layer | Active |",
+    "| --- | --- |",
+    "| ULB | Yes |",
+    "",
+    "<script>alert('unsafe')</script>",
+  ].join("\n");
+  const html = renderAssistantMarkdown(markdown);
+
+  assert.match(html, /<h4>Executive answer<\/h4>/);
+  assert.match(html, /<strong>Alice<\/strong>/);
+  assert.match(html, /<code>\$10<\/code>/);
+  assert.match(html, /<ul><li>Inspect the next event<\/li>/);
+  assert.match(html, /<table>/);
+  assert.match(html, /href="https:\/\/docs\.github\.com/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;script&gt;/);
+});
+
+test("Copilot assistant provider surfaces backend failures without scripted fallback", async () => {
+  const provider = createCopilotAssistantProvider({
+    fetchImpl: async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "Copilot session is unavailable." }),
+    }),
+  });
+
+  await assert.rejects(
+    provider.answer("Summarize health", {}),
+    /Copilot session is unavailable/,
+  );
 });
 
 test("default scenario provides an enterprise-grade synthetic tenant", () => {
@@ -734,38 +814,61 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
 test("assistant is available globally as a collapsible side panel", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const extension = await readFile(new URL("../.github/extensions/budget-lab/extension.mjs", import.meta.url), "utf8");
 
   assert.doesNotMatch(html, /data-view="assistant"/);
   assert.match(html, /id="assistant-launcher"/);
   assert.match(html, /aria-controls="assistant-drawer"/);
   assert.match(html, /id="assistant-drawer"/);
   assert.match(html, /id="assistant-collapse"/);
+  assert.match(html, /id="assistant-fullscreen"/);
   assert.match(html, /id="assistant-prompts"/);
+  assert.match(html, /id="assistant-model-settings"/);
+  assert.match(html, /id="assistant-model"/);
+  assert.match(html, /id="assistant-optimized-for"/);
   assert.ok(html.indexOf('id="assistant-prompts"') > html.indexOf('id="assistant-thread"'), "assistant prompt pills should sit directly above the input area");
   assert.ok(html.indexOf('id="assistant-prompts"') < html.indexOf('id="assistant-form"'), "assistant prompt pills should sit directly above the input area");
+  assert.ok(html.indexOf('id="assistant-model-settings"') > html.indexOf('id="assistant-form"'), "model settings should be part of the composer, below the textarea");
   assert.match(html, /placeholder="Ask a budget-health question\.\.\."/);
   assert.match(html, /id="assistant-submit"/);
+  assert.match(html, /class="assistant-send"/);
   assert.ok(html.indexOf('id="assistant-drawer"') > html.indexOf("</main>"), "assistant drawer should sit outside page views");
 
   assert.match(app, /let assistantDrawerOpen = false/);
+  assert.match(app, /let assistantFullscreen = false/);
   assert.match(app, /let assistantBusy = false/);
   assert.match(app, /let currentView = "dashboard"/);
+  assert.match(app, /resolveAssistantBackend\(window\.location\.search\)/);
+  assert.match(app, /assistantBackend === ASSISTANT_BACKENDS\.copilot \? createCopilotAssistantProvider\(\) : createAssistantProvider\(\)/);
   assert.match(app, /ASSISTANT_THINK_DELAY_MS/);
   assert.match(app, /ASSISTANT_STREAM_INTERVAL_MS/);
   assert.match(app, /function setAssistantDrawerOpen\(open\)/);
+  assert.match(app, /function setAssistantFullscreen\(full\)/);
   assert.match(app, /function assistantPromptOptions\(context\)/);
   assert.match(app, /function assistantMessageHtml\(message\)/);
   assert.match(app, /Loading budget data/);
   assert.match(app, /assistant-typing-dots/);
   assert.match(app, /assistant-stream-caret/);
   assert.match(app, /async function streamAssistantMessage/);
+  assert.match(app, /await assistantProvider\.answer\(value, context, assistantSettings\)/);
+  assert.match(app, /renderAssistantMarkdown\(message\.text\)/);
+  assert.match(app, /loadAssistantConfiguration/);
+  assert.match(app, /Copilot assistant unavailable:/);
   assert.match(app, /currentView = view/);
   assert.match(app, /function navigate\(view\)[\s\S]*renderAssistantPanel\(\);/);
   assert.match(app, /document\.body\.classList\.toggle\("assistant-open", assistantDrawerOpen\)/);
+  assert.match(app, /drawer\.classList\.toggle\("fullscreen", assistantFullscreen\)/);
   assert.match(app, /launcher\.hidden = assistantDrawerOpen/);
   assert.match(app, /#assistant-launcher"\)\?\.addEventListener\("click"/);
   assert.match(app, /#assistant-collapse"\)\?\.addEventListener\("click"/);
+  assert.match(app, /#assistant-fullscreen"\)\?\.addEventListener\("click", \(\) => setAssistantFullscreen\(!assistantFullscreen\)\)/);
   assert.match(app, /\[data-assistant-prompt\]/);
+  assert.match(extension, /enum: \["scripted", "copilot"\]/);
+  assert.match(extension, /ctx\.input\?\.assistantBackend === "copilot" \? "copilot" : "scripted"/);
+  assert.match(extension, /session\.sendAndWait/);
+  assert.match(extension, /github-ai-credit-finops/);
+  assert.match(extension, /session\.rpc\.model\.list/);
+  assert.match(extension, /session\.setModel/);
 });
 
 test("hierarchy nodes name their own entity type and share one icon set across pages", async () => {
@@ -1321,4 +1424,3 @@ test("changing the scenario definition rematerializes the scenario before render
   // Importing a custom scenario selects it, so it must take the same rematerialize-and-render path.
   assert.match(app, /changeScenarioDefinition\(definitions\.at\(-1\)\.id\)/);
 });
-

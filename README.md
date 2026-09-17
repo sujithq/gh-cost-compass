@@ -47,6 +47,22 @@ npm test
 
 Open <http://localhost:4173>.
 
+The standalone app always uses the scripted, deterministic assistant. The experimental
+Copilot-backed assistant is enabled only when the project-scoped `budget-lab` canvas extension
+opens the app with its `assistantBackend` input explicitly set to `copilot`. That canvas setting
+also defaults to `scripted`. Ordinary `npm start` does not load the Copilot SDK or call an LLM.
+The canvas extension lives under `.github/extensions/budget-lab/` and uses a loopback-only
+endpoint to pass the existing compact assistant context to the active Copilot session. If that
+backend is unavailable, the canvas assistant reports an explicit error rather than silently
+falling back to a scripted answer.
+
+Copilot mode exposes the session's available model selector and an **Optimized for** selector for
+Auto routing. **Use conversation model** is the default and does not change the active model;
+choosing another model changes the shared Copilot conversation model before the next Budget Lab
+question. The hosted prompt limits the assistant to GitHub questions and requires the
+`github-ai-credit-finops` skill for Copilot AI-credit, billing, budget, cost-center, and FinOps
+answers.
+
 ## Documented AI-credit rules represented
 
 - One AI credit is valued at $0.01 USD.

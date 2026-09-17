@@ -142,7 +142,10 @@
           <p class="eyebrow">AI ASSISTANT</p>
           <h3>Budget assistant</h3>
         </div>
-        <button id="assistant-collapse" type="button" class="text-button" aria-label="Collapse budget assistant">Collapse</button>
+        <div class="assistant-header-actions">
+          <button id="assistant-fullscreen" type="button" class="text-button" aria-label="Expand budget assistant to full screen" aria-pressed="false">⤢</button>
+          <button id="assistant-collapse" type="button" class="text-button" aria-label="Collapse budget assistant">Collapse</button>
+        </div>
       </div>
       <span id="assistant-status" class="assistant-status">0 included credits remaining</span>
       <div id="assistant-thread" class="assistant-thread" aria-live="polite"></div>
@@ -150,7 +153,19 @@
       <form id="assistant-form" class="assistant-form">
         <label for="assistant-input" class="sr-only">Ask about budget health</label>
         <textarea id="assistant-input" rows="2" placeholder="Ask a budget-health question..."></textarea>
-        <button id="assistant-submit" type="submit" class="primary">Ask assistant</button>
+        <div class="assistant-composer-footer">
+          <div id="assistant-model-settings" class="assistant-model-settings" hidden>
+            <select id="assistant-model" aria-label="Assistant model">
+              <option value="current">Use conversation model</option>
+            </select>
+            <select id="assistant-optimized-for" aria-label="Optimized for" disabled>
+              <option value="efficiency">Efficiency</option>
+              <option value="balance" selected>Balance</option>
+              <option value="intelligence">Intelligence</option>
+            </select>
+          </div>
+          <button id="assistant-submit" type="submit" class="assistant-send" aria-label="Ask assistant">↑</button>
+        </div>
       </form>
     </article>
   </aside>
