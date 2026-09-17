@@ -13,7 +13,7 @@ const COLLECTIONS = {
 const materializedScenarioCache = new WeakMap();
 
 function clone(value) {
-  return JSON.parse(JSON.stringify(value));
+  return structuredClone(value);
 }
 
 function applyMutation(scenario, mutation) {
