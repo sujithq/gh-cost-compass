@@ -1,0 +1,73 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "enterprise-pool-to-paid-overage",
+  "defaultSetId": "enterprise",
+  "title": "Enterprise shared pool to paid overage",
+  "summary": "Exhaust the Enterprise tenant's large shared AI-credit pool, then show paid usage flowing into metered budgets.",
+  "compatibleDefaultSetIds": [
+    "enterprise"
+  ],
+  "tags": [
+    "shared pool",
+    "metered usage",
+    "enterprise"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing"
+  ],
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 10000
+      }
+    }
+  ],
+  "startDate": "2026-09-15",
+  "steps": [
+    {
+      "id": "pool-mostly-used",
+      "type": "usage",
+      "title": "Consume most included credits",
+      "description": "Alice consumes 665,000 of the Enterprise shared pool's 666,000 included credits.",
+      "expected": "The event is accepted from included credits, no paid overage is created, and 1,000 pooled credits remain.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 665000
+      }
+    },
+    {
+      "id": "pool-empty",
+      "type": "usage",
+      "title": "Exhaust the shared pool",
+      "description": "The remaining 1,000 included credits are consumed.",
+      "expected": "The Enterprise shared pool reaches 100%, while metered cost remains $0.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "paid-overage",
+      "type": "usage",
+      "title": "Create paid overage",
+      "description": "A further 1,000 credits can no longer use the Enterprise shared pool.",
+      "expected": "The event is accepted as 1,000 metered credits and creates $10 of paid overage.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    }
+  ]
+}

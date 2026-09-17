@@ -24,6 +24,26 @@
     {
       "id": "hard-stop-boundary",
       "file": "hard-stop-boundary.json"
+    },
+    {
+      "id": "enterprise-budget-health-progression",
+      "file": "enterprise-budget-health-progression.json"
+    },
+    {
+      "id": "enterprise-pool-to-paid-overage",
+      "file": "enterprise-pool-to-paid-overage.json"
+    },
+    {
+      "id": "enterprise-cost-center-pool-blocks",
+      "file": "enterprise-cost-center-pool-blocks.json"
+    },
+    {
+      "id": "enterprise-cost-center-pool-to-overage",
+      "file": "enterprise-cost-center-pool-to-overage.json"
+    },
+    {
+      "id": "enterprise-hard-stop-boundary",
+      "file": "enterprise-hard-stop-boundary.json"
     }
   ]
 }

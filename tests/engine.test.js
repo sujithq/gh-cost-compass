@@ -766,6 +766,8 @@ test("guided scenarios are declarative, reversible, and produce their documented
     assert.equal(validateScenarioDefinition(definition), null);
     if (definition.id === "inspect-selected-dataset") {
       assert.equal(definition.compatibleDefaultSetIds, undefined);
+    } else if (definition.id.startsWith("enterprise-")) {
+      assert.deepEqual(definition.compatibleDefaultSetIds, ["enterprise"]);
     } else {
       assert.deepEqual(definition.compatibleDefaultSetIds, ["compact"]);
     }
@@ -777,8 +779,11 @@ test("guided scenarios are declarative, reversible, and produce their documented
     const selected = materializeScenario(definition, -1, { defaultSetId: "enterprise" });
     assert.equal(selected.users.length, 200);
   }
-  assert.deepEqual(BUILT_IN_SCENARIOS.filter((definition) => isScenarioCompatibleWithDefaultSet(definition, "enterprise")).map((definition) => definition.id), ["inspect-selected-dataset"]);
-  assert.equal(BUILT_IN_SCENARIOS.filter((definition) => isScenarioCompatibleWithDefaultSet(definition, "compact")).length, BUILT_IN_SCENARIOS.length);
+  assert.deepEqual(
+    BUILT_IN_SCENARIOS.filter((definition) => isScenarioCompatibleWithDefaultSet(definition, "enterprise")).map((definition) => definition.id),
+    ["inspect-selected-dataset", "enterprise-budget-health-progression", "enterprise-pool-to-paid-overage", "enterprise-cost-center-pool-blocks", "enterprise-cost-center-pool-to-overage", "enterprise-hard-stop-boundary"],
+  );
+  assert.equal(BUILT_IN_SCENARIOS.filter((definition) => isScenarioCompatibleWithDefaultSet(definition, "compact")).length, 6);
 
   const compactAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "compact" });
 
@@ -815,6 +820,53 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.equal(overage.results.at(-1).status, "accepted");
   assert.equal(overage.results.at(-1).meteredQuantity, 2400);
   assert.ok(overage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
+
+  const enterpriseAt = (definition, stepIndex) => materializeScenario(definition, stepIndex, { defaultSetId: "enterprise" });
+  const enterpriseProgression = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-budget-health-progression");
+  const enterpriseAtNinety = replayScenario(enterpriseAt(enterpriseProgression, 3));
+  const enterpriseAtHundred = replayScenario(enterpriseAt(enterpriseProgression, 4));
+  assert.equal(enterpriseAtNinety.budgetStates.find((item) => item.id === "ulb-alice").percent, 90);
+  assert.equal(enterpriseAtHundred.results.at(-1).status, "accepted");
+  assert.ok(enterpriseAtHundred.alerts.some((alert) => alert.budgetId === "ulb-alice" && alert.threshold === 100));
+  assert.equal(enterpriseAtHundred.pool.total, 666000);
+
+  const enterpriseSharedPool = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-pool-to-paid-overage");
+  const enterpriseOverage = replayScenario(enterpriseAt(enterpriseSharedPool, 2));
+  assert.equal(enterpriseOverage.results.at(-1).status, "accepted");
+  assert.equal(enterpriseOverage.results.at(-1).includedQuantity, 0);
+  assert.equal(enterpriseOverage.results.at(-1).meteredQuantity, 1000);
+  assert.equal(enterpriseOverage.results.at(-1).cost, 10);
+  assert.equal(enterpriseOverage.results.at(-1).poolTotal, 666000);
+
+  const enterprisePoolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-blocks");
+  const enterpriseBlockedAtPool = replayScenario(enterpriseAt(enterprisePoolBlocks, 1));
+  assert.equal(enterpriseBlockedAtPool.results.at(-1).status, "blocked");
+  assert.match(enterpriseBlockedAtPool.results.at(-1).reason, /included AI credit pool cap/);
+  assert.equal(enterpriseBlockedAtPool.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").total, 38900);
+
+  const enterprisePoolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-to-overage");
+  const enterpriseCostCenterOverage = replayScenario(enterpriseAt(enterprisePoolOverage, 1));
+  assert.equal(enterpriseCostCenterOverage.results.at(-1).status, "accepted");
+  assert.equal(enterpriseCostCenterOverage.results.at(-1).meteredQuantity, 2400);
+  assert.equal(enterpriseCostCenterOverage.results.at(-1).cost, 24);
+  assert.ok(enterpriseCostCenterOverage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
+
+  const enterpriseHardStop = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-hard-stop-boundary");
+  const enterpriseBlocked = replayScenario(enterpriseAt(enterpriseHardStop, 1));
+  assert.equal(enterpriseBlocked.results.at(-1).status, "blocked");
+  assert.match(enterpriseBlocked.results.at(-1).reason, /Stop usage when budget limit is reached/);
+
+  const enterpriseDefinitions = BUILT_IN_SCENARIOS.filter((definition) => definition.id.startsWith("enterprise-"));
+  for (const definition of enterpriseDefinitions) {
+    for (let stepIndex = -1; stepIndex < definition.steps.length; stepIndex += 1) {
+      const materialized = enterpriseAt(definition, stepIndex);
+      assert.equal(materialized.enterprise.id, "ent-acme");
+      assert.equal(materialized.users.length, 200);
+      assert.equal(validateScenario(materialized), null);
+      assert.deepEqual(materialized, enterpriseAt(definition, stepIndex));
+      assert.doesNotThrow(() => replayScenario(materialized));
+    }
+  }
 });
 
 test("guided configuration steps do not retroactively change earlier usage attribution", () => {

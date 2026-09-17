@@ -1,0 +1,60 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "enterprise-hard-stop-boundary",
+  "defaultSetId": "enterprise",
+  "title": "Enterprise user hard-stop boundary",
+  "summary": "Reach Alice's user-level budget exactly in the Enterprise tenant, then demonstrate atomic rejection of the next event.",
+  "compatibleDefaultSetIds": [
+    "enterprise"
+  ],
+  "tags": [
+    "hard stop",
+    "blocked usage",
+    "atomic events",
+    "enterprise"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 10
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "reach-limit",
+      "type": "usage",
+      "title": "Reach the exact limit",
+      "description": "Alice consumes 1,000 AI credits, worth $10 for ULB accounting.",
+      "expected": "The event is accepted and Alice's ULB reaches exactly 100%.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "blocked-after-limit",
+      "type": "usage",
+      "title": "Attempt the next event",
+      "description": "Alice attempts to consume one additional AI credit.",
+      "expected": "The complete event is rejected by Alice's user-level hard stop and no counter changes.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1
+      }
+    }
+  ]
+}
