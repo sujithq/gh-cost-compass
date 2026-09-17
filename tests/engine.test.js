@@ -7,6 +7,7 @@ import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
 import { trimToastStack } from "../src/toast-stack.js";
 import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend, validateAssistantDraft } from "../src/assistant.js";
+import { includedPoolHistoryResults } from "../src/history.js";
 
 async function fileFetch(url) {
   try {
@@ -757,6 +758,33 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
   assert.match(app, /next accepted usage uses paid overage/);
+});
+
+test("control evaluation explainers use shared outcome-aware cards across app surfaces", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /class="control-evaluation \$\{escapeHtml\(evaluation\.outcome\)\}"/);
+  assert.match(app, /class="control-evaluation-icon" aria-hidden="true"/);
+  assert.match(app, /class="control-evaluation-outcome"/);
+  assert.match(app, /class="control-evaluations\$\{compact \? " compact" : ""\}"/);
+  assert.match(app, /aria-label="Control evaluation details"/);
+  for (const outcome of ["passed", "continued", "alerted", "blocked"]) {
+    assert.match(styles, new RegExp(`\\.control-evaluation\\.${outcome}\\{`));
+  }
+  assert.match(styles, /\.control-evaluations\.compact \.control-evaluation\{/);
+  assert.match(styles, /box-shadow:0 3px 12px rgba\(23,32,51,.045\)/);
+});
+
+test("cost-center pool history includes blocked attempts against the selected pool", () => {
+  const definition = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-blocks");
+  const scenario = materializeScenario(definition, 1, { defaultSetId: "enterprise" });
+  const replay = replayScenario(scenario);
+  const results = includedPoolHistoryResults(replay.results, { poolType: "costCenter", stateId: "cc-ai:2026-09" });
+
+  assert.deepEqual(results.map((result) => result.status), ["accepted", "blocked"]);
+  assert.equal(results[1].includedQuantity, 100);
+  assert.ok(results[1].controlEvaluations.some((evaluation) => evaluation.outcome === "blocked"));
 });
 
 test("the Included credits panel renders the pool as a collapsible tree with cost-center reservations nested underneath", async () => {

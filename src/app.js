@@ -3,6 +3,7 @@ import { isScenarioCompatibleWithDefaultSet, materializeScenario, validateScenar
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
 import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend } from "./assistant.js";
+import { includedPoolHistoryResults } from "./history.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
@@ -254,13 +255,23 @@ function poolChanges(before, after) {
 
 function controlEvaluationsHtml(result, { compact = false } = {}) {
   if (!result?.controlEvaluations?.length) return "";
+  const outcomePresentation = {
+    passed: { icon: "✓", label: "Passed" },
+    continued: { icon: "→", label: "Continued" },
+    alerted: { icon: "!", label: "Alerted" },
+    blocked: { icon: "×", label: "Blocked" },
+  };
   const items = result.controlEvaluations.map((evaluation) => `
     <li class="control-evaluation ${escapeHtml(evaluation.outcome)}">
-      <div class="control-evaluation-head"><strong>${escapeHtml(evaluation.control)}</strong><span>${escapeHtml(evaluation.outcome)}</span></div>
+      <div class="control-evaluation-head">
+        <span class="control-evaluation-icon" aria-hidden="true">${outcomePresentation[evaluation.outcome]?.icon || "•"}</span>
+        <strong>${escapeHtml(evaluation.control)}</strong>
+        <span class="control-evaluation-outcome">${escapeHtml(outcomePresentation[evaluation.outcome]?.label || evaluation.outcome)}</span>
+      </div>
       ${compact ? "" : `<dl>${evaluation.configuration.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(field.value)}</dd></div>`).join("")}</dl>`}
       <p>${escapeHtml(evaluation.result)}</p>
     </li>`).join("");
-  return `<div class="control-evaluations"><h4>Why this event is ${escapeHtml(result.status)}</h4><ol>${items}</ol></div>`;
+  return `<section class="control-evaluations${compact ? " compact" : ""}" aria-label="Control evaluation details"><h4>Why this event is ${escapeHtml(result.status)}</h4><ol class="control-evaluation-list">${items}</ol></section>`;
 }
 
 function budgetTypeLabel(budget) {
@@ -741,7 +752,7 @@ function openBudgetHistory(historyId, trigger) {
   let alertHtml = "<li>The shared pool does not emit budget alerts.</li>";
 
   if (historyId === "pool") {
-    const contributors = currentPeriodResults.filter((item) => item.status === "accepted" && item.poolType === "enterprise" && item.includedQuantity > 0);
+    const contributors = includedPoolHistoryResults(currentPeriodResults, { poolType: "enterprise", stateId: replay.pool.stateId });
     title = "Shared included AI-credit pool history";
     summary = [
       ["Consumed", `${replay.pool.consumed.toLocaleString()} credits`],
@@ -749,10 +760,12 @@ function openBudgetHistory(historyId, trigger) {
       ["Remaining", `${replay.pool.remaining.toLocaleString()} credits`],
       ["Percent", percent(replay.pool.percent)],
     ];
-    entries = historyEntries(contributors, (result) => `Drew ${result.includedQuantity.toLocaleString()} credits from the shared pool`, "No usage events have consumed this period's shared pool.");
+    entries = historyEntries(contributors, (result) => result.status === "blocked"
+      ? `Attempted ${result.includedQuantity.toLocaleString()} credits against the shared pool; no credits were consumed`
+      : `Drew ${result.includedQuantity.toLocaleString()} credits from the shared pool`, "No usage events have consumed or attempted to use this period's shared pool.");
   } else if (replay.costCenterPoolStates.some((item) => item.stateId === historyId)) {
     const poolState = replay.costCenterPoolStates.find((item) => item.stateId === historyId);
-    const contributors = currentPeriodResults.filter((item) => item.status === "accepted" && item.poolStateKey === historyId && item.includedQuantity > 0);
+    const contributors = includedPoolHistoryResults(currentPeriodResults, { poolType: "costCenter", stateId: historyId });
     title = `${poolState.displayName} history`;
     summary = [
       ["Consumed", `${poolState.consumed.toLocaleString()} credits`],
@@ -761,7 +774,9 @@ function openBudgetHistory(historyId, trigger) {
       ["AI credit pool enabled", poolState.enabled ? "Enabled" : "Disabled"],
       ["At included usage cap", poolState.capMode === "block" ? "Block members" : "Paid overage"],
     ];
-    entries = historyEntries(contributors, (result) => `Drew ${result.includedQuantity.toLocaleString()} credits from this cost center pool`, "No usage events have consumed this cost center pool.");
+    entries = historyEntries(contributors, (result) => result.status === "blocked"
+      ? `Attempted ${result.includedQuantity.toLocaleString()} credits against this cost center pool; no credits were consumed`
+      : `Drew ${result.includedQuantity.toLocaleString()} credits from this cost center pool`, "No usage events have consumed or attempted to use this cost center pool.");
     alertHtml = "<li>Included usage control health is simulator guidance; Receive budget threshold alerts remains tied to budgets.</li>";
   } else {
     const budgetState = replay.budgetStates.find((item) => item.stateId === historyId);
@@ -789,7 +804,7 @@ function openBudgetHistory(historyId, trigger) {
   $("#budget-history-title").textContent = title;
   $("#budget-history-content").innerHTML = `
     <div class="budget-history-summary">${summary.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
-    <div class="history-panel"><h4>What drove the current state</h4>${entries}</div>
+    <div class="history-panel"><h4>Usage and decisions</h4>${entries}</div>
     <div class="history-panel"><h4>Triggered alerts</h4><ul class="history-alert-list">${alertHtml}</ul></div>`;
   budgetHistoryTrigger = trigger || document.activeElement;
   $("#budget-history-modal").classList.remove("hidden");
