@@ -140,13 +140,17 @@ function budgetScopeLabel(budget) {
   return budget.budgetKind === "user" ? "Users" : scopeLabels[budget.scopeType] || budget.scopeType;
 }
 
+export function budgetStopsUsage(scenario, budget, product = scenario.products.find((item) => item.id === budget.productId)) {
+  return budget.enforcement === "hard" || budget.budgetKind === "user" || (product?.billingMode === "aiCredits" && Number(budget.amount) === 0);
+}
+
 function budgetConfiguration(scenario, budget, product) {
   return [
     { label: "Budget Type", value: budgetTypeLabel(budget, product) },
     { label: product?.billingMode === "aiCredits" ? "SKU" : "Product", value: product?.name || budget.productId },
     { label: "Budget scope", value: `${budgetScopeLabel(budget)} · ${describeScope(scenario, budget)}` },
     { label: "Budget amount", value: money(Number(budget.amount), "USD") },
-    { label: "Stop usage when budget limit is reached", value: budget.enforcement === "hard" || budget.budgetKind === "user" ? "Enabled" : "Not enabled" },
+    { label: "Stop usage when budget limit is reached", value: budgetStopsUsage(scenario, budget, product) ? "Enabled" : "Not enabled" },
     { label: "Receive budget threshold alerts", value: (budget.thresholds || []).length ? `Enabled · ${(budget.thresholds || []).join("%, ")}%` : "Not enabled" },
   ];
 }
@@ -155,7 +159,7 @@ function budgetEvaluation(scenario, budget, product, before, increment, eventAle
   const after = before + increment;
   const amount = Number(budget.amount);
   const overLimit = after > amount;
-  const stopEnabled = budget.enforcement === "hard" || budget.budgetKind === "user" || (product?.billingMode === "aiCredits" && amount === 0);
+  const stopEnabled = budgetStopsUsage(scenario, budget, product);
   const alertText = eventAlerts.length ? ` Receive budget threshold alerts fired at ${eventAlerts.map((alert) => `${alert.threshold}%`).join(", ")}.` : "";
   const result = blocked
     ? `The event would move usage from ${money(before, "USD")} to ${money(after, "USD")}, above the ${money(amount, "USD")} budget amount. Stop usage when budget limit is reached is enabled, so usage is blocked.`
@@ -343,7 +347,7 @@ export function replayScenario(scenario) {
     if (!blockingReason && costCenterPoolEnabled && meteredQuantity > 0 && eventCostCenter.aiCreditPoolCapMode === "block") blockingReason = `Included usage controls for cost centers block members of ${eventCostCenter.name} when the included AI credit pool cap is reached`;
     if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = `AI credit paid usage is disabled and the eligible ${costCenterPoolEnabled ? `${eventCostCenter.name} cost-center pool` : "enterprise shared pool"} is exhausted`;
     if (!blockingReason) {
-      const blocker = meteredBudgets.find((budget) => (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
+      const blocker = meteredBudgets.find((budget) => budgetStopsUsage(effectiveScenario, budget, product) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
       if (blocker) blockingReason = `${blocker.name}: Stop usage when budget limit is reached is enabled and this event would exceed the budget amount`;
     }
 
@@ -428,7 +432,7 @@ export function replayScenario(scenario) {
     if (!result.controlEvaluations.some((item) => item.outcome === "blocked")) {
       for (const budget of meteredBudgets) {
         const before = meteredBudgetBefore.get(budget.id) || 0;
-        const blocked = Boolean(blockingReason && before + billedCost > Number(budget.amount) && (budget.enforcement === "hard" || (isAi && Number(budget.amount) === 0)));
+        const blocked = Boolean(blockingReason && before + billedCost > Number(budget.amount) && budgetStopsUsage(effectiveScenario, budget, product));
         result.controlEvaluations.push(budgetEvaluation(effectiveScenario, budget, product, before, billedCost, alerts.filter((alert) => alert.eventId === event.id && alert.budgetId === budget.id), blocked, !blockingReason));
         if (blocked) break;
       }
