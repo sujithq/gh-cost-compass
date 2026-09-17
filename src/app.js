@@ -512,7 +512,11 @@ function budgetGroupHtml(key, items) {
   const highestPercent = Math.max(...items.map((item) => item.percent));
   const summary = `${items.length} ${items.length === 1 ? "card" : "cards"} · highest ${percent(highestPercent)}`;
   const body = key === "user" ? userBudgetSubgroupsHtml(items) : sortBudgetItems(items).map((item) => item.html).join("");
-  return `<div class="budget-group"><button type="button" class="budget-group-toggle" data-budget-group-toggle="${escapeHtml(key)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="budget-group-title">${escapeHtml(meta.label)}</span><span class="budget-group-summary">${summary}</span></button>${open ? `<div class="budget-group-body">${body}</div>` : ""}</div>`;
+  // A group holding only a single card (typically the shared pool) is sized to that one card's
+  // column width instead of stretching across the full grid, so the empty space next to it isn't
+  // wasted and other groups (like the multi-column user-level budgets) have visual room to expand.
+  const soloClass = items.length === 1 ? " budget-group-solo" : "";
+  return `<div class="budget-group${soloClass}"><button type="button" class="budget-group-toggle" data-budget-group-toggle="${escapeHtml(key)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span><span class="budget-group-title">${escapeHtml(meta.label)}</span><span class="budget-group-summary">${summary}</span></button>${open ? `<div class="budget-group-body">${body}</div>` : ""}</div>`;
 }
 
 function userBudgetSubgroupsHtml(items) {

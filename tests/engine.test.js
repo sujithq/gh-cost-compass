@@ -764,6 +764,25 @@ test("user-level budgets are sub-grouped by type and sorted by percent, amount, 
   assert.match(css, /\.budget-subgroup\{/);
 });
 
+test("single-card budget groups shrink to their item's column so multi-item groups get more room", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // The "Included AI-credit pools" group (and any other group with exactly one card, such as an
+  // enterprise with no cost-center pools) should not stretch across the full grid width; it gets
+  // a "solo" modifier so it only occupies a single column, leaving the rest of the row free for
+  // groups that actually need it.
+  assert.match(app, /const soloClass = items\.length === 1 \? " budget-group-solo" : "";/);
+  assert.match(app, /<div class="budget-group\$\{soloClass\}">/);
+  // Groups default to spanning the full grid row; only solo (single-card) groups are constrained
+  // back down to a single column.
+  assert.match(css, /\.budget-group\{grid-column:1\/-1;/);
+  assert.match(css, /\.budget-group-solo\{grid-column:span 1\}/);
+  // With the freed-up row width, the expanded user-level sub-groups render three columns of cards
+  // instead of two.
+  assert.match(css, /\.budget-subgroup-body\{grid-template-columns:repeat\(3,1fr\);/);
+});
+
 test("the hierarchy tree stays usable at enterprise scale", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
