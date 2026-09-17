@@ -1,0 +1,75 @@
+{
+  "$schema": "./scenario.schema.json",
+  "version": 1,
+  "id": "enterprise-cost-center-pool-to-overage",
+  "defaultSetId": "enterprise",
+  "title": "Enterprise cost center pool to paid overage",
+  "summary": "Enable the AI Innovation cost-center pool and show excess Enterprise usage rolling into metered budgets.",
+  "compatibleDefaultSetIds": [
+    "enterprise"
+  ],
+  "tags": [
+    "cost center",
+    "included pool",
+    "metered usage",
+    "enterprise"
+  ],
+  "sourceUrls": [
+    "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
+  ],
+  "startDate": "2026-09-15",
+  "setup": [
+    {
+      "target": "budget",
+      "id": "ulb-alice",
+      "changes": {
+        "amount": 10000
+      }
+    },
+    {
+      "target": "budget",
+      "id": "metered-ai-team",
+      "changes": {
+        "amount": 30
+      }
+    },
+    {
+      "target": "costCenter",
+      "id": "cc-ai",
+      "changes": {
+        "aiCreditPoolEnabled": true,
+        "aiCreditPoolCapMode": "allowOverage"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "pool-used",
+      "type": "usage",
+      "title": "Use the AI Innovation pool",
+      "description": "Alice consumes all 38,900 included credits available to the AI Innovation cost center.",
+      "expected": "The cost-center included pool reaches 100%, while paid overage remains $0.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 38900
+      }
+    },
+    {
+      "id": "overage-budget-alert",
+      "type": "usage",
+      "title": "Roll into paid overage",
+      "description": "Alice consumes 2,400 more AI credits after the AI Innovation pool is exhausted.",
+      "expected": "The event is accepted as $24 of paid overage and the AI team metered budget reaches 80%, crossing its 75% threshold.",
+      "event": {
+        "date": "2026-09-15",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 2400
+      }
+    }
+  ]
+}
