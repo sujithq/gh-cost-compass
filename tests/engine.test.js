@@ -716,6 +716,30 @@ test("cost-center-scoped user-level budgets use the cost-center icon, not the pe
   assert.match(app, /const colorClass = isUlb \? \(budget\.userBudgetType === "costCenter" \? "cost-center" : "user"\) : /);
 });
 
+test("the dashboard budget grid groups cards by type, collapsed by default", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /const BUDGET_GROUP_KINDS = \{/);
+  for (const label of ["Included AI-credit pools", "Enterprise budgets", "Organization budgets", "Cost center budgets", "Repository budgets", "User-level budgets", "Other budgets"]) {
+    assert.match(app, new RegExp(`label: "${label}"`));
+  }
+  // Groups must default to collapsed so an enterprise with many configured budgets isn't a wall of
+  // open cards; only a group an admin has explicitly toggled should stay open across re-renders.
+  assert.match(app, /function budgetGroupExpanded\(key, fallback = false\)/);
+  assert.match(app, /function budgetGroupKeyFor\(budget\)/);
+  assert.match(app, /data-budget-group-toggle="\$\{escapeHtml\(key\)\}" aria-expanded="\$\{open\}"/);
+  assert.match(app, /\$\{open \? `<div class="budget-group-body">/);
+  // The pool card and cost-center pools group under the same "pool" key as any other budget type.
+  assert.match(app, /const groups = new Map\(\[\["pool", \[poolCard, \.\.\.costCenterPoolCards\]\]\]\);/);
+  // Clicking a group's toggle button must flip its expansion state and re-render just the grid.
+  assert.match(app, /const budgetGroupToggle = event\.target\.closest\("\[data-budget-group-toggle\]"\);/);
+  assert.match(app, /budgetGroupExpansion\.set\(key, !open\);/);
+  assert.match(app, /renderBudgets\(replayScenario\(scenario\), scenario\.enterprise\.currency\);/);
+  assert.match(css, /\.budget-group-toggle\{/);
+  assert.match(css, /\.budget-group-body\{/);
+});
+
 test("the hierarchy tree stays usable at enterprise scale", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
