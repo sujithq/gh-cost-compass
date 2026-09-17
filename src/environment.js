@@ -1,5 +1,9 @@
 const environments = new Map();
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 const COLLECTIONS = {
   organizations: "organization",
   repositories: "repository",
@@ -90,7 +94,7 @@ export function validateEnvironment(environment) {
     return "Environment provenance requires kind, createdAt, assumptions, and omittedCapabilities.";
   }
   if (environment.events !== undefined || environment.simulationDate !== undefined) return "Environment must contain topology only; events and simulationDate belong to scenarios.";
-  const scenario = { ...structuredClone(environment), version: 2, simulationDate: environment.source.createdAt.slice(0, 10), events: [], enterpriseTeams: environment.enterpriseTeams || [] };
+  const scenario = { ...clone(environment), version: 2, simulationDate: environment.source.createdAt.slice(0, 10), events: [], enterpriseTeams: environment.enterpriseTeams || [] };
   delete scenario.source;
   delete scenario.name;
   delete scenario.summary;
@@ -101,13 +105,13 @@ export function validateEnvironment(environment) {
 export function registerEnvironment(environment) {
   const error = validateEnvironment(environment);
   if (error) throw new Error(error);
-  environments.set(environment.id, structuredClone(environment));
+  environments.set(environment.id, clone(environment));
   return environment.id;
 }
 
 export function getEnvironment(environmentId) {
   const environment = environments.get(environmentId);
-  return environment ? structuredClone(environment) : undefined;
+  return environment ? clone(environment) : undefined;
 }
 
 export function listEnvironments() {

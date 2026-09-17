@@ -10,9 +10,10 @@ const COLLECTIONS = {
   enterpriseTeam: "enterpriseTeams",
   product: "products",
 };
+const materializedScenarioCache = new WeakMap();
 
 function clone(value) {
-  return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
 }
 
 function applyMutation(scenario, mutation) {
@@ -56,7 +57,7 @@ function baseScenarioForDefinition(definition, defaultSetId) {
     return normalizeEnvironmentScenario({ ...topology, version: 2, events: [], simulationDate: definition.startDate || source.createdAt.slice(0, 10), enterpriseTeams: topology.enterpriseTeams || [] });
   }
   if (definition.baseline) {
-    const { source, name, summary, ...topology } = structuredClone(definition.baseline);
+    const { source, name, summary, ...topology } = clone(definition.baseline);
     return normalizeEnvironmentScenario({ ...topology, version: 2, events: [], simulationDate: definition.startDate || source.createdAt.slice(0, 10), enterpriseTeams: topology.enterpriseTeams || [] });
   }
   const scenario = createDefaultScenario(defaultSetId);
@@ -90,6 +91,16 @@ export function validateScenarioDefinition(definition) {
 export function materializeScenario(definition, stepIndex = -1, { defaultSetId } = {}) {
   const error = validateDefinitionShape(definition);
   if (error) throw new Error(error);
+  const fingerprint = JSON.stringify(definition);
+  const cacheKey = `${defaultSetId || ""}:${stepIndex}`;
+  let cache = materializedScenarioCache.get(definition);
+  if (cache?.fingerprint === fingerprint && cache.scenarios.has(cacheKey)) {
+    return clone(cache.scenarios.get(cacheKey));
+  }
+  if (!cache || cache.fingerprint !== fingerprint) {
+    cache = { fingerprint, scenarios: new Map() };
+    materializedScenarioCache.set(definition, cache);
+  }
   const scenario = baseScenarioForDefinition(definition, defaultSetId);
   let scenarioSnapshot;
   for (const seedEvent of definition.seed || []) {
@@ -114,5 +125,6 @@ export function materializeScenario(definition, stepIndex = -1, { defaultSetId }
   }
   const materializedError = validateMaterializedScenario(scenario);
   if (materializedError) throw new Error(materializedError);
+  cache.scenarios.set(cacheKey, clone(scenario));
   return scenario;
 }
