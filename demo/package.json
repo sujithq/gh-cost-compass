@@ -1,0 +1,14 @@
+{
+  "name": "copilot-budget-lab-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deck": "node generate-deck.mjs",
+    "record": "node record-demo.mjs",
+    "record:fast": "node record-demo.mjs --fast"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "pptxgenjs": "^3.12.0"
+  }
+}
