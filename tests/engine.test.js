@@ -912,6 +912,7 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.match(app, /function resizeAssistantInput\(\)/);
   assert.match(app, /function assistantPromptOptions\(context\)/);
   assert.match(app, /function assistantMessageHtml\(message\)/);
+  assert.match(app, /class="assistant-message-role"/);
   assert.match(app, /Loading budget data/);
   assert.match(app, /assistant-typing-dots/);
   assert.match(app, /assistant-stream-caret/);
@@ -934,6 +935,8 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.match(styles, /\.assistant-composer\{/);
   assert.match(styles, /\.assistant-form \.assistant-composer textarea/);
   assert.match(styles, /\.assistant-form \.assistant-send\{position:absolute/);
+  assert.match(styles, /\.assistant-message-role\{/);
+  assert.equal(styles.includes(".assistant-bubble strong"), false);
   assert.match(extension, /enum: \["scripted", "copilot"\]/);
   assert.match(extension, /ctx\.input\?\.assistantBackend === "scripted" \? "scripted" : "copilot"/);
   assert.match(extension, /session\.sendAndWait/);
