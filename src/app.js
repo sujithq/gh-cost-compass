@@ -1857,7 +1857,10 @@ $("#usage-form").addEventListener("submit", (event) => {
 $("#assistant-form").addEventListener("submit", (event) => { askAssistantQuestion(event); });
 ["#usage-user", "#usage-repository", "#usage-product", "#usage-date"].forEach((selector) => $(selector).addEventListener("change", () => { renderSelectors(); renderApplicableControls(replayScenario(scenario), scenario.enterprise.currency); }));
 
-$("#paid-ai-usage-policy").addEventListener("change", renderPaidUsageProducts);
+$("#paid-ai-usage-policy").addEventListener("change", () => {
+  renderPaidUsageProducts();
+  renderImpactPreviews();
+});
 $("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.aiCreditPaidUsage = $("#paid-ai-usage-policy").value; scenario.enterprise.aiCreditPaidUsageProductIds = [...$("#paid-ai-usage-products").selectedOptions].map((option) => option.value); normalizeScenario(scenario); scenario.enterprise.seatCreditPolicy = $("#seat-credit-policy").value || "prorated"; saveAndRender("Enterprise saved"); });
 $("#product-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.products.push({ id: createId("product"), name: $("#product-name").value.trim(), unit: "unit", unitPrice: Number($("#product-price").value), billingMode: "metered" }); event.target.reset(); saveAndRender("Product added"); });
 $("#organization-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.organizations.push({ id: createId("org"), name: $("#organization-name").value.trim() }); event.target.reset(); saveAndRender("Organization added"); });

@@ -31,6 +31,15 @@ export function isScenarioCompatibleWithDefaultSet(definition, selectedDefaultSe
 
 function applyMutation(scenario, mutation) {
   if (mutation.target === "enterprise") {
+    if (Object.hasOwn(mutation.changes, "paidAiUsage") && !Object.hasOwn(mutation.changes, "aiCreditPaidUsage")) {
+      mutation = {
+        ...mutation,
+        changes: {
+          ...mutation.changes,
+          aiCreditPaidUsage: mutation.changes.paidAiUsage === false ? "disabled" : "enabled",
+        },
+      };
+    }
     Object.assign(scenario.enterprise, mutation.changes);
     // Keep the legacy paidAiUsage boolean in sync immediately so materialized scenarios are
     // internally consistent as soon as this mutation applies, rather than only after a later
