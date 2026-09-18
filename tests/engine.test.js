@@ -541,6 +541,7 @@ test("the grand total included AI-credit pool stays whole even after a cost cent
 test("cost-center AI credit pool can block at its included cap", () => {
   const scenario = createDefaultScenario("compact");
   Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
+  scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("near-cap", "2026-09-15", 3800), usage("blocked", "2026-09-15", 200)];
   const replay = replayScenario(scenario);
@@ -763,7 +764,7 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /Stop usage when budget limit is reached/);
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
-  assert.match(app, /next accepted usage uses paid overage/);
+  assert.match(app, /further usage needs the paid usage policy and budgets/);
 });
 
 test("control evaluation explainers use shared outcome-aware cards across app surfaces", async () => {
@@ -1382,14 +1383,18 @@ test("optimized bucket attribution names cost-center included pools", () => {
 test("replay results explain blocked included usage controls with GitHub wording", () => {
   const scenario = createDefaultScenario("compact");
   Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
+  scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("near-cap", "2026-09-15", 3800), usage("blocked", "2026-09-15", 200)];
   const blocked = replayScenario(scenario).results.at(-1);
   assert.equal(blocked.status, "blocked");
-  assert.ok(blocked.controlEvaluations.some((item) => item.control === "Included usage controls for cost centers" && item.outcome === "blocked"));
+  assert.ok(blocked.controlEvaluations.some((item) => item.control === "AI credit paid usage" && item.outcome === "blocked"));
   const poolCheck = blocked.controlEvaluations.find((item) => item.control === "Included usage controls for cost centers");
+  assert.equal(poolCheck.outcome, "continued");
   assert.deepEqual(poolCheck.configuration.map((item) => item.label), ["Cost center", "AI credit included usage cap", "Included allowance"]);
-  assert.match(poolCheck.result, /blocked before paid overage or metered budgets are evaluated/);
+  assert.match(poolCheck.result, /is not a total-usage hard stop/);
+  const paidUsageCheck = blocked.controlEvaluations.find((item) => item.control === "AI credit paid usage");
+  assert.match(paidUsageCheck.result, /blocked before metered budgets are evaluated/);
 });
 
 test("replay results explain cost-center AI budget alerts without stop usage", () => {
