@@ -1,4 +1,4 @@
-import { DEFAULT_SCENARIO_SET_ID, createDefaultScenario, defaultScenarioSetOptions } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, createDefaultScenario, defaultScenarioSetOptions, normalizeEnterprisePaidUsage } from "./engine.js";
 import { getEnvironment, validateMaterializedScenario, validateEnvironment } from "./environment.js";
 
 const COLLECTIONS = {
@@ -31,7 +31,20 @@ export function isScenarioCompatibleWithDefaultSet(definition, selectedDefaultSe
 
 function applyMutation(scenario, mutation) {
   if (mutation.target === "enterprise") {
+    if (Object.hasOwn(mutation.changes, "paidAiUsage") && !Object.hasOwn(mutation.changes, "aiCreditPaidUsage")) {
+      mutation = {
+        ...mutation,
+        changes: {
+          ...mutation.changes,
+          aiCreditPaidUsage: mutation.changes.paidAiUsage === false ? "disabled" : "enabled",
+        },
+      };
+    }
     Object.assign(scenario.enterprise, mutation.changes);
+    // Keep the legacy paidAiUsage boolean in sync immediately so materialized scenarios are
+    // internally consistent as soon as this mutation applies, rather than only after a later
+    // normalizeScenario/validateScenario pass mutates the object again.
+    normalizeEnterprisePaidUsage(scenario.enterprise);
     return;
   }
   const collection = scenario[COLLECTIONS[mutation.target]];

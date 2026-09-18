@@ -36,6 +36,8 @@ function quantityWithOverage(scenario, overage = 200, date = "2026-09-15") {
 
 test("assistant context summarizes the live budget health for the current simulation state", () => {
   const scenario = createDefaultScenario("compact");
+  scenario.enterprise.aiCreditPaidUsage = "selectedProducts";
+  scenario.enterprise.aiCreditPaidUsageProductIds = ["ai-credits"];
   scenario.events = [usage("assistant-check", "2026-09-15", 200, { userId: "user-alice" })];
   const replay = replayScenario(scenario);
   const latestResult = replay.results.at(-1);
@@ -46,6 +48,8 @@ test("assistant context summarizes the live budget health for the current simula
   assert.ok(context.risks.length > 0 || !context.risks.length);
   assert.ok(context.docs.some((doc) => doc.title.includes("budgets")));
   assert.equal(context.latestResult.status, latestResult.status);
+  assert.equal(context.paidUsagePolicy, "selectedProducts");
+  assert.deepEqual(context.paidUsageProductIds, ["ai-credits"]);
   assert.ok(context.latestResult.controlEvaluations.length > 0);
   assert.match(context.riskOverview, /at .*\(|No active budget/);
 });
@@ -540,19 +544,25 @@ test("the grand total included AI-credit pool stays whole even after a cost cent
 
 test("cost-center AI credit pool can block at its included cap", () => {
   const scenario = createDefaultScenario("compact");
-  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "block" });
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
+  scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("near-cap", "2026-09-15", 3800), usage("blocked", "2026-09-15", 200)];
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "accepted");
   assert.equal(replay.results[1].status, "blocked");
-  assert.match(replay.results[1].reason, /included AI credit pool cap/);
+  assert.match(replay.results[1].reason, /AI credit paid usage is disabled/);
   assert.equal(replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").consumed, 3800);
+  assert.equal(replay.budgetStates.find((item) => item.id === "ulb-alice").spent, 38);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 0);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 0);
+  assert.deepEqual(replay.results[1].affectedBudgets, []);
+  assert.deepEqual(replay.alerts, []);
 });
 
 test("cost-center AI credit pool can roll over into paid metered budgets", () => {
   const scenario = createDefaultScenario("compact");
-  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" });
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("pool", "2026-09-15", 3900), usage("overage", "2026-09-15", 2400)];
   const replay = replayScenario(scenario);
@@ -566,7 +576,7 @@ test("cost-center AI credit pool can roll over into paid metered budgets", () =>
 
 test("cost-center overage remains visible while enterprise pool has headroom", () => {
   const scenario = createDefaultScenario("compact");
-  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" });
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("pool", "2026-09-15", 3900), usage("overage", "2026-09-15", 100)];
   const replay = replayScenario(scenario);
@@ -581,13 +591,38 @@ test("cost-center overage remains visible while enterprise pool has headroom", (
 
 test("paid usage policy blocks overage regardless of budget headroom", () => {
   const scenario = createDefaultScenario();
-  scenario.enterprise.paidAiUsage = false;
+  scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
   scenario.events = [usage("over", "2026-09-15", quantityWithOverage(scenario))];
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "blocked");
   assert.equal(replay.results[0].fundingRoute, "blocked");
   assert.match(replay.results[0].reason, /AI credit paid usage is disabled/);
+});
+
+test("selected-product paid usage allows only configured AI-credit products", () => {
+  for (const [productId, expectedStatus] of [["ai-credits", "accepted"], ["ai-credits-unselected", "blocked"]]) {
+    const scenario = createDefaultScenario("compact");
+    scenario.products.push({ id: "ai-credits-unselected", name: "Unselected AI credits", unit: "AI credit", unitPrice: 0.01, billingMode: "aiCredits" });
+    scenario.enterprise.aiCreditPaidUsage = "selectedProducts";
+    scenario.enterprise.aiCreditPaidUsageProductIds = ["ai-credits"];
+    scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+    scenario.events = [usage(`selected-policy-${productId}`, "2026-09-15", quantityWithOverage(scenario), { productId })];
+
+    const replay = replayScenario(scenario);
+    const result = replay.results[0];
+    assert.equal(result.status, expectedStatus);
+    if (expectedStatus === "blocked") {
+      assert.match(result.reason, /not enabled for Unselected AI credits/);
+      assert.equal(replay.pool.consumed, 0);
+      assert.ok(replay.budgetStates.every((budget) => budget.spent === 0));
+      assert.deepEqual(result.affectedBudgets, []);
+      assert.deepEqual(replay.alerts, []);
+    } else {
+      assert.equal(result.fundingRoute, "split");
+      assert.ok(replay.pool.consumed > 0);
+    }
+  }
 });
 
 test("metered hard budget blocks overage but not included consumption", () => {
@@ -598,6 +633,28 @@ test("metered hard budget blocks overage but not included consumption", () => {
   const replay = replayScenario(scenario);
   assert.equal(replay.results[0].status, "blocked");
   assert.match(replay.results[0].reason, /Stop usage when budget limit is reached/);
+});
+
+test("the applicable hard budget with the least headroom blocks atomically", () => {
+  for (const [enterpriseAmount, costCenterAmount, blockingBudgetName] of [
+    [1, 3, "Enterprise AI overage"],
+    [3, 1, "AI team overage"],
+  ]) {
+    const scenario = createDefaultScenario("compact");
+    scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
+    scenario.budgets.find((item) => item.id === "metered-enterprise").amount = enterpriseAmount;
+    scenario.budgets.find((item) => item.id === "metered-ai-team").amount = costCenterAmount;
+    scenario.events = [usage(`least-headroom-${blockingBudgetName}`, "2026-09-15", quantityWithOverage(scenario, 400))];
+
+    const replay = replayScenario(scenario);
+    const result = replay.results[0];
+    assert.equal(result.status, "blocked");
+    assert.match(result.reason, new RegExp(`^${blockingBudgetName}:`));
+    assert.equal(replay.pool.consumed, 0);
+    assert.ok(replay.budgetStates.every((budget) => budget.spent === 0));
+    assert.deepEqual(result.affectedBudgets, []);
+    assert.deepEqual(replay.alerts, []);
+  }
 });
 
 test("zero-dollar AI-credit budget blocks metered usage even when configured alert-only", () => {
@@ -704,9 +761,11 @@ test("canvas-hosted UI keeps the native simulation date visible", async () => {
 
 test("configuration help exposes impact regions and official GitHub citations", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   for (const id of ["enterprise-impact", "cost-center-impact", "user-impact", "budget-impact"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /id="default-scenario-set"/);
-  for (const id of ["enterprise-team-form", "enterprise-team-users", "cost-center-ai-pool", "cost-center-pool-mode", "cost-center-team", "cost-center-repository"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["enterprise-team-form", "enterprise-team-users", "cost-center-ai-pool", "paid-ai-usage-policy", "cost-center-team", "cost-center-repository"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(app, /#paid-ai-usage-policy"\)\.addEventListener\("change", \(\) => \{\s+renderPaidUsageProducts\(\);\s+renderImpactPreviews\(\);/);
   assert.match(html, /docs\.github\.com\/en\/copilot\/concepts\/billing-and-usage\/organizations-and-enterprises\/billing/);
   assert.match(html, /docs\.github\.com\/en\/billing\/reference\/cost-center-allocation/);
   assert.match(html, /included-usage-controls-for-cost-centers/);
@@ -763,7 +822,7 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /Stop usage when budget limit is reached/);
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
-  assert.match(app, /next accepted usage uses paid overage/);
+  assert.match(app, /further usage needs the paid usage policy and budgets/);
 });
 
 test("control evaluation explainers use shared outcome-aware cards across app surfaces", async () => {
@@ -1179,7 +1238,7 @@ test("guided scenarios are declarative, reversible, and produce their documented
   const poolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-blocks");
   const blockedAtPool = replayScenario(compactAt(poolBlocks, 1));
   assert.equal(blockedAtPool.results.at(-1).status, "blocked");
-  assert.match(blockedAtPool.results.at(-1).reason, /included AI credit pool cap/);
+  assert.match(blockedAtPool.results.at(-1).reason, /AI credit paid usage is disabled/);
 
   const sharedPool = BUILT_IN_SCENARIOS.find((item) => item.id === "pool-to-paid-overage");
   const sharedPoolOverage = replayScenario(compactAt(sharedPool, 2));
@@ -1215,7 +1274,7 @@ test("guided scenarios are declarative, reversible, and produce their documented
   const enterprisePoolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-blocks");
   const enterpriseBlockedAtPool = replayScenario(enterpriseAt(enterprisePoolBlocks, 1));
   assert.equal(enterpriseBlockedAtPool.results.at(-1).status, "blocked");
-  assert.match(enterpriseBlockedAtPool.results.at(-1).reason, /included AI credit pool cap/);
+  assert.match(enterpriseBlockedAtPool.results.at(-1).reason, /AI credit paid usage is disabled/);
   assert.equal(enterpriseBlockedAtPool.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").total, 38900);
 
   const enterprisePoolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-to-overage");
@@ -1241,6 +1300,27 @@ test("guided scenarios are declarative, reversible, and produce their documented
       assert.doesNotThrow(() => replayScenario(materialized));
     }
   }
+});
+
+test("guided enterprise mutations honor the legacy paid-usage boolean", () => {
+  const definition = {
+    version: 1,
+    id: "legacy-paid-usage",
+    title: "Legacy paid usage",
+    summary: "Legacy enterprise mutations remain compatible.",
+    steps: [{
+      id: "disable-paid-usage",
+      type: "configuration",
+      title: "Disable paid usage",
+      description: "Apply the legacy paid-usage setting.",
+      expected: "The canonical policy is disabled.",
+      mutation: { target: "enterprise", changes: { paidAiUsage: false } },
+    }],
+  };
+
+  const scenario = materializeScenario(definition, 0, { defaultSetId: "compact" });
+  assert.equal(scenario.enterprise.aiCreditPaidUsage, "disabled");
+  assert.equal(scenario.enterprise.paidAiUsage, false);
 });
 
 test("guided configuration steps do not retroactively change earlier usage attribution", () => {
@@ -1338,7 +1418,7 @@ test("cost-center pool enablement does not create extra included-credit capacity
         title: "Enable pool",
         description: "AI Innovation enables its own included pool.",
         expected: "Alice's remaining included capacity is reduced by earlier usage.",
-        mutation: { target: "costCenter", id: "cc-ai", changes: { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" } },
+        mutation: { target: "costCenter", id: "cc-ai", changes: { aiCreditPoolEnabled: true } },
       },
       {
         id: "alice-remaining-capacity",
@@ -1381,20 +1461,24 @@ test("optimized bucket attribution names cost-center included pools", () => {
 
 test("replay results explain blocked included usage controls with GitHub wording", () => {
   const scenario = createDefaultScenario("compact");
-  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "block" });
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
+  scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 200;
   scenario.events = [usage("near-cap", "2026-09-15", 3800), usage("blocked", "2026-09-15", 200)];
   const blocked = replayScenario(scenario).results.at(-1);
   assert.equal(blocked.status, "blocked");
-  assert.ok(blocked.controlEvaluations.some((item) => item.control === "Included usage controls for cost centers" && item.outcome === "blocked"));
+  assert.ok(blocked.controlEvaluations.some((item) => item.control === "AI credit paid usage" && item.outcome === "blocked"));
   const poolCheck = blocked.controlEvaluations.find((item) => item.control === "Included usage controls for cost centers");
-  assert.deepEqual(poolCheck.configuration.map((item) => item.label), ["Cost center", "AI credit pool enabled", "At the included usage cap"]);
-  assert.match(poolCheck.result, /blocked before paid overage or metered budgets are evaluated/);
+  assert.equal(poolCheck.outcome, "continued");
+  assert.deepEqual(poolCheck.configuration.map((item) => item.label), ["Cost center", "AI credit included usage cap", "Included allowance"]);
+  assert.match(poolCheck.result, /is not a total-usage hard stop/);
+  const paidUsageCheck = blocked.controlEvaluations.find((item) => item.control === "AI credit paid usage");
+  assert.match(paidUsageCheck.result, /blocked before metered budgets are evaluated/);
 });
 
 test("replay results explain cost-center AI budget alerts without stop usage", () => {
   const scenario = createDefaultScenario("compact");
-  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true, aiCreditPoolCapMode: "allowOverage" });
+  Object.assign(scenario.costCenters.find((item) => item.id === "cc-ai"), { aiCreditPoolEnabled: true });
   const userBudget = scenario.budgets.find((item) => item.id === "ulb-alice");
   userBudget.amount = 200;
   const budget = scenario.budgets.find((item) => item.id === "metered-ai-team");

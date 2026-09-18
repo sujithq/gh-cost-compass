@@ -180,6 +180,8 @@ export function buildAssistantContext(scenario, replay = replayScenario(scenario
       percent: Number(replay.pool.percent || 0),
     },
     paidUsageEnabled: Boolean(scenario?.enterprise?.paidAiUsage),
+    paidUsagePolicy: scenario?.enterprise?.aiCreditPaidUsage || "enabled",
+    paidUsageProductIds: [...(scenario?.enterprise?.aiCreditPaidUsageProductIds || [])],
     alerts: replay.alerts.slice(0, 5).map((alert) => ({
       id: alert.id,
       message: alert.message,

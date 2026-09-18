@@ -1,4 +1,4 @@
-import { DEFAULT_SCENARIO_SET_ID, budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, budgetInScope, paidUsageAllowedForProduct, paidUsagePolicyLabel, budgetStopsUsage, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -677,7 +677,7 @@ function renderSummary(replay, currency) {
     ["Shared included AI-credit pool", `${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}`, `${percent(replay.pool.percent)} of included credits consumed`],
     ["Cost center AI pools", costCenterPoolCount, costCenterPoolCount ? "AI credit pool enabled for selected cost centers" : "No cost center included usage controls enabled"],
     ["Seat charge this cycle", money(seatCharge, currency), `${scenario.users.filter((user) => user.licenseStartsAt || user.licenseEndsAt).length} seats with dated lifecycle`],
-    ["Paid AI overage", money(replay.pool.meteredCost, "USD"), scenario.enterprise.paidAiUsage ? "AI credit paid usage enabled" : "AI credit paid usage disabled"],
+    ["Paid AI overage", money(replay.pool.meteredCost, "USD"), `AI credit paid usage: ${paidUsagePolicyLabel(scenario.enterprise)}`],
     ["Budget threshold alerts", replay.alerts.filter((item) => item.date.startsWith(replay.period)).length, "Receive budget threshold alerts: 75%, 90%, 100%"],
     ["Blocked events", blocked, blocked ? "Stop usage when budget limit is reached or included usage control blocked usage" : "No usage blocked"],
     ["Seat credit policy", policyLabel, "Add behavior for mid-cycle seats"],
@@ -725,8 +725,8 @@ function budgetSectionHtml(key, items) {
 }
 
 function renderBudgets(replay, currency) {
-  const poolRow = { percent: replay.pool.percent, amount: replay.pool.total, name: "Shared included AI-credit pool", html: budgetRowHtml({ stateId: "pool", kind: "shared-pool", iconName: "pool", colorClass: "pool", kicker: "Enterprise · Included pool", name: "Shared included AI-credit pool", note: "All licensed users · resets monthly", detailLabel: "SKU", detailValue: "AI credits", stopValue: scenario.enterprise.paidAiUsage ? "No" : "At exhaustion", percentValue: replay.pool.percent, usedText: `${replay.pool.consumed.toLocaleString()} credits used`, limitText: `${replay.pool.total.toLocaleString()} total credits` }) };
-  const costCenterPoolRows = replay.costCenterPoolStates.map((pool) => ({ percent: pool.percent, amount: pool.total, name: pool.displayName, html: budgetRowHtml({ stateId: pool.stateId, kind: "cost-center-pool", iconName: "costCenter", colorClass: "cost-center", kicker: "Cost center · Included pool", name: pool.displayName, note: pool.capMode === "block" ? "Blocks members at cap" : "Continues as paid overage", detailLabel: "SKU", detailValue: "AI credits", stopValue: pool.capMode === "block" ? "At cap" : "No", percentValue: pool.percent, usedText: `${pool.consumed.toLocaleString()} credits used`, limitText: `${pool.total.toLocaleString()} credit cap` }) }));
+  const poolRow = { percent: replay.pool.percent, amount: replay.pool.total, name: "Shared included AI-credit pool", html: budgetRowHtml({ stateId: "pool", kind: "shared-pool", iconName: "pool", colorClass: "pool", kicker: "Enterprise · Included pool", name: "Shared included AI-credit pool", note: "All licensed users · resets monthly", detailLabel: "SKU", detailValue: "AI credits", stopValue: paidUsageAllowedForProduct(scenario, "ai-credits") ? "No" : "At exhaustion", percentValue: replay.pool.percent, usedText: `${replay.pool.consumed.toLocaleString()} credits used`, limitText: `${replay.pool.total.toLocaleString()} total credits` }) };
+  const costCenterPoolRows = replay.costCenterPoolStates.map((pool) => ({ percent: pool.percent, amount: pool.total, name: pool.displayName, html: budgetRowHtml({ stateId: pool.stateId, kind: "cost-center-pool", iconName: "costCenter", colorClass: "cost-center", kicker: "Cost center · Included pool", name: pool.displayName, note: "Included credits funded by attributed licenses", detailLabel: "SKU", detailValue: "AI credits", stopValue: "No", percentValue: pool.percent, usedText: `${pool.consumed.toLocaleString()} credits used`, limitText: `${pool.total.toLocaleString()} credit cap` }) }));
   const groups = new Map([["pool", [poolRow, ...costCenterPoolRows]]]);
   for (const budget of replay.budgetStates) {
     const isUlb = budget.budgetKind === "user";
@@ -781,7 +781,7 @@ function openBudgetHistory(historyId, trigger) {
       ["Capacity", `${poolState.total.toLocaleString()} credits`],
       ["Remaining", `${poolState.remaining.toLocaleString()} credits`],
       ["AI credit pool enabled", poolState.enabled ? "Enabled" : "Disabled"],
-      ["At included usage cap", poolState.capMode === "block" ? "Block members" : "Paid overage"],
+      ["At included usage cap", "Paid usage policy and budgets decide"],
     ];
     entries = historyEntries(contributors, (result) => result.status === "blocked"
       ? `Attempted ${result.includedQuantity.toLocaleString()} credits against this cost center pool; no credits were consumed`
@@ -1057,7 +1057,7 @@ function renderApplicableControls(replay, currency) {
   const user = scenario.users.find((item) => item.id === userId);
   const costCenter = costCenterForUser(scenario, user);
   const pool = costCenter?.aiCreditPoolEnabled ? replay.costCenterPoolStates.find((item) => item.costCenterId === costCenter.id) : null;
-  const poolHtml = pool ? `<div class="impact-row"><div class="impact-row-label">${scopeMarker({ healthType: "costCenterPool" })}<div><strong>Included usage controls for cost centers</strong><small>${escapeHtml(pool.displayName)} · AI credit pool enabled · ${pool.capMode === "block" ? "Block members at cap" : "Continue as paid overage"}</small></div></div><strong>${pool.consumed.toLocaleString()} / ${pool.total.toLocaleString()}</strong></div>` : "";
+  const poolHtml = pool ? `<div class="impact-row"><div class="impact-row-label">${scopeMarker({ healthType: "costCenterPool" })}<div><strong>Included usage controls for cost centers</strong><small>${escapeHtml(pool.displayName)} · AI credit pool enabled · Included credits funded by attributed licenses</small></div></div><strong>${pool.consumed.toLocaleString()} / ${pool.total.toLocaleString()}</strong></div>` : "";
   const budgetHtml = budgets.map((item) => `<div class="impact-row"><div class="impact-row-label">${scopeMarker(item)}<div><strong>${escapeHtml(item.displayName)}</strong><small>Budget Type: ${escapeHtml(budgetTypeLabel(item))} · Budget scope: ${escapeHtml(budgetScopeText(item))} · ${escapeHtml(budgetStopLabel(item))} · effective ${item.effectiveFrom}</small></div></div><strong>${money(item.spent, "USD")} / ${money(item.amount, "USD")}</strong></div>`).join("");
   $("#applicable-controls").innerHTML = poolHtml || budgetHtml ? poolHtml + budgetHtml : `<div class="empty">No budget applies on this date.</div>`;
 }
@@ -1066,7 +1066,8 @@ function renderConfiguration() {
   const replay = replayScenario(scenario);
   $("#enterprise-name").value = scenario.enterprise.name;
   $("#enterprise-currency").value = scenario.enterprise.currency;
-  $("#paid-ai-usage").checked = scenario.enterprise.paidAiUsage;
+  $("#paid-ai-usage-policy").value = scenario.enterprise.aiCreditPaidUsage;
+  renderPaidUsageProducts();
   $("#seat-credit-policy").value = scenario.enterprise.seatCreditPolicy || "prorated";
   const reposByOrg = groupBy(scenario.repositories, (repo) => repo.organizationId);
   const costCenterMembers = new Map();
@@ -1093,9 +1094,9 @@ function renderConfiguration() {
     // GitHub derives the cap from the licenses attributed to the cost center, so surface both the
     // amount and the license count that produced it rather than only an on/off state.
     const capText = settings.includedUsageCapEnabled
-      ? `AI credit included usage cap on · ${(pool?.consumed || 0).toLocaleString()}/${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses · at cap: ${settings.atCapBehavior === "block" ? "block members" : "continue as paid overage"}`
+      ? `AI credit included usage cap on · ${(pool?.consumed || 0).toLocaleString()}/${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses`
       : `AI credit included usage cap off · would cap at ${settings.capCredits.toLocaleString()} credits from ${settings.licenseCount} attributed licenses`;
-    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · Included usage controls for cost centers: ${escapeHtml(capText)} · ${escapeHtml(assignments || "no resource assignment")} · ${settings.excludeFromEnterpriseBudget ? "AI overage excluded from enterprise budget" : "AI overage counts against enterprise budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}" title="GitHub setting: AI credit included usage cap">${settings.includedUsageCapEnabled ? "Turn off included usage cap" : "Turn on included usage cap"}</button><button class="text-button" data-toggle-pool-mode="${item.id}" title="Behavior when the included usage cap is reached">${settings.atCapBehavior === "block" ? "At cap: continue as paid overage" : "At cap: block members"}</button><button class="text-button" data-toggle-costcenter="${item.id}" title="Whether this cost center's paid AI overage rolls up into the enterprise budget">${settings.excludeFromEnterpriseBudget ? "Include AI overage in enterprise budget" : "Exclude AI overage from enterprise budget"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
+    return `<div class="entity-row"><div><strong>${escapeHtml(item.name)}</strong><br><small>${members} users · Included usage controls for cost centers: ${escapeHtml(capText)} · ${escapeHtml(assignments || "no resource assignment")} · ${settings.excludeFromEnterpriseBudget ? "AI overage excluded from enterprise budget" : "AI overage counts against enterprise budget"}</small></div><div><button class="text-button" data-toggle-pool="${item.id}" title="GitHub setting: AI credit included usage cap">${settings.includedUsageCapEnabled ? "Turn off included usage cap" : "Turn on included usage cap"}</button><button class="text-button" data-toggle-costcenter="${item.id}" title="Whether this cost center's paid AI overage rolls up into the enterprise budget">${settings.excludeFromEnterpriseBudget ? "Include AI overage in enterprise budget" : "Exclude AI overage from enterprise budget"}</button><button class="delete" data-delete="costCenter" data-id="${item.id}" title="Delete">×</button></div></div>`;
   }).join("");
   $("#user-list").innerHTML = scenario.users.map((item) => {
     const seatActive = isSeatActiveForDate(item, scenario.simulationDate);
@@ -1110,6 +1111,17 @@ function renderConfiguration() {
   $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Budget Type / scope</span><span>Budget amount</span><span>Effective</span><span>Stop usage when limit is reached</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span class="budget-scope-cell">${scopeMarker(item)}${escapeHtml(budgetTypeLabel(item))} · ${escapeHtml(budgetScopeText(item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${budgetStopsUsage(scenario, item) ? "hard" : item.enforcement}">${budgetStopsUsage(scenario, item) ? "Enabled" : "Not enabled"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
 }
 
+// The "Enabled for selected products" policy state only makes sense with an explicit product list,
+// so the picker is populated from the scenario's AI-credit products and hidden for the other states.
+function renderPaidUsageProducts() {
+  const select = $("#paid-ai-usage-products");
+  const label = $("#paid-ai-usage-products-label");
+  if (!select || !label) return;
+  const selected = new Set(scenario.enterprise.aiCreditPaidUsageProductIds || []);
+  select.innerHTML = scenario.products.filter((product) => product.billingMode === "aiCredits").map((product) => `<option value="${product.id}"${selected.has(product.id) ? " selected" : ""}>${escapeHtml(product.name)}</option>`).join("");
+  label.hidden = $("#paid-ai-usage-policy").value !== "selectedProducts";
+}
+
 function setImpact(selector, tone, title, text) {
   const element = $(selector);
   if (!element) return;
@@ -1118,10 +1130,12 @@ function setImpact(selector, tone, title, text) {
 }
 
 function renderImpactPreviews() {
-  const paidUsage = $("#paid-ai-usage").checked;
+  const paidUsagePolicy = $("#paid-ai-usage-policy").value;
   const fullCredits = $("#seat-credit-policy").value === "full";
-  if (!paidUsage) {
-    setImpact("#enterprise-impact", "danger", "Usage-blocking impact", `AI-credit-consuming features stop when the shared pool is exhausted.${fullCredits ? " The full-credit option is also a hypothetical simulator policy." : ""}`);
+  if (paidUsagePolicy === "disabled") {
+    setImpact("#enterprise-impact", "danger", "Usage-blocking impact", `AI-credit-consuming features stop when the eligible included pool is exhausted.${fullCredits ? " The full-credit option is also a hypothetical simulator policy." : ""}`);
+  } else if (paidUsagePolicy === "selectedProducts") {
+    setImpact("#enterprise-impact", "warning", "Paid usage limited to selected products", "Only the selected products can continue as paid overage after included credits are exhausted; organizations cannot change this.");
   } else if (fullCredits) {
     setImpact("#enterprise-impact", "warning", "Higher simulated pool", "Paid overage remains available, and mid-cycle seats receive a hypothetical full monthly credit contribution.");
   } else {
@@ -1462,7 +1476,7 @@ function scopeConfigurationHtml(config) {
     }).join("");
     const capValue = `${settings.capCredits.toLocaleString()} credits`;
     const capDetail = settings.includedUsageCapEnabled
-      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. At the cap, members are ${settings.atCapBehavior === "block" ? "<strong>blocked</strong>" : "allowed to continue as <strong>paid overage</strong>"}.`
+      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. The cap selects which included credits members draw from; beyond it, the enterprise <strong>AI credit paid usage</strong> policy and applicable budgets decide.`
       : `Not enabled — this cost center draws from the enterprise shared pool instead. If enabled, the cap would be ${capValue} from ${settings.licenseCount} attributed licenses.`;
     return `<div class="scope-config"><h5>Resources</h5><div class="config-fact-grid">${resources}</div><h5>Settings</h5><div class="config-fact"><span>AI credit included usage cap</span><b>${settings.includedUsageCapEnabled ? capValue : "Off"}</b></div><p class="muted">${capDetail}</p>${settings.excludeFromEnterpriseBudget ? `<p class="muted">Paid AI overage from this cost center is excluded from the enterprise budget.</p>` : ""}</div>`;
   }
@@ -1494,7 +1508,7 @@ function renderOptimizedBuckets(replay) {
     spent: item.consumed,
     amount: item.total,
     parentId: poolRootKey,
-    routeNote: item.capMode === "block" ? "Blocks at cap." : item.remaining === 0 ? "At cap · next accepted usage uses paid overage." : "Included credits available before paid overage.",
+    routeNote: item.remaining === 0 ? "At cap · further usage needs the paid usage policy and budgets." : "Included credits available before paid overage.",
   }));
   const scopedUserBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
   const userBudgets = optimizedScope.type === "user" ? scopedUserBudgets : aggregateUserBudgets(scopedUserBudgets);
@@ -1757,13 +1771,6 @@ document.addEventListener("click", (event) => {
       saveAndRender(target.aiCreditPoolEnabled ? "AI credit included usage cap turned on" : "AI credit included usage cap turned off");
     }
   }
-  const modeToggle = event.target.closest("[data-toggle-pool-mode]"); if (modeToggle) {
-    const target = scenario.costCenters.find((item) => item.id === modeToggle.dataset.togglePoolMode);
-    if (target) {
-      target.aiCreditPoolCapMode = target.aiCreditPoolCapMode === "block" ? "allowOverage" : "block";
-      saveAndRender(target.aiCreditPoolCapMode === "block" ? "At the included usage cap, members are blocked" : "At the included usage cap, usage continues as paid overage");
-    }
-  }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
 });
 
@@ -1850,12 +1857,16 @@ $("#usage-form").addEventListener("submit", (event) => {
 $("#assistant-form").addEventListener("submit", (event) => { askAssistantQuestion(event); });
 ["#usage-user", "#usage-repository", "#usage-product", "#usage-date"].forEach((selector) => $(selector).addEventListener("change", () => { renderSelectors(); renderApplicableControls(replayScenario(scenario), scenario.enterprise.currency); }));
 
-$("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.paidAiUsage = $("#paid-ai-usage").checked; scenario.enterprise.seatCreditPolicy = $("#seat-credit-policy").value || "prorated"; saveAndRender("Enterprise saved"); });
+$("#paid-ai-usage-policy").addEventListener("change", () => {
+  renderPaidUsageProducts();
+  renderImpactPreviews();
+});
+$("#enterprise-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterprise.name = $("#enterprise-name").value.trim(); scenario.enterprise.currency = $("#enterprise-currency").value; scenario.enterprise.aiCreditPaidUsage = $("#paid-ai-usage-policy").value; scenario.enterprise.aiCreditPaidUsageProductIds = [...$("#paid-ai-usage-products").selectedOptions].map((option) => option.value); normalizeScenario(scenario); scenario.enterprise.seatCreditPolicy = $("#seat-credit-policy").value || "prorated"; saveAndRender("Enterprise saved"); });
 $("#product-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.products.push({ id: createId("product"), name: $("#product-name").value.trim(), unit: "unit", unitPrice: Number($("#product-price").value), billingMode: "metered" }); event.target.reset(); saveAndRender("Product added"); });
 $("#organization-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.organizations.push({ id: createId("org"), name: $("#organization-name").value.trim() }); event.target.reset(); saveAndRender("Organization added"); });
 $("#repository-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.repositories.push({ id: createId("repo"), name: $("#repository-name").value.trim(), organizationId: $("#repository-org").value }); event.target.reset(); saveAndRender("Repository added"); });
 $("#enterprise-team-form").addEventListener("submit", (event) => { event.preventDefault(); scenario.enterpriseTeams.push({ id: createId("team"), name: $("#enterprise-team-name").value.trim(), userIds: [...$("#enterprise-team-users").selectedOptions].map((option) => option.value) }); event.target.reset(); saveAndRender("Enterprise team added"); });
-$("#cost-center-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#cost-center-org").value; const repositoryId = $("#cost-center-repository").value; const teamId = $("#cost-center-team").value; scenario.costCenters.push({ id: createId("cc"), name: $("#cost-center-name").value.trim(), organizationIds: organizationId ? [organizationId] : [], repositoryIds: repositoryId ? [repositoryId] : [], userIds: [], enterpriseTeamIds: teamId ? [teamId] : [], aiCreditPoolEnabled: $("#cost-center-ai-pool").checked, aiCreditPoolCapMode: $("#cost-center-pool-mode").value, excludeFromEnterpriseBudget: $("#cost-center-excluded").checked }); event.target.reset(); saveAndRender("Cost center added"); });
+$("#cost-center-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#cost-center-org").value; const repositoryId = $("#cost-center-repository").value; const teamId = $("#cost-center-team").value; scenario.costCenters.push({ id: createId("cc"), name: $("#cost-center-name").value.trim(), organizationIds: organizationId ? [organizationId] : [], repositoryIds: repositoryId ? [repositoryId] : [], userIds: [], enterpriseTeamIds: teamId ? [teamId] : [], aiCreditPoolEnabled: $("#cost-center-ai-pool").checked, excludeFromEnterpriseBudget: $("#cost-center-excluded").checked }); event.target.reset(); saveAndRender("Cost center added"); });
 $("#user-form").addEventListener("submit", (event) => { event.preventDefault(); const organizationId = $("#user-org").value; scenario.users.push({ id: createId("user"), name: $("#user-name").value.trim(), organizationIds: [organizationId], licenseOrganizationId: organizationId, costCenterId: $("#user-cost-center").value || null, licensePlan: $("#user-license-plan").value, licenseStartsAt: $("#user-license-start").value || null, licenseEndsAt: $("#user-license-end").value || null, licenseEndMode: $("#user-license-end").value ? $("#user-license-end-mode").value : null }); event.target.reset(); saveAndRender("User added"); });
 $("#budget-kind").addEventListener("change", renderBudgetScopeOptions);
 $("#budget-product").addEventListener("change", renderBudgetScopeOptions);

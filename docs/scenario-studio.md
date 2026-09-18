@@ -111,7 +111,11 @@ without authored topology are portable and are materialized against every select
 
 Every step requires a unique `id`, `title`, `description`, and `expected` outcome. Setup and configuration mutations target `enterprise`, `budget`, `user`, `organization`, `repository`, `costCenter`, `enterpriseTeam`, or `product`. Non-enterprise targets also require the existing entity `id` and a `changes` object.
 
-Cost-center scenarios can toggle `aiCreditPoolEnabled` and `aiCreditPoolCapMode` to model the documented included-usage control. Use `aiCreditPoolCapMode: "block"` when the cost center should stop at its included-pool cap, or `"allowOverage"` when usage should continue into paid overage subject to the enterprise paid-usage policy and metered budgets.
+Cost-center scenarios can toggle `aiCreditPoolEnabled` to select the documented included-usage
+boundary. When that allowance is exhausted, the enterprise paid-usage policy determines whether
+the request may enter paid usage; applicable hard metered budgets then determine whether it
+continues. There is no separate cost-center block-versus-overage setting in GitHub's public
+cost-center contract. See the canonical [AI-credit control model](ai-credit-control-model.md).
 
 ## Adding scenarios
 
