@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-credit control flow</title>
+  <style>
+    /* Tokens mirrored from the eli5 skill's bundled tokens.css @ 2026-03-12 -
+       do not edit inline; re-copy from the skill resource. */
+    :root {
+      color-scheme: light;
+      --bg-canvas: #ffffff;
+      --bg-canvas-2: #ffffff;
+      --bg-canvas-3: #f5f5f5;
+      --bg-brand-rest: #eff6fc;
+      --fg-1: #242424;
+      --fg-2: #424242;
+      --fg-3: #616161;
+      --fg-disabled: #bdbdbd;
+      --fg-on-accent: #ffffff;
+      --stroke-1: #d1d1d1;
+      --stroke-2: #e0e0e0;
+      --stroke-accessible: #616161;
+      --stroke-focus: #0f6cbd;
+      --brand: #0f6cbd;
+      --brand-hover: #115ea3;
+      --brand-pressed: #0c3b5e;
+      --success-fg: #107c10;
+      --success-bg: #f1faf1;
+      --warning-fg: #8a3707;
+      --warning-bg: #fff4ce;
+      --danger-fg: #a4262c;
+      --danger-bg: #fde7e9;
+      --info-fg: #005a9e;
+      --info-bg: #eff6fc;
+      --shadow-4: 0 1px 2px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+      --shadow-8: 0 2px 4px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+      --r-sm: 2px;
+      --r-md: 4px;
+      --r-lg: 8px;
+      --r-pill: 999px;
+      --sp-1: 4px;
+      --sp-2: 8px;
+      --sp-3: 12px;
+      --sp-4: 16px;
+      --sp-5: 20px;
+      --sp-6: 24px;
+      --sp-8: 32px;
+      --f-display: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      --f-text: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      --f-numeric: "Segoe UI Variable", "Segoe UI", sans-serif;
+      --f-code: "Cascadia Code", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--fg-1);
+      background: var(--bg-canvas);
+      font-family: var(--f-text);
+    }
+    main {
+      width: min(100% - 32px, 980px);
+      margin: 0 auto;
+      padding: 48px 0 64px;
+    }
+    header { margin-bottom: var(--sp-8); }
+    .eyebrow {
+      margin: 0 0 var(--sp-2);
+      color: var(--fg-3);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0 0 var(--sp-3);
+      font-family: var(--f-display);
+      font-size: clamp(34px, 6vw, 40px);
+      line-height: 1.3;
+      font-weight: 600;
+    }
+    .lead {
+      max-width: 720px;
+      margin: 0;
+      color: var(--fg-2);
+      font-size: 18px;
+      line-height: 1.5;
+    }
+    .stack { display: grid; gap: var(--sp-6); }
+    .panel {
+      padding: var(--sp-6);
+      background: var(--bg-canvas-2);
+      border: 1px solid var(--stroke-2);
+      border-radius: var(--r-md);
+      box-shadow: var(--shadow-4);
+    }
+    .panel:hover { box-shadow: var(--shadow-8); }
+    .panel-head {
+      display: flex;
+      align-items: baseline;
+      gap: var(--sp-4);
+      margin-bottom: var(--sp-4);
+    }
+    .number {
+      min-width: 42px;
+      color: var(--brand);
+      font-family: var(--f-numeric);
+      font-size: 32px;
+      line-height: 40px;
+    }
+    h2 {
+      margin: 0;
+      font-family: var(--f-display);
+      font-size: 24px;
+      line-height: 32px;
+      font-weight: 600;
+    }
+    .diagram {
+      padding: var(--sp-4);
+      background: var(--bg-canvas);
+      border: 1px solid var(--stroke-2);
+      border-radius: var(--r-md);
+    }
+    svg { display: block; width: 100%; height: auto; }
+    .caption {
+      margin: var(--sp-3) 0 0;
+      color: var(--fg-3);
+      font-size: 12px;
+      line-height: 16px;
+    }
+    .memory {
+      background: var(--bg-brand-rest);
+      border-color: var(--brand);
+    }
+    .memory h2 {
+      max-width: 760px;
+      font-size: clamp(24px, 4vw, 32px);
+      line-height: 1.3;
+    }
+    .source {
+      margin-top: var(--sp-6);
+      color: var(--fg-3);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .source a { color: var(--info-fg); }
+    @media (max-width: 640px) {
+      main { width: min(100% - 20px, 980px); padding-top: 28px; }
+      .panel { padding: var(--sp-4); }
+      .diagram { padding: var(--sp-2); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">GitHub AI credits · visual model</p>
+      <h1>Two meters, then the tightest gate</h1>
+      <p class="lead">Included credits and paid credits are different meters. Budgets overlap rather than refill one another.</p>
+    </header>
+
+    <div class="stack">
+      <section class="panel">
+        <div class="panel-head"><span class="number">0</span><h2>Think lunch card and company card</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 310" role="img" aria-label="A lunch card represents included credits and a company card represents paid credits">
+            <defs>
+              <marker id="a0" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="var(--stroke-accessible)"/></marker>
+            </defs>
+            <circle cx="90" cy="112" r="28" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <path d="M42 225 Q42 160 90 160 Q138 160 138 225" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="90" y="266" text-anchor="middle" fill="var(--fg-1)" font-size="16">User</text>
+            <path d="M150 180 H242" fill="none" stroke="var(--stroke-accessible)" marker-end="url(#a0)"/>
+            <text x="196" y="164" text-anchor="middle" fill="var(--fg-3)" font-size="13">spends</text>
+            <rect x="260" y="72" width="190" height="150" rx="4" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+            <rect x="284" y="96" width="54" height="40" rx="3" fill="var(--bg-canvas)" stroke="var(--brand)"/>
+            <text x="355" y="171" text-anchor="middle" fill="var(--fg-1)" font-size="18">Lunch card</text>
+            <text x="355" y="198" text-anchor="middle" fill="var(--fg-3)" font-size="14">Included credits</text>
+            <path d="M462 147 H542" fill="none" stroke="var(--stroke-accessible)" marker-end="url(#a0)"/>
+            <text x="502" y="130" text-anchor="middle" fill="var(--fg-3)" font-size="13">then</text>
+            <rect x="560" y="72" width="236" height="150" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <rect x="584" y="98" width="84" height="50" rx="3" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+            <text x="678" y="171" text-anchor="middle" fill="var(--fg-1)" font-size="18">Company card</text>
+            <text x="678" y="198" text-anchor="middle" fill="var(--fg-3)" font-size="14">Metered charges</text>
+          </svg>
+        </div>
+        <p class="caption">One request may move from license-funded usage into paid usage.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><span class="number">1</span><h2>The cost-center cap picks the lunch card</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 310" role="img" aria-label="Cost-center cap disabled selects shared pool while enabled selects a cost-center slice">
+            <rect x="54" y="48" width="752" height="48" rx="24" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+            <text x="430" y="78" text-anchor="middle" fill="var(--fg-1)" font-size="17">AI credit included usage cap</text>
+            <path d="M430 96 V142 M430 142 H222 M430 142 H638" fill="none" stroke="var(--stroke-accessible)"/>
+            <text x="222" y="132" text-anchor="middle" fill="var(--fg-3)" font-size="14">OFF</text>
+            <text x="638" y="132" text-anchor="middle" fill="var(--fg-3)" font-size="14">ON</text>
+            <rect x="92" y="160" width="260" height="92" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="222" y="197" text-anchor="middle" fill="var(--fg-1)" font-size="18">Shared enterprise pool</text>
+            <text x="222" y="225" text-anchor="middle" fill="var(--fg-3)" font-size="14">all license-funded credits</text>
+            <rect x="508" y="160" width="260" height="92" rx="4" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+            <text x="638" y="197" text-anchor="middle" fill="var(--fg-1)" font-size="18">Cost-center slice</text>
+            <text x="638" y="225" text-anchor="middle" fill="var(--fg-3)" font-size="14">its license-funded credits</text>
+          </svg>
+        </div>
+        <p class="caption">The cap partitions included credits; it does not create a new budget.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><span class="number">2</span><h2>A user limit counts both cards</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 310" role="img" aria-label="User level budget counts included and metered consumption">
+            <rect x="74" y="66" width="230" height="96" rx="4" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+            <text x="189" y="106" text-anchor="middle" fill="var(--fg-1)" font-size="18">Included</text>
+            <text x="189" y="135" text-anchor="middle" fill="var(--fg-3)" font-size="14">$70 value</text>
+            <text x="339" y="122" text-anchor="middle" fill="var(--fg-1)" font-size="28">+</text>
+            <rect x="374" y="66" width="230" height="96" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="489" y="106" text-anchor="middle" fill="var(--fg-1)" font-size="18">Metered</text>
+            <text x="489" y="135" text-anchor="middle" fill="var(--fg-3)" font-size="14">$30 charge</text>
+            <path d="M620 114 H704" fill="none" stroke="var(--stroke-accessible)"/>
+            <path d="M696 106 L708 114 L696 122" fill="none" stroke="var(--stroke-accessible)"/>
+            <rect x="704" y="48" width="112" height="132" rx="4" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+            <text x="760" y="96" text-anchor="middle" fill="var(--fg-1)" font-size="16">ULB</text>
+            <text x="760" y="126" text-anchor="middle" fill="var(--fg-1)" font-size="20">$100</text>
+            <text x="760" y="153" text-anchor="middle" fill="var(--danger-fg)" font-size="13">hard stop</text>
+            <text x="430" y="236" text-anchor="middle" fill="var(--fg-2)" font-size="17">Individual &gt; cost-center ULB &gt; universal</text>
+            <text x="430" y="265" text-anchor="middle" fill="var(--fg-3)" font-size="13" font-family="var(--f-code)">one ULB per user</text>
+          </svg>
+        </div>
+        <p class="caption">A ULB is a per-person total limit, never a shared team wallet.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><span class="number">3</span><h2>The paid-usage policy opens the second card</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 310" role="img" aria-label="Enterprise paid usage policy allows or blocks paid usage">
+            <rect x="54" y="52" width="752" height="54" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="430" y="85" text-anchor="middle" fill="var(--fg-1)" font-size="17">Copilot settings → AI Controls → AI credit paid usage</text>
+            <rect x="70" y="150" width="210" height="94" rx="4" fill="var(--success-bg)" stroke="var(--success-fg)"/>
+            <text x="175" y="189" text-anchor="middle" fill="var(--success-fg)" font-size="18">Enabled</text>
+            <text x="175" y="218" text-anchor="middle" fill="var(--fg-3)" font-size="14">all products</text>
+            <rect x="325" y="150" width="210" height="94" rx="4" fill="var(--warning-bg)" stroke="var(--warning-fg)"/>
+            <text x="430" y="189" text-anchor="middle" fill="var(--warning-fg)" font-size="18">Selected products</text>
+            <text x="430" y="218" text-anchor="middle" fill="var(--fg-3)" font-size="14">check this product</text>
+            <rect x="580" y="150" width="210" height="94" rx="4" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+            <text x="685" y="189" text-anchor="middle" fill="var(--danger-fg)" font-size="18">Disabled</text>
+            <text x="685" y="218" text-anchor="middle" fill="var(--fg-3)" font-size="14">block overage</text>
+          </svg>
+        </div>
+        <p class="caption">Budgets do not enable paid usage; this policy does.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><span class="number">4</span><h2>Paid usage moves several meters together</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 340" role="img" aria-label="One metered request increments user, cost-center, and enterprise meters">
+            <circle cx="96" cy="142" r="27" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <path d="M50 242 Q50 184 96 184 Q142 184 142 242" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="96" y="277" text-anchor="middle" fill="var(--fg-1)" font-size="16">User</text>
+            <path d="M154 210 H236" fill="none" stroke="var(--stroke-accessible)"/>
+            <path d="M228 202 L240 210 L228 218" fill="none" stroke="var(--stroke-accessible)"/>
+            <text x="197" y="194" text-anchor="middle" fill="var(--fg-3)" font-size="13">one request</text>
+            <rect x="252" y="44" width="540" height="80" rx="4" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+            <text x="282" y="76" fill="var(--fg-1)" font-size="16">User ULB</text>
+            <text x="282" y="103" fill="var(--fg-3)" font-size="14">included + metered</text>
+            <rect x="252" y="138" width="540" height="80" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="282" y="170" fill="var(--fg-1)" font-size="16">Cost-center budget</text>
+            <text x="282" y="197" fill="var(--fg-3)" font-size="14">metered only</text>
+            <rect x="252" y="232" width="540" height="80" rx="4" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+            <text x="282" y="264" fill="var(--fg-1)" font-size="16">Enterprise budget</text>
+            <text x="282" y="291" fill="var(--fg-3)" font-size="14">metered roll-up unless excluded</text>
+            <text x="748" y="91" text-anchor="end" fill="var(--fg-2)" font-size="18">+$10 value</text>
+            <text x="748" y="185" text-anchor="end" fill="var(--fg-2)" font-size="18">+$10 charge</text>
+            <text x="748" y="279" text-anchor="end" fill="var(--fg-2)" font-size="18">+$10 charge</text>
+          </svg>
+        </div>
+        <p class="caption">Meters overlap. Spending does not flow from one budget into another.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><span class="number">5</span><h2>The smallest hard headroom wins</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 330" role="img" aria-label="A request is blocked by any hard budget without enough remaining headroom">
+            <rect x="56" y="50" width="748" height="56" rx="4" fill="var(--bg-brand-rest)" stroke="var(--brand)"/>
+            <text x="430" y="84" text-anchor="middle" fill="var(--fg-1)" font-size="18">Proposed request: $20</text>
+            <rect x="70" y="150" width="210" height="102" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="175" y="184" text-anchor="middle" fill="var(--fg-1)" font-size="17">User ULB</text>
+            <text x="175" y="217" text-anchor="middle" fill="var(--success-fg)" font-size="18">$40 left</text>
+            <rect x="325" y="150" width="210" height="102" rx="4" fill="var(--danger-bg)" stroke="var(--danger-fg)"/>
+            <text x="430" y="184" text-anchor="middle" fill="var(--fg-1)" font-size="17">Cost center</text>
+            <text x="430" y="217" text-anchor="middle" fill="var(--danger-fg)" font-size="18">$10 left</text>
+            <rect x="580" y="150" width="210" height="102" rx="4" fill="var(--bg-canvas-3)" stroke="var(--stroke-1)"/>
+            <text x="685" y="184" text-anchor="middle" fill="var(--fg-1)" font-size="17">Enterprise</text>
+            <text x="685" y="217" text-anchor="middle" fill="var(--success-fg)" font-size="18">$100 left</text>
+            <text x="430" y="301" text-anchor="middle" fill="var(--danger-fg)" font-size="20">Blocked by cost-center budget</text>
+          </svg>
+        </div>
+        <p class="caption">Any applicable hard control can reject the whole request.</p>
+      </section>
+
+      <section class="panel memory">
+        <div class="panel-head"><span class="number">6</span><h2>Remember: the included cap chooses the pool; policy and budgets decide overage.</h2></div>
+        <div class="diagram">
+          <svg viewBox="0 0 860 220" role="img" aria-label="Included cap chooses the pool then policy and budgets decide paid usage">
+            <rect x="42" y="72" width="190" height="78" rx="4" fill="var(--bg-canvas)" stroke="var(--brand)"/>
+            <text x="137" y="104" text-anchor="middle" fill="var(--fg-1)" font-size="17">Included cap</text>
+            <text x="137" y="132" text-anchor="middle" fill="var(--fg-3)" font-size="14">chooses pool</text>
+            <path d="M244 111 H320" fill="none" stroke="var(--stroke-accessible)"/>
+            <path d="M312 103 L324 111 L312 119" fill="none" stroke="var(--stroke-accessible)"/>
+            <rect x="328" y="72" width="190" height="78" rx="4" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+            <text x="423" y="104" text-anchor="middle" fill="var(--fg-1)" font-size="17">Paid policy</text>
+            <text x="423" y="132" text-anchor="middle" fill="var(--fg-3)" font-size="14">opens overage</text>
+            <path d="M530 111 H606" fill="none" stroke="var(--stroke-accessible)"/>
+            <path d="M598 103 L610 111 L598 119" fill="none" stroke="var(--stroke-accessible)"/>
+            <rect x="614" y="72" width="204" height="78" rx="4" fill="var(--bg-canvas)" stroke="var(--stroke-1)"/>
+            <text x="716" y="104" text-anchor="middle" fill="var(--fg-1)" font-size="17">Hard budgets</text>
+            <text x="716" y="132" text-anchor="middle" fill="var(--fg-3)" font-size="14">check headroom</text>
+          </svg>
+        </div>
+        <p class="caption">There is no separate cost-center block-versus-overage selector.</p>
+      </section>
+    </div>
+
+    <p class="source">
+      Canonical specification: <a href="../ai-credit-control-model.md">AI-credit control model</a>.
+      Grounded in GitHub documentation for
+      <a href="https://docs.github.com/en/enterprise-cloud@latest/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing">billing</a>,
+      <a href="https://docs.github.com/en/enterprise-cloud@latest/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets">budgets</a>,
+      and the <a href="https://docs.github.com/en/enterprise-cloud@latest/rest/billing/cost-centers">cost-center API</a>.
+    </p>
+  </main>
+</body>
+</html>

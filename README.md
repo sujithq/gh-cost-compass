@@ -7,7 +7,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Enterprise → organization → repository hierarchy
 - Copilot Business and Enterprise users, enterprise teams, license organizations, and direct, team, repository, or organization-based cost-center assignment
 - Shared monthly AI-credit pool: 1,900 credits per Business seat and 3,900 per Enterprise seat
-- Cost-center included usage controls with **AI credit pool enabled** and either block-members or continue-as-paid-overage behavior
+- Cost-center included usage controls with a license-funded **AI credit included usage cap**
 - Universal, cost-center, and individual user-level budgets (ULBs)
 - Separate enterprise, organization, and cost-center metered-overage budgets
 - AI paid-usage policy, effective dates, monthly resets, alerts, and hard stops
@@ -86,10 +86,14 @@ answers.
 
 ## Documented AI-credit rules represented
 
+Contributor reference: [AI-credit control model](docs/ai-credit-control-model.md). For a visual
+walkthrough, see [AI-credit control flow](docs/presentation/ai-credit-control-flow.html). The
+Markdown control model is authoritative for engine behavior and scenario expectations.
+
 - One AI credit is valued at $0.01 USD.
 - Included credits are pooled across the enterprise and reset at 00:00 UTC on the first calendar day of each month.
 - A cost center can enable its own AI credit pool, calculated from the Copilot Business and Enterprise licenses attributed to that cost center. When enabled, the simulator partitions those included credits from the general enterprise pool.
-- When a cost center reaches its included AI credit pool cap, the simulator follows the configured documented behavior: block further usage at the cap or continue into paid overage if paid usage is allowed.
+- When a cost center reaches its included AI credit pool cap, the enterprise or organization **AI credit paid usage** policy decides whether usage may enter the metered phase. Applicable hard budgets then decide whether it continues.
 - A ULB measures one user's **total** AI-credit consumption across both included and metered phases. It is always a hard stop.
 - ULB precedence is individual → cost-center ULB → universal ULB.
 - Enterprise, organization, and cost-center spending budgets measure **only paid overage after the shared pool is exhausted**.
