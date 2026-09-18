@@ -29,8 +29,7 @@
       "target": "costCenter",
       "id": "cc-ai",
       "changes": {
-        "aiCreditPoolEnabled": true,
-        "aiCreditPoolCapMode": "allowOverage"
+        "aiCreditPoolEnabled": true
       }
     }
   ],

@@ -57,17 +57,50 @@ export function createDefaultScenario(defaultSetId = DEFAULT_SCENARIO_SET_ID) {
   return normalizeScenario(createScenarioFromDefaultSet(defaultSetId));
 }
 
+export const AI_CREDIT_PAID_USAGE_POLICIES = ["enabled", "selectedProducts", "disabled"];
+
+// Copilot settings → AI Controls → Billing & usage → AI credit paid usage. The policy decides
+// whether a request may enter the paid/metered phase at all; budgets only govern usage once the
+// policy permits that transition.
+export function normalizeEnterprisePaidUsage(enterprise) {
+  if (!enterprise || typeof enterprise !== "object") return enterprise;
+  if (!AI_CREDIT_PAID_USAGE_POLICIES.includes(enterprise.aiCreditPaidUsage)) {
+    enterprise.aiCreditPaidUsage = enterprise.paidAiUsage === false ? "disabled" : "enabled";
+  }
+  enterprise.aiCreditPaidUsageProductIds = Array.isArray(enterprise.aiCreditPaidUsageProductIds) ? enterprise.aiCreditPaidUsageProductIds : [];
+  // Kept in sync for the legacy boolean readers (imported scenarios, assistant context).
+  enterprise.paidAiUsage = enterprise.aiCreditPaidUsage !== "disabled";
+  return enterprise;
+}
+
+export function paidUsageAllowedForProduct(scenario, productId) {
+  const enterprise = normalizeEnterprisePaidUsage(scenario?.enterprise);
+  if (enterprise?.aiCreditPaidUsage === "disabled") return false;
+  if (enterprise?.aiCreditPaidUsage === "selectedProducts") return enterprise.aiCreditPaidUsageProductIds.includes(productId);
+  return true;
+}
+
+export function paidUsagePolicyLabel(enterprise) {
+  const policy = normalizeEnterprisePaidUsage(enterprise)?.aiCreditPaidUsage;
+  if (policy === "disabled") return "Disabled";
+  if (policy === "selectedProducts") return "Enabled for selected products";
+  return "Enabled";
+}
+
 export function normalizeScenario(scenario) {
   if (!scenario || typeof scenario !== "object") return scenario;
   scenario.enterpriseTeams ||= [];
+  normalizeEnterprisePaidUsage(scenario.enterprise);
   for (const team of scenario.enterpriseTeams) team.userIds ||= [];
   for (const costCenter of scenario.costCenters || []) {
     costCenter.organizationIds ||= [];
     costCenter.repositoryIds ||= [];
     costCenter.userIds ||= [];
     costCenter.enterpriseTeamIds ||= [];
+    // The cost-center included usage cap is a pool selector, not a block-versus-overage switch.
+    // The public cost-center REST schema exposes ai_credit_pool_enabled only.
     costCenter.aiCreditPoolEnabled = Boolean(costCenter.aiCreditPoolEnabled);
-    costCenter.aiCreditPoolCapMode = costCenter.aiCreditPoolCapMode === "block" ? "block" : "allowOverage";
+    delete costCenter.aiCreditPoolCapMode;
     costCenter.excludeFromEnterpriseBudget = Boolean(costCenter.excludeFromEnterpriseBudget);
   }
   return scenario;
@@ -344,11 +377,18 @@ export function replayScenario(scenario) {
     const meteredBudgets = effectiveScenario.budgets.filter((budget) => budget.budgetKind === "metered" && matchesScope(budget, event, effectiveScenario, product));
 
     if (!blockingReason && userBudget && stateFor(states, userBudgetKey).spent + grossAiValue > Number(userBudget.amount)) blockingReason = `${userBudget.name}: Stop usage when budget limit is reached is enabled and this event would exceed the user-level budget amount`;
-    if (!blockingReason && costCenterPoolEnabled && meteredQuantity > 0 && eventCostCenter.aiCreditPoolCapMode === "block") blockingReason = `Included usage controls for cost centers block members of ${eventCostCenter.name} when the included AI credit pool cap is reached`;
-    if (!blockingReason && isAi && meteredQuantity > 0 && !effectiveScenario.enterprise.paidAiUsage) blockingReason = `AI credit paid usage is disabled and the eligible ${costCenterPoolEnabled ? `${eventCostCenter.name} cost-center pool` : "enterprise shared pool"} is exhausted`;
+    if (!blockingReason && isAi && meteredQuantity > 0 && !paidUsageAllowedForProduct(effectiveScenario, product.id)) blockingReason = `AI credit paid usage is ${effectiveScenario.enterprise.aiCreditPaidUsage === "selectedProducts" ? `not enabled for ${product.name}` : "disabled"} and the eligible ${costCenterPoolEnabled ? `${eventCostCenter.name} cost-center pool` : "enterprise shared pool"} is exhausted`;
+    let blockingBudgetId = null;
     if (!blockingReason) {
-      const blocker = meteredBudgets.find((budget) => budgetStopsUsage(effectiveScenario, budget, product) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount));
-      if (blocker) blockingReason = `${blocker.name}: Stop usage when budget limit is reached is enabled and this event would exceed the budget amount`;
+      // Overlapping controls, not sequential wallets: the applicable hard budget with the least
+      // remaining headroom blocks first, and a larger budget never rescues a smaller one.
+      const blocker = meteredBudgets
+        .filter((budget) => budgetStopsUsage(effectiveScenario, budget, product) && stateFor(states, `${budget.id}:${period}`).spent + billedCost > Number(budget.amount))
+        .sort((left, right) => (Number(left.amount) - stateFor(states, `${left.id}:${period}`).spent) - (Number(right.amount) - stateFor(states, `${right.id}:${period}`).spent))[0];
+      if (blocker) {
+        blockingBudgetId = blocker.id;
+        blockingReason = `${blocker.name}: Stop usage when budget limit is reached is enabled and this event would exceed the budget amount`;
+      }
     }
 
     const fundingRoute = !isAi ? "metered" : blockingReason ? "blocked" : meteredQuantity > 0 ? (includedQuantity > 0 ? "split" : "overage") : "included";
@@ -396,18 +436,17 @@ export function replayScenario(scenario) {
     if (isAi && !result.controlEvaluations.some((item) => item.outcome === "blocked")) {
       if (costCenterPoolEnabled) {
         const exceedsPool = meteredQuantity > 0;
-        const blocked = exceedsPool && eventCostCenter.aiCreditPoolCapMode === "block";
         result.controlEvaluations.push({
           control: "Included usage controls for cost centers",
           configuration: [
             { label: "Cost center", value: eventCostCenter.name },
-            { label: "AI credit pool enabled", value: "Enabled" },
-            { label: "At the included usage cap", value: eventCostCenter.aiCreditPoolCapMode === "block" ? "Block members" : "Continue as paid overage" },
+            { label: "AI credit included usage cap", value: "Enabled" },
+            { label: "Included allowance", value: `${poolTotal.toLocaleString()} credits funded by attributed licenses` },
           ],
           result: exceedsPool
-            ? `The cost center has consumed ${poolBefore.toLocaleString()} of ${poolTotal.toLocaleString()} included AI credits. This event needs ${meteredQuantity.toLocaleString()} credits beyond the cap, so ${blocked ? "usage is blocked before paid overage or metered budgets are evaluated" : "the additional usage continues as paid overage"}.`
-            : `The event uses ${includedQuantity.toLocaleString()} included AI credits and remains within the ${poolTotal.toLocaleString()}-credit cost center pool.`,
-          outcome: blocked ? "blocked" : exceedsPool ? "continued" : "passed",
+            ? `The cost center has consumed ${poolBefore.toLocaleString()} of ${poolTotal.toLocaleString()} included AI credits. This event needs ${meteredQuantity.toLocaleString()} credits beyond the included allowance, so the AI credit paid usage policy and any applicable budgets decide what happens next. The cap selects the included pool; it is not a total-usage hard stop.`
+            : `The event uses ${includedQuantity.toLocaleString()} included AI credits and remains within the ${poolTotal.toLocaleString()}-credit cost center included allowance.`,
+          outcome: exceedsPool ? "continued" : "passed",
         });
       } else {
         result.controlEvaluations.push({
@@ -421,18 +460,29 @@ export function replayScenario(scenario) {
       }
     }
     if (isAi && meteredQuantity > 0 && !result.controlEvaluations.some((item) => item.outcome === "blocked")) {
-      const paidUsageBlocked = !effectiveScenario.enterprise.paidAiUsage;
+      const paidUsageAllowed = paidUsageAllowedForProduct(effectiveScenario, product.id);
+      const policy = effectiveScenario.enterprise.aiCreditPaidUsage;
+      const configuration = [{ label: "AI credit paid usage", value: paidUsagePolicyLabel(effectiveScenario.enterprise) }];
+      if (policy === "selectedProducts") {
+        const selectedNames = effectiveScenario.products.filter((item) => effectiveScenario.enterprise.aiCreditPaidUsageProductIds.includes(item.id)).map((item) => item.name);
+        configuration.push({ label: "Selected products", value: selectedNames.length ? selectedNames.join(", ") : "None selected" });
+      }
       result.controlEvaluations.push({
         control: "AI credit paid usage",
-        configuration: [{ label: "AI credit paid usage", value: effectiveScenario.enterprise.paidAiUsage ? "Enabled" : "Disabled" }],
-        result: paidUsageBlocked ? "Paid overage is not allowed, so usage is blocked before metered budgets are evaluated." : `${meteredQuantity.toLocaleString()} credits can continue as paid overage, subject to applicable budgets.`,
-        outcome: paidUsageBlocked ? "blocked" : "passed",
+        configuration,
+        result: paidUsageAllowed
+          ? `${meteredQuantity.toLocaleString()} credits can continue as paid overage, subject to applicable budgets.`
+          : `Paid overage is not allowed for ${product.name}, so usage is blocked before metered budgets are evaluated.`,
+        outcome: paidUsageAllowed ? "passed" : "blocked",
       });
     }
     if (!result.controlEvaluations.some((item) => item.outcome === "blocked")) {
-      for (const budget of meteredBudgets) {
+      // When a hard budget blocks, report that control first so the explanation names the control
+      // with the least remaining headroom rather than whichever budget happens to be listed first.
+      const orderedBudgets = blockingBudgetId ? [meteredBudgets.find((budget) => budget.id === blockingBudgetId)] : meteredBudgets;
+      for (const budget of orderedBudgets) {
         const before = meteredBudgetBefore.get(budget.id) || 0;
-        const blocked = Boolean(blockingReason && before + billedCost > Number(budget.amount) && budgetStopsUsage(effectiveScenario, budget, product));
+        const blocked = budget.id === blockingBudgetId;
         result.controlEvaluations.push(budgetEvaluation(effectiveScenario, budget, product, before, billedCost, alerts.filter((alert) => alert.eventId === event.id && alert.budgetId === budget.id), blocked, !blockingReason));
         if (blocked) break;
       }
@@ -471,7 +521,6 @@ export function replayScenario(scenario) {
       stateId,
       costCenterId,
       displayName: result?.poolName || `${costCenter?.name || costCenterId} included AI-credit pool`,
-      capMode: costCenter?.aiCreditPoolCapMode || "allowOverage",
       enabled,
       total,
       consumed,
@@ -601,7 +650,6 @@ export function describeCostCenterConfiguration(scenario, costCenter, atDate = s
       capCredits: Math.round(costCenterIncludedPoolFor(scenario, costCenter.id, atDate)),
       licenseCount: licensedUsers.length,
       attributedUserCount: attributedUsers.length,
-      atCapBehavior: costCenter.aiCreditPoolCapMode === "block" ? "block" : "allowOverage",
       excludeFromEnterpriseBudget: Boolean(costCenter.excludeFromEnterpriseBudget),
     },
   };
@@ -654,7 +702,7 @@ export function describeScopeConfiguration(scenario, scope) {
         facts: [
           { label: "Licensed users", value: `${licensed}` },
           { label: "Mid-cycle seat credits", value: scenario.enterprise.seatCreditPolicy === "full" ? "Full" : "Prorated" },
-          { label: "AI credit paid usage", value: scenario.enterprise.paidAiUsage ? "Allowed after included pool" : "Blocked after included pool" },
+          { label: "AI credit paid usage", value: paidUsagePolicyLabel(scenario.enterprise) },
         ],
       };
     }
