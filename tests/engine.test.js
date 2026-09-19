@@ -839,8 +839,12 @@ test("optimized hierarchy surfaces AI-credit settings and consumption without ch
   assert.match(app, /nodeBudgetShield\("costCenter", cc\.id\)/);
   assert.match(app, /hierarchyMeterHtml\("Shared included pool", replay\.pool\.percent\)/);
   assert.match(app, /hierarchyMeterHtml\("Included allowance", pool\.percent\)/);
+  assert.match(app, /hierarchyMeterHtml\("AI overage budget", budget\.percent, "overage"\)/);
+  assert.match(app, /costCenterAllowanceMeters/);
   assert.match(app, /hierarchyMeterHtml\("User-level budget", budget\.percent\)/);
+  assert.doesNotMatch(app, /Enterprise budget: \$\{/);
   assert.match(styles, /\.hierarchy-meter \.progress\{height:4px/);
+  assert.match(styles, /\.hierarchy-meter-overage/);
   assert.match(styles, /\.hierarchy-badge\.included-cap-on\{/);
   assert.match(html, /id="optimized-hierarchy"/);
 });
@@ -850,14 +854,16 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
   assert.match(app, /data-toggle-pool="\$\{escapeHtml\(config\.id\)\}"/);
-  assert.match(app, /data-toggle-costcenter="\$\{escapeHtml\(config\.id\)\}"/);
   assert.match(app, /AI credit paid usage<\/strong> setting and applicable budgets decide/);
-  assert.match(app, /it does not enable paid usage/);
+  assert.doesNotMatch(app, /Enterprise budget routing/);
   assert.match(app, /saveAndRender\(target\.aiCreditPoolEnabled \? "AI credit included usage cap turned on"/);
   assert.match(app, /const optimizedBucketPanelExpansion = new Map\(\)/);
   assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
   assert.match(app, /optimizedBucketPanelExpansion\.set\("credit-buckets"/);
+  assert.match(app, /classList\.toggle\("buckets-collapsed", !expanded\)/);
+  assert.match(app, /#optimized-current-step-panel"\)\.hidden = !expanded/);
   assert.match(html, /id="optimized-buckets-toggle"/);
+  assert.match(html, /id="optimized-layout"/);
   assert.match(html, /aria-controls="optimized-buckets-content"/);
   assert.match(html, /id="optimized-buckets-content"/);
 });
