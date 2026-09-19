@@ -288,8 +288,13 @@ function budgetScopeText(budget) {
   return budget.budgetKind === "user" ? `Users · ${describeScope(scenario, budget)}` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
 }
 
+function budgetStopEnabled(budget) {
+  const definition = scenario.budgets.find((item) => item.id === budget.id) || budget;
+  return budgetStopsUsage(scenario, definition);
+}
+
 function budgetStopLabel(budget) {
-  return `Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, budget) ? "Enabled" : "Disabled"}`;
+  return `Stop usage: ${budgetStopEnabled(budget) ? "Enabled" : "Disabled"}`;
 }
 
 function scenarioResultHtml(result) {
@@ -761,6 +766,7 @@ function openBudgetHistory(historyId, trigger) {
   let title;
   let summary;
   let entries;
+  let editorHtml = "";
   let alertHtml = "<li>The shared pool does not emit budget alerts.</li>";
 
   if (historyId === "pool") {
@@ -793,6 +799,8 @@ function openBudgetHistory(historyId, trigger) {
   } else {
     const budgetState = replay.budgetStates.find((item) => item.stateId === historyId);
     if (!budgetState) return;
+    const budget = scenario.budgets.find((item) => item.id === budgetState.id);
+    if (!budget) return;
     const contributors = currentPeriodResults.filter((item) => item.affectedBudgets.some((impact) => impact.stateKey === historyId));
     const alerts = replay.alerts.filter((item) => item.budgetId === budgetState.id && item.date.startsWith(replay.period) && contributors.some((result) => result.eventId === item.eventId));
     title = `${budgetState.displayName} history`;
@@ -811,11 +819,25 @@ function openBudgetHistory(historyId, trigger) {
       return `Added ${money((impact?.after || 0) - (impact?.before || 0), "USD")} to this budget`;
     }, "No usage events are currently contributing to this budget.");
     alertHtml = alerts.length ? alerts.map((alert) => `<li>${alert.date} · ${alert.threshold}% threshold reached</li>`).join("") : "<li>No budget alerts triggered for this control.</li>";
+    const stopLocked = budget.budgetKind === "user";
+    editorHtml = `
+      <form class="budget-history-editor" data-budget-edit-form="${escapeHtml(budget.id)}">
+        <label>Budget amount (USD)<input name="amount" type="number" min="0" step="0.01" value="${escapeHtml(String(budget.amount))}" required></label>
+        <label>Stop usage when budget limit is reached
+          <select name="enforcement" ${stopLocked ? "disabled" : ""}>
+            <option value="hard" ${budgetStopsUsage(scenario, budget) ? "selected" : ""}>Enabled</option>
+            <option value="soft" ${!budgetStopsUsage(scenario, budget) ? "selected" : ""}>Disabled</option>
+          </select>
+        </label>
+        ${stopLocked ? `<small>User-level budgets always stop usage, so this setting cannot be disabled.</small>` : ""}
+        <button type="submit" class="primary">Save budget</button>
+      </form>`;
   }
 
   $("#budget-history-title").textContent = title;
   $("#budget-history-content").innerHTML = `
     <div class="budget-history-summary">${summary.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+    ${editorHtml}
     <div class="history-panel"><h4>Usage and decisions</h4>${entries}</div>
     <div class="history-panel"><h4>Triggered alerts</h4><ul class="history-alert-list">${alertHtml}</ul></div>`;
   budgetHistoryTrigger = trigger || document.activeElement;
@@ -907,7 +929,7 @@ function hierarchyBadgeHtml(label, className = "", attributes = "") {
   return `<${tag}${attributes ? ` type="button" ${attributes}` : ""} class="hierarchy-badge${className ? ` ${className}` : ""}">${escapeHtml(label)}</${tag}>`;
 }
 function hierarchyMeterHtml(label, value, usedText, limitText, tone = "included", stopState = "") {
-  const stopStatus = stopState ? `<small class="hierarchy-meter-stop ${stopState === "Enabled" ? "enabled" : "disabled"}">Stop usage when budget limit is reached: ${escapeHtml(stopState)}</small>` : "";
+  const stopStatus = stopState ? `<small class="hierarchy-meter-stop ${stopState === "Enabled" ? "enabled" : "disabled"}">Stop usage: ${escapeHtml(stopState)}</small>` : "";
   return `<div class="hierarchy-meter hierarchy-meter-${escapeHtml(tone)}"><span><b>${escapeHtml(label)}</b><em>${escapeHtml(usedText)} / ${escapeHtml(limitText)} · ${percent(value)}</em>${stopStatus}</span><div class="progress ${statusClass(value)}" role="progressbar" aria-label="${escapeHtml(label)}: ${escapeHtml(usedText)} of ${escapeHtml(limitText)}, ${percent(value)} used${stopState ? `, Stop usage when budget limit is reached: ${escapeHtml(stopState)}` : ""}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"><div style="width:${Math.min(100, value)}%"></div></div></div>`;
 }
 function hierarchyIncludedCreditsMeterHtml(replay) {
@@ -979,8 +1001,8 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
     const scopes = [];
     const costCenterBudget = aiOverageBudget("costCenter", costCenter.id);
     const enterpriseBudget = !costCenter.excludeFromEnterpriseBudget && aiOverageBudget("enterprise", scenario.enterprise.id);
-    if (costCenterBudget) scopes.push(`Cost center (Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, costCenterBudget) ? "Enabled" : "Disabled"})`);
-    if (enterpriseBudget) scopes.push(`Enterprise (Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, enterpriseBudget) ? "Enabled" : "Disabled"})`);
+    if (costCenterBudget) scopes.push("Cost center");
+    if (enterpriseBudget) scopes.push("Enterprise");
     const route = scopes.length ? scopes.join(" + ") : "No aggregate budget (unmetered)";
     const stopEnabled = [costCenterBudget, enterpriseBudget].filter(Boolean).some((budget) => budgetStopsUsage(scenario, budget));
     return `<span class="hierarchy-overage-route" title="Paid overage is checked against every listed budget at the same time. Organization budgets do not apply while cost-center attribution exists. A disabled stop does not transfer spend to another budget; usage continues unless another applicable hard stop blocks it.">${icon(stopEnabled ? "hardStop" : "alertOnly")}Overage checks: ${escapeHtml(route)}</span>`;
@@ -1301,7 +1323,7 @@ function renderBudgetScopeOptions() {
 
 function budgetIcon(budget) {
   if (budget.stateId === "pool" || budget.budgetKind === "pool") return icon("pool");
-  if (budgetStopsUsage(scenario, budget)) return icon("hardStop");
+  if (budgetStopEnabled(budget)) return icon("hardStop");
   return icon("alertOnly");
 }
 
@@ -1425,7 +1447,7 @@ function bucketRowDetail(item) {
     const breaching = item.breachingCount ? ` · ${item.breachingCount} over threshold` : "";
     return `${item.userCount} users · highest ${percent(item.percent)}${breaching} · ${money(item.spent, "USD")} of ${money(item.amount, "USD")} combined`;
   }
-  return `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${budgetStopLabel(item)}`;
+  return `${money(item.spent, "USD")} of ${money(item.amount, "USD")}`;
 }
 
 function bucketRowHtml(item) {
@@ -1435,7 +1457,8 @@ function bucketRowHtml(item) {
   const icons = { "cost-center": "costCenter", enterprise: "enterprise", user: "hardStop", metered: "alertOnly" };
   const label = labels[type];
   const rowClass = `bucket-row bucket-row-${type}${item.parentId ? " bucket-row-nested" : ""}`;
-  const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${percent(item.percent)}</b>`;
+  const stopStatus = item.budgetKind !== "pool" ? `<span class="budget-stop-label ${budgetStopEnabled(item) ? "enabled" : "disabled"}">${escapeHtml(budgetStopLabel(item))}</span>` : "";
+  const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-row-heading"><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong>${stopStatus}</span><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${percent(item.percent)}</b>`;
   // Aggregate rows stand in for many per-user budget states (or the rolled-up total pool), so there
   // is no single state whose audit trail could be opened; render them as static rows rather than
   // budget-history triggers.
@@ -1496,10 +1519,17 @@ function updateBucketPanel(groups) {
       const track = row.querySelector(".progress");
       const percentEl = row.querySelector("b");
       const smallEl = row.querySelector("small");
+      const stopEl = row.querySelector(".budget-stop-label");
+      const iconEl = row.querySelector(".bucket-icon");
       if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
       if (track) track.className = `progress ${statusClass(item.percent)}`;
       if (percentEl) percentEl.textContent = percent(item.percent);
       if (smallEl) smallEl.textContent = bucketRowDetail(item) + (item.routeNote ? ` · ${item.routeNote}` : "");
+      if (stopEl) {
+        stopEl.className = `budget-stop-label ${budgetStopEnabled(item) ? "enabled" : "disabled"}`;
+        stopEl.textContent = budgetStopLabel(item);
+      }
+      if (iconEl) iconEl.innerHTML = budgetIcon(item);
     });
   });
 }
@@ -1979,6 +2009,20 @@ document.addEventListener("click", (event) => {
     }
   }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
+});
+
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-budget-edit-form]");
+  if (!form) return;
+  event.preventDefault();
+  const budget = scenario.budgets.find((item) => item.id === form.dataset.budgetEditForm);
+  if (!budget) return;
+  const amount = Number(new FormData(form).get("amount"));
+  if (!Number.isFinite(amount) || amount < 0) return showToast("Budget amount must be zero or greater", { tone: "danger" });
+  budget.amount = amount;
+  if (budget.budgetKind !== "user") budget.enforcement = new FormData(form).get("enforcement") === "hard" ? "hard" : "soft";
+  closeBudgetHistory();
+  saveAndRender("Budget updated");
 });
 
 document.addEventListener("input", (event) => {

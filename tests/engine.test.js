@@ -828,6 +828,9 @@ test("dashboard includes an accessible budget history dialog", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(html, /id="budget-history-modal"/);
   assert.match(html, /role="dialog" aria-modal="true"/);
+  assert.match(app, /data-budget-edit-form="\$\{escapeHtml\(budget\.id\)\}"/);
+  assert.match(app, /budget\.amount = amount/);
+  assert.match(app, /budget\.budgetKind !== "user"\) budget\.enforcement/);
   assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"/);
   assert.match(app, /budgetRowHtml\(\{ stateId: "pool", kind: "shared-pool"/);
   assert.match(app, /budgetRowHtml\(\{ stateId: budget\.stateId, kind: "budget"/);
@@ -873,8 +876,10 @@ test("optimized hierarchy surfaces AI-credit settings and consumption without ch
   assert.match(app, /Shared pool \$\{replay\.pool\.consumed\.toLocaleString\(\)\} \/ \$\{replay\.pool\.total\.toLocaleString\(\)\}/);
   assert.match(app, /hierarchyMeterHtml\("Included allowance", pool\.percent, `\$\{pool\.consumed\.toLocaleString\(\)\} credits`/);
   assert.match(app, /hierarchyMeterHtml\("AI overage", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\), "overage", stopState\)/);
-  assert.match(app, /Stop usage when budget limit is reached: \$\{escapeHtml\(stopState\)\}/);
-  assert.match(app, /Cost center \(Stop usage when budget limit is reached: \$\{budgetStopsUsage/);
+  assert.match(app, /Stop usage: \$\{escapeHtml\(stopState\)\}/);
+  assert.doesNotMatch(app, /Cost center \(Stop usage when budget limit is reached:/);
+  assert.match(app, /scenario\.budgets\.find\(\(item\) => item\.id === budget\.id\) \|\| budget/);
+  assert.match(app, /stopEl\.textContent = budgetStopLabel\(item\)/);
   assert.match(app, /Without an applicable hard stop, paid usage continues unmetered by an aggregate budget/);
   assert.match(app, /Stop usage when budget limit is reached<\/span><strong>\$\{escapeHtml\(stopValue\)\}/);
   assert.match(app, /stopValue: budgetStopsUsage\(scenario, budget, product\) \? "Enabled" : "Disabled"/);
@@ -889,7 +894,8 @@ test("optimized hierarchy surfaces AI-credit settings and consumption without ch
   assert.match(styles, /\.optimized-map-panel\{container-type:inline-size\}/);
   assert.match(styles, /\.optimized-hierarchy\{grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(styles, /@container\(max-width:720px\)\{\.optimized-map-panel \.hierarchy-node-content\.has-meters\{grid-template-columns:minmax\(0,1fr\)\}/);
-  assert.match(styles, /\.hierarchy-meter-stop\.enabled\{/);
+  assert.match(styles, /\.hierarchy-meter-stop\.enabled,\.budget-stop-label\.enabled\{/);
+  assert.match(styles, /\.budget-stop-label\.enabled\{/);
   assert.match(styles, /\.hierarchy-meter-overage/);
   assert.match(styles, /\.hierarchy-composition-segment\.cost-centers/);
   assert.match(styles, /\.hierarchy-overage-route/);
