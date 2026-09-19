@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas } from "@github/copilot-sdk/extension";
+import { sendAndWaitForTurn } from "./copilot-request.mjs";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_QUESTION_LENGTH = 2_000;
@@ -95,7 +96,7 @@ async function applyModelSettings(settings = {}) {
 function askCopilot(question, context, settings) {
     const request = conversationQueue.then(async () => {
         await applyModelSettings(settings);
-        const response = await session.sendAndWait({
+        const response = await sendAndWaitForTurn(session, {
             prompt: buildPrompt(question, context),
             displayPrompt: `[Budget Lab] ${question}`,
             mode: "enqueue",

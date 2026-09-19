@@ -8,6 +8,7 @@ import { registerEnvironment, validateMaterializedScenario, validateEnvironment 
 import { trimToastStack } from "../src/toast-stack.js";
 import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend, validateAssistantDraft } from "../src/assistant.js";
 import { includedPoolHistoryResults } from "../src/history.js";
+import { sendAndWaitForTurn } from "../.github/extensions/budget-lab/copilot-request.mjs";
 
 async function fileFetch(url) {
   try {
@@ -86,6 +87,30 @@ test("assistant backend stays scripted unless Copilot is explicitly selected", (
   assert.equal(resolveAssistantBackend(""), ASSISTANT_BACKENDS.scripted);
   assert.equal(resolveAssistantBackend("?assistantBackend=unknown"), ASSISTANT_BACKENDS.scripted);
   assert.equal(resolveAssistantBackend("?assistantBackend=copilot"), ASSISTANT_BACKENDS.copilot);
+});
+
+test("Copilot canvas requests resolve from their own completed turn without waiting for session idle", async () => {
+  const listeners = new Set();
+  const session = {
+    on(handler) {
+      listeners.add(handler);
+      return () => listeners.delete(handler);
+    },
+    async send() {
+      const emit = (event) => listeners.forEach((handler) => handler(event));
+      emit({ type: "user.message", data: { messageId: "unrelated", turnId: "turn-1" } });
+      emit({ type: "assistant.message", data: { content: "Ignore me", turnId: "turn-1" } });
+      emit({ type: "assistant.turn_end", data: { turnId: "turn-1" } });
+      emit({ type: "user.message", data: { messageId: "request-2", turnId: "turn-2" } });
+      emit({ type: "assistant.message", data: { content: "Budget answer", turnId: "turn-2" } });
+      emit({ type: "assistant.turn_end", data: { turnId: "turn-2" } });
+      return "request-2";
+    },
+  };
+
+  const response = await sendAndWaitForTurn(session, { prompt: "Question" }, 50);
+  assert.equal(response.data.content, "Budget answer");
+  assert.equal(listeners.size, 0);
 });
 
 test("Copilot assistant provider posts bounded context and validates its response", async () => {
@@ -843,15 +868,24 @@ test("optimized hierarchy surfaces AI-credit settings and consumption without ch
   assert.match(app, /Cost-center pools \$\{costCenterConsumed\.toLocaleString\(\)\} \/ \$\{costCenterTotal\.toLocaleString\(\)\}/);
   assert.match(app, /Shared pool \$\{replay\.pool\.consumed\.toLocaleString\(\)\} \/ \$\{replay\.pool\.total\.toLocaleString\(\)\}/);
   assert.match(app, /hierarchyMeterHtml\("Included allowance", pool\.percent, `\$\{pool\.consumed\.toLocaleString\(\)\} credits`/);
-  assert.match(app, /hierarchyMeterHtml\("AI overage", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\), "overage"\)/);
+  assert.match(app, /hierarchyMeterHtml\("AI overage", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\), "overage", stopState\)/);
+  assert.match(app, /Stop usage when budget limit is reached: \$\{escapeHtml\(stopState\)\}/);
+  assert.match(app, /Cost center \(Stop usage when budget limit is reached: \$\{budgetStopsUsage/);
+  assert.match(app, /Without an applicable hard stop, paid usage continues unmetered by an aggregate budget/);
+  assert.match(app, /Stop usage when budget limit is reached<\/span><strong>\$\{escapeHtml\(stopValue\)\}/);
+  assert.match(app, /stopValue: budgetStopsUsage\(scenario, budget, product\) \? "Enabled" : "Disabled"/);
   assert.doesNotMatch(app, /costCenterAllowanceMeters/);
   assert.match(app, /Overage checks: \$\{escapeHtml\(route\)\}/);
   assert.match(app, /Organization budgets do not apply while cost-center attribution exists/);
-  assert.match(app, /hierarchyMeterHtml\("User-level budget", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\)\)/);
+  assert.match(app, /hierarchyMeterHtml\("User-level budget", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\), "included", "Enabled"\)/);
   assert.match(app, /data-toggle-pool="\$\{escapeHtml\(cc\.id\)\}"/);
   assert.doesNotMatch(app, /Enterprise budget: \$\{/);
   assert.match(styles, /\.hierarchy-meter \.progress\{height:5px/);
   assert.match(styles, /\.hierarchy-node-content\.has-meters\{display:grid;grid-template-columns:/);
+  assert.match(styles, /\.optimized-map-panel\{container-type:inline-size\}/);
+  assert.match(styles, /\.optimized-hierarchy\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(styles, /@container\(max-width:720px\)\{\.optimized-map-panel \.hierarchy-node-content\.has-meters\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(styles, /\.hierarchy-meter-stop\.enabled\{/);
   assert.match(styles, /\.hierarchy-meter-overage/);
   assert.match(styles, /\.hierarchy-composition-segment\.cost-centers/);
   assert.match(styles, /\.hierarchy-overage-route/);
@@ -1086,7 +1120,8 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.equal(styles.includes(".assistant-bubble strong"), false);
   assert.match(extension, /enum: \["scripted", "copilot"\]/);
   assert.match(extension, /ctx\.input\?\.assistantBackend === "scripted" \? "scripted" : "copilot"/);
-  assert.match(extension, /session\.sendAndWait/);
+  assert.match(extension, /sendAndWaitForTurn\(session,/);
+  assert.doesNotMatch(extension, /session\.sendAndWait/);
   assert.match(extension, /github-ai-credit-finops/);
   assert.match(extension, /session\.rpc\.model\.list/);
   assert.match(extension, /session\.setModel/);
@@ -1163,7 +1198,7 @@ test("budget rows stay grouped by scope and sort by percent, amount, then name",
   assert.match(app, /data-budget-section-more=/);
   assert.match(app, /budgetSectionExpansion\.add\(key\)/);
   assert.match(app, /money\(budget\.spent, "USD"\)/);
-  assert.match(app, /budgetStopsUsage\(scenario, budget, product\) \? "Yes" : "No"/);
+  assert.match(app, /budgetStopsUsage\(scenario, budget, product\) \? "Enabled" : "Disabled"/);
 });
 
 test("budget health rows use stable desktop columns and responsive narrow layouts", async () => {

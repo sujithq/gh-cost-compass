@@ -289,7 +289,7 @@ function budgetScopeText(budget) {
 }
 
 function budgetStopLabel(budget) {
-  return `Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, budget) ? "Enabled" : "Not enabled"}`;
+  return `Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, budget) ? "Enabled" : "Disabled"}`;
 }
 
 function scenarioResultHtml(result) {
@@ -714,7 +714,7 @@ function sortBudgetItems(items) {
 }
 
 function budgetRowHtml({ stateId, kind, iconName, colorClass, kicker, name, note, detailLabel, detailValue, stopValue, percentValue, usedText, limitText }) {
-  return `<article class="budget-row" data-budget-row-kind="${escapeHtml(kind)}"><div class="budget-row-identity"><span class="budget-row-icon dashboard-card-${escapeHtml(colorClass)}">${icon(iconName)}</span><div><span class="budget-row-kicker">${escapeHtml(kicker)}</span><h3><button type="button" class="budget-row-title budget-history-trigger" data-history-id="${escapeHtml(stateId)}" aria-label="View ${escapeHtml(name)} history">${escapeHtml(name)}</button></h3>${note ? `<small>${escapeHtml(note)}</small>` : ""}</div></div><div class="budget-row-meta budget-row-detail"><span>${escapeHtml(detailLabel)}</span><strong>${escapeHtml(detailValue)}</strong></div><div class="budget-row-meta budget-row-stop"><span>Stop usage</span><strong>${escapeHtml(stopValue)}</strong></div><div class="budget-row-meter"><div class="progress ${statusClass(percentValue)}" role="progressbar" aria-label="${percent(percentValue)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, percentValue)}"><div style="width:${Math.min(100, percentValue)}%"></div></div><div class="budget-row-values"><span>${escapeHtml(usedText)}</span><span>${escapeHtml(limitText)}</span></div></div></article>`;
+  return `<article class="budget-row" data-budget-row-kind="${escapeHtml(kind)}"><div class="budget-row-identity"><span class="budget-row-icon dashboard-card-${escapeHtml(colorClass)}">${icon(iconName)}</span><div><span class="budget-row-kicker">${escapeHtml(kicker)}</span><h3><button type="button" class="budget-row-title budget-history-trigger" data-history-id="${escapeHtml(stateId)}" aria-label="View ${escapeHtml(name)} history">${escapeHtml(name)}</button></h3>${note ? `<small>${escapeHtml(note)}</small>` : ""}</div></div><div class="budget-row-meta budget-row-detail"><span>${escapeHtml(detailLabel)}</span><strong>${escapeHtml(detailValue)}</strong></div><div class="budget-row-meta budget-row-stop"><span>Stop usage when budget limit is reached</span><strong>${escapeHtml(stopValue)}</strong></div><div class="budget-row-meter"><div class="progress ${statusClass(percentValue)}" role="progressbar" aria-label="${percent(percentValue)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, percentValue)}"><div style="width:${Math.min(100, percentValue)}%"></div></div><div class="budget-row-values"><span>${escapeHtml(usedText)}</span><span>${escapeHtml(limitText)}</span></div></div></article>`;
 }
 
 function budgetSectionHtml(key, items) {
@@ -739,7 +739,7 @@ function renderBudgets(replay, currency) {
     const colorClass = isUlb ? (budget.userBudgetType === "costCenter" ? "cost-center" : "user") : ({ enterprise: "enterprise", organization: "org", costCenter: "cost-center", repository: "repo" })[budget.scopeType] || "metered";
     const product = scenario.products.find((item) => item.id === budget.productId);
     const isAiCreditSku = isUlb || product?.billingMode === "aiCredits";
-    const html = budgetRowHtml({ stateId: budget.stateId, kind: "budget", iconName, colorClass, kicker: scope, name: budget.displayName, note: basis, detailLabel: isAiCreditSku ? "SKU" : "Product", detailValue: isUlb ? "All AI Credit SKUs" : product?.name || budget.productId || budgetTypeLabel(budget), stopValue: budgetStopsUsage(scenario, budget, product) ? "Yes" : "No", percentValue: budget.percent, usedText: `${money(budget.spent, "USD")} spent`, limitText: `${money(budget.amount, "USD")} budget` });
+    const html = budgetRowHtml({ stateId: budget.stateId, kind: "budget", iconName, colorClass, kicker: scope, name: budget.displayName, note: basis, detailLabel: isAiCreditSku ? "SKU" : "Product", detailValue: isUlb ? "All AI Credit SKUs" : product?.name || budget.productId || budgetTypeLabel(budget), stopValue: budgetStopsUsage(scenario, budget, product) ? "Enabled" : "Disabled", percentValue: budget.percent, usedText: `${money(budget.spent, "USD")} spent`, limitText: `${money(budget.amount, "USD")} budget` });
     const groupKey = budgetGroupKeyFor(budget);
     if (!groups.has(groupKey)) groups.set(groupKey, []);
     groups.get(groupKey).push({ percent: budget.percent, amount: budget.amount, name: budget.displayName, html });
@@ -800,7 +800,7 @@ function openBudgetHistory(historyId, trigger) {
       ["Budget Type", budgetTypeLabel(budgetState)],
       ["Budget scope", budgetScopeText(budgetState)],
       ["Budget amount", money(budgetState.amount, "USD")],
-      ["Stop usage", budgetStopsUsage(scenario, budgetState) ? "Enabled" : "Not enabled"],
+      ["Stop usage when budget limit is reached", budgetStopsUsage(scenario, budgetState) ? "Enabled" : "Disabled"],
       ["Current usage", money(budgetState.spent, "USD")],
       ["Remaining", money(budgetState.remaining, "USD")],
       ["Percent", percent(budgetState.percent)],
@@ -906,8 +906,9 @@ function hierarchyBadgeHtml(label, className = "", attributes = "") {
   const tag = attributes ? "button" : "span";
   return `<${tag}${attributes ? ` type="button" ${attributes}` : ""} class="hierarchy-badge${className ? ` ${className}` : ""}">${escapeHtml(label)}</${tag}>`;
 }
-function hierarchyMeterHtml(label, value, usedText, limitText, tone = "included") {
-  return `<div class="hierarchy-meter hierarchy-meter-${escapeHtml(tone)}"><span><b>${escapeHtml(label)}</b><em>${escapeHtml(usedText)} / ${escapeHtml(limitText)} · ${percent(value)}</em></span><div class="progress ${statusClass(value)}" role="progressbar" aria-label="${escapeHtml(label)}: ${escapeHtml(usedText)} of ${escapeHtml(limitText)}, ${percent(value)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"><div style="width:${Math.min(100, value)}%"></div></div></div>`;
+function hierarchyMeterHtml(label, value, usedText, limitText, tone = "included", stopState = "") {
+  const stopStatus = stopState ? `<small class="hierarchy-meter-stop ${stopState === "Enabled" ? "enabled" : "disabled"}">Stop usage when budget limit is reached: ${escapeHtml(stopState)}</small>` : "";
+  return `<div class="hierarchy-meter hierarchy-meter-${escapeHtml(tone)}"><span><b>${escapeHtml(label)}</b><em>${escapeHtml(usedText)} / ${escapeHtml(limitText)} · ${percent(value)}</em>${stopStatus}</span><div class="progress ${statusClass(value)}" role="progressbar" aria-label="${escapeHtml(label)}: ${escapeHtml(usedText)} of ${escapeHtml(limitText)}, ${percent(value)} used${stopState ? `, Stop usage when budget limit is reached: ${escapeHtml(stopState)}` : ""}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"><div style="width:${Math.min(100, value)}%"></div></div></div>`;
 }
 function hierarchyIncludedCreditsMeterHtml(replay) {
   const enabledCostCenterPools = replay.costCenterPoolStates.filter((item) => item.enabled);
@@ -960,29 +961,36 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
   const scopeAttributes = (type, id, name) => (scopeNodes ? `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"` : "");
   const scopeClass = scopeNodes ? "scope-node" : "";
   const nodeBudgetShield = (type, id) => {
-    if (!scopeNodes || !replay?.budgetStates.some((item) => item.budgetKind === "metered" && item.scopeType === type && item.scopeId === id)) return "";
-    return `<span class="hierarchy-budget-shield" title="Metered budget configured" aria-label="Metered budget configured">${icon("hardStop")}</span>`;
+    const budgets = replay?.budgetStates.filter((item) => item.budgetKind === "metered" && item.scopeType === type && item.scopeId === id && item.productId === "ai-credits") || [];
+    if (!scopeNodes || !budgets.length) return "";
+    const stopEnabled = budgets.some((item) => budgetStopsUsage(scenario, item));
+    const label = `AI overage budget · Stop usage when budget limit is reached: ${stopEnabled ? "Enabled" : "Disabled"}`;
+    return `<span class="hierarchy-budget-shield" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon(stopEnabled ? "hardStop" : "alertOnly")}</span>`;
   };
   const aiOverageBudget = (type, id) => replay?.budgetStates
     .filter((item) => item.budgetKind === "metered" && item.scopeType === type && item.scopeId === id && item.productId === "ai-credits")
     .sort((left, right) => right.percent - left.percent)[0];
   const budgetMeter = (type, id) => {
     const budget = aiOverageBudget(type, id);
-    return budget ? hierarchyMeterHtml("AI overage", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD"), "overage") : "";
+    const stopState = budget && budgetStopsUsage(scenario, budget) ? "Enabled" : "Disabled";
+    return budget ? hierarchyMeterHtml("AI overage", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD"), "overage", stopState) : "";
   };
   const costCenterOverageRoute = (costCenter) => {
     const scopes = [];
-    if (aiOverageBudget("costCenter", costCenter.id)) scopes.push("Cost center");
-    if (!costCenter.excludeFromEnterpriseBudget && aiOverageBudget("enterprise", scenario.enterprise.id)) scopes.push("Enterprise");
-    const route = scopes.length ? scopes.join(" + ") : "No aggregate budget";
-    return `<span class="hierarchy-overage-route" title="Paid overage is checked against every listed budget. Organization budgets do not apply while cost-center attribution exists.">${icon("hardStop")}Overage checks: ${escapeHtml(route)}</span>`;
+    const costCenterBudget = aiOverageBudget("costCenter", costCenter.id);
+    const enterpriseBudget = !costCenter.excludeFromEnterpriseBudget && aiOverageBudget("enterprise", scenario.enterprise.id);
+    if (costCenterBudget) scopes.push(`Cost center (Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, costCenterBudget) ? "Enabled" : "Disabled"})`);
+    if (enterpriseBudget) scopes.push(`Enterprise (Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, enterpriseBudget) ? "Enabled" : "Disabled"})`);
+    const route = scopes.length ? scopes.join(" + ") : "No aggregate budget (unmetered)";
+    const stopEnabled = [costCenterBudget, enterpriseBudget].filter(Boolean).some((budget) => budgetStopsUsage(scenario, budget));
+    return `<span class="hierarchy-overage-route" title="Paid overage is checked against every listed budget at the same time. Organization budgets do not apply while cost-center attribution exists. A disabled stop does not transfer spend to another budget; usage continues unless another applicable hard stop blocks it.">${icon(stopEnabled ? "hardStop" : "alertOnly")}Overage checks: ${escapeHtml(route)}</span>`;
   };
   const userSupplementary = (user) => {
     if (!scopeNodes || !replay) return { badges: "", meters: "" };
     const budget = replay.budgetStates.find((item) => item.budgetKind === "user" && item.userId === user.id);
     return budget ? {
       badges: `<div class="hierarchy-badges">${hierarchyBadgeHtml("ULB", "user-budget")}</div>`,
-      meters: hierarchyMeterHtml("User-level budget", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD")),
+      meters: hierarchyMeterHtml("User-level budget", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD"), "included", "Enabled"),
     } : { badges: "", meters: "" };
   };
   let matchCount = 0;
@@ -1041,14 +1049,14 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
     if (visibleRepos.length) {
       matchCount += visibleRepos.length;
       const node = `<div class="hierarchy-node repo"><span>${icon("repo")}</span><div><span class="hierarchy-kind">Repositories</span><strong>${visibleRepos.length} repositor${visibleRepos.length === 1 ? "y" : "ies"}</strong><small>Usage here bills to ${escapeHtml(org.name)}</small></div></div>`;
-      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`, "", "", scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("repository", repo.id)}</div>` : "")))));
+      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`, "", "", scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("repository", repo.id)}</div>` : "", scopeNodes ? budgetMeter("repository", repo.id) : "")))));
     }
 
     const children = costCenterHtml + unassignedHtml + repoHtml;
     if (filter && !orgMatches && !children) return "";
     if (orgMatches) matchCount += 1;
     const orgOpen = branchOpen(orgKey, true);
-    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass, scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("organization", org.id)}</div>` : "");
+    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass, scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("organization", org.id)}</div>` : "", scopeNodes ? budgetMeter("organization", org.id) : "");
     return hierarchyBranchHtml(orgKey, orgNode, orgOpen, org.name, () => children || `<div class="empty">No cost centers, repositories, or users yet.</div>`);
   }).join("");
 
@@ -1174,7 +1182,7 @@ function renderConfiguration() {
     const assignment = item.costCenterId ? costCenter?.name : costCenter ? `${costCenter.name} (via organization)` : "No cost center";
     return entityRow(item.name, `${item.licensePlan === "enterprise" ? "3,900" : "1,900"} included credits · ${assignment} · ${seatText} · ${money(charge, scenario.enterprise.currency)} this cycle`, "user", item.id);
   }).join("");
-  $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Budget Type / scope</span><span>Budget amount</span><span>Effective</span><span>Stop usage when limit is reached</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span class="budget-scope-cell">${scopeMarker(item)}${escapeHtml(budgetTypeLabel(item))} · ${escapeHtml(budgetScopeText(item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${budgetStopsUsage(scenario, item) ? "hard" : item.enforcement}">${budgetStopsUsage(scenario, item) ? "Enabled" : "Not enabled"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
+  $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Budget Type / scope</span><span>Budget amount</span><span>Effective</span><span>Stop usage when budget limit is reached</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span class="budget-scope-cell">${scopeMarker(item)}${escapeHtml(budgetTypeLabel(item))} · ${escapeHtml(budgetScopeText(item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${budgetStopsUsage(scenario, item) ? "hard" : item.enforcement}">${budgetStopsUsage(scenario, item) ? "Enabled" : "Disabled"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
 }
 
 // The "Enabled for selected products" policy state only makes sense with an explicit product list,
@@ -1603,7 +1611,7 @@ function renderOptimizedBuckets(replay) {
   updateBucketPanel([
     { title: includedCreditsTitle, items: hasCostCenterPools ? (poolExpanded ? [poolRoot, sharedPool, ...costCenterPools] : [poolRoot]) : [poolRoot], note: includedCreditsNote },
     { title: "User-level budgets", items: userBudgets, note: `User-level budgets always stop usage based on total AI-credit value${scopeNote}.` },
-    { title: "Budget controls", items: meteredBudgets, note: `Budgets and alerts track paid metered overage after included credits${scopeNote}.` },
+    { title: "Budget controls", items: meteredBudgets, note: `Budgets track paid metered overage after included credits${scopeNote}. "Stop usage when budget limit is reached: Enabled" blocks at that limit; Disabled allows usage to continue unless another applicable hard stop blocks it. Without an applicable hard stop, paid usage continues unmetered by an aggregate budget.` },
   ]);
 }
 
