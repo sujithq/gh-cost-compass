@@ -9,7 +9,7 @@ alert, enforcement, and FinOps questions.
 2. Identify which control is active before and after included-pool exhaustion.
 3. Map users, enterprise teams, cost centers, organizations, and the enterprise to the
    correct controls.
-4. Distinguish alerts, hard stops, included-usage controls, and paid-usage policy.
+4. Distinguish alerts, hard stops, the enterprise AI-credit paid-usage setting, and cost-center included-usage controls.
 5. Ground changeable claims in current official GitHub documentation.
 6. State simulator assumptions and missing evidence explicitly.
 
@@ -18,7 +18,7 @@ alert, enforcement, and FinOps questions.
 1. Read `references/sources.md` and verify current official GitHub documentation when
    web access is available.
 2. Establish only the customer state needed for the question: licensed seats and users,
-   included-pool consumption, billing period, paid-usage policy, ULBs, cost centers,
+   included-pool consumption, billing period, enterprise paid-usage setting, ULBs, cost centers,
    included-usage controls, overage budgets, alert thresholds, recipients, and stop
    settings.
 3. Read `references/control-model.md` and evaluate controls in their documented order.
@@ -52,4 +52,3 @@ alert, enforcement, and FinOps questions.
   the enterprise ceiling.
 - Keep scenario suggestions read-only until they pass validation and are explicitly
   imported.
-

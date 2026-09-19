@@ -1,4 +1,4 @@
-import { DEFAULT_SCENARIO_SET_ID, budgetInScope, paidUsageAllowedForProduct, paidUsagePolicyLabel, budgetStopsUsage, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, budgetInScope, paidUsageAllowedForProduct, paidUsagePolicyLabel, budgetStopsUsage, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, overrideCostCenterIncludedUsageCap, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -64,6 +64,8 @@ const ICON_PATHS = {
   hardStop: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M9.5 12l1.7 1.8L15 10"/>',
   alertOnly: '<path d="M12 3 4.5 6v5.2c0 4.4 3.2 8.3 7.5 9.3 4.3-1 7.5-4.9 7.5-9.3V6L12 3Z"/><path d="M12 8v4.2"/><circle cx="12" cy="15" r="0.9" fill="currentColor" stroke="none"/>',
   repo: '<path d="M6.5 3H19v14H6.5A2.5 2.5 0 0 0 4 19.5v-14A2.5 2.5 0 0 1 6.5 3Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19v4H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M9 7h6"/>',
+  panelExpand: '<path d="m9 6 6 6-6 6"/>',
+  panelCollapse: '<path d="m15 6-6 6 6 6"/>',
 };
 function icon(name, className = "") {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon${className ? ` ${className}` : ""}" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
@@ -215,14 +217,15 @@ function progressBarKey(bar, index) {
 function setPanelHtmlWithBarTransitions(selector, html) {
   const container = $(selector);
   if (!container) return;
+  const progressFills = (host) => [...host.querySelectorAll(".progress > div, .progress [data-progress-fill]")];
   const previous = new Map();
-  [...container.querySelectorAll(".progress > div")].forEach((bar, index) => {
+  progressFills(container).forEach((bar, index) => {
     previous.set(progressBarKey(bar, index), bar.style.width);
   });
 
   container.innerHTML = html;
 
-  const pending = [...container.querySelectorAll(".progress > div")].map((bar, index) => ({ bar, target: bar.style.width, before: previous.get(progressBarKey(bar, index)) }))
+  const pending = progressFills(container).map((bar, index) => ({ bar, target: bar.style.width, before: previous.get(progressBarKey(bar, index)) }))
     .filter((item) => item.before !== undefined && item.before !== item.target);
   if (!pending.length) return;
   pending.forEach((item) => { item.bar.style.width = item.before; });
@@ -285,8 +288,13 @@ function budgetScopeText(budget) {
   return budget.budgetKind === "user" ? `Users · ${describeScope(scenario, budget)}` : `${scopeLabels[budget.scopeType]} · ${describeScope(scenario, budget)}`;
 }
 
+function budgetStopEnabled(budget) {
+  const definition = scenario.budgets.find((item) => item.id === budget.id) || budget;
+  return budgetStopsUsage(scenario, definition);
+}
+
 function budgetStopLabel(budget) {
-  return `Stop usage when budget limit is reached: ${budgetStopsUsage(scenario, budget) ? "Enabled" : "Not enabled"}`;
+  return `Stop usage: ${budgetStopEnabled(budget) ? "Enabled" : "Disabled"}`;
 }
 
 function scenarioResultHtml(result) {
@@ -711,7 +719,7 @@ function sortBudgetItems(items) {
 }
 
 function budgetRowHtml({ stateId, kind, iconName, colorClass, kicker, name, note, detailLabel, detailValue, stopValue, percentValue, usedText, limitText }) {
-  return `<article class="budget-row" data-budget-row-kind="${escapeHtml(kind)}"><div class="budget-row-identity"><span class="budget-row-icon dashboard-card-${escapeHtml(colorClass)}">${icon(iconName)}</span><div><span class="budget-row-kicker">${escapeHtml(kicker)}</span><h3><button type="button" class="budget-row-title budget-history-trigger" data-history-id="${escapeHtml(stateId)}" aria-label="View ${escapeHtml(name)} history">${escapeHtml(name)}</button></h3>${note ? `<small>${escapeHtml(note)}</small>` : ""}</div></div><div class="budget-row-meta budget-row-detail"><span>${escapeHtml(detailLabel)}</span><strong>${escapeHtml(detailValue)}</strong></div><div class="budget-row-meta budget-row-stop"><span>Stop usage</span><strong>${escapeHtml(stopValue)}</strong></div><div class="budget-row-meter"><div class="progress ${statusClass(percentValue)}" role="progressbar" aria-label="${percent(percentValue)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, percentValue)}"><div style="width:${Math.min(100, percentValue)}%"></div></div><div class="budget-row-values"><span>${escapeHtml(usedText)}</span><span>${escapeHtml(limitText)}</span></div></div></article>`;
+  return `<article class="budget-row" data-budget-row-kind="${escapeHtml(kind)}"><div class="budget-row-identity"><span class="budget-row-icon dashboard-card-${escapeHtml(colorClass)}">${icon(iconName)}</span><div><span class="budget-row-kicker">${escapeHtml(kicker)}</span><h3><button type="button" class="budget-row-title budget-history-trigger" data-history-id="${escapeHtml(stateId)}" aria-label="View ${escapeHtml(name)} history">${escapeHtml(name)}</button></h3>${note ? `<small>${escapeHtml(note)}</small>` : ""}</div></div><div class="budget-row-meta budget-row-detail"><span>${escapeHtml(detailLabel)}</span><strong>${escapeHtml(detailValue)}</strong></div><div class="budget-row-meta budget-row-stop"><span>Stop usage when budget limit is reached</span><strong>${escapeHtml(stopValue)}</strong></div><div class="budget-row-meter"><div class="progress ${statusClass(percentValue)}" role="progressbar" aria-label="${percent(percentValue)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, percentValue)}"><div style="width:${Math.min(100, percentValue)}%"></div></div><div class="budget-row-values"><span>${escapeHtml(usedText)}</span><span>${escapeHtml(limitText)}</span></div></div></article>`;
 }
 
 function budgetSectionHtml(key, items) {
@@ -736,7 +744,7 @@ function renderBudgets(replay, currency) {
     const colorClass = isUlb ? (budget.userBudgetType === "costCenter" ? "cost-center" : "user") : ({ enterprise: "enterprise", organization: "org", costCenter: "cost-center", repository: "repo" })[budget.scopeType] || "metered";
     const product = scenario.products.find((item) => item.id === budget.productId);
     const isAiCreditSku = isUlb || product?.billingMode === "aiCredits";
-    const html = budgetRowHtml({ stateId: budget.stateId, kind: "budget", iconName, colorClass, kicker: scope, name: budget.displayName, note: basis, detailLabel: isAiCreditSku ? "SKU" : "Product", detailValue: isUlb ? "All AI Credit SKUs" : product?.name || budget.productId || budgetTypeLabel(budget), stopValue: budgetStopsUsage(scenario, budget, product) ? "Yes" : "No", percentValue: budget.percent, usedText: `${money(budget.spent, "USD")} spent`, limitText: `${money(budget.amount, "USD")} budget` });
+    const html = budgetRowHtml({ stateId: budget.stateId, kind: "budget", iconName, colorClass, kicker: scope, name: budget.displayName, note: basis, detailLabel: isAiCreditSku ? "SKU" : "Product", detailValue: isUlb ? "All AI Credit SKUs" : product?.name || budget.productId || budgetTypeLabel(budget), stopValue: budgetStopsUsage(scenario, budget, product) ? "Enabled" : "Disabled", percentValue: budget.percent, usedText: `${money(budget.spent, "USD")} spent`, limitText: `${money(budget.amount, "USD")} budget` });
     const groupKey = budgetGroupKeyFor(budget);
     if (!groups.has(groupKey)) groups.set(groupKey, []);
     groups.get(groupKey).push({ percent: budget.percent, amount: budget.amount, name: budget.displayName, html });
@@ -758,6 +766,7 @@ function openBudgetHistory(historyId, trigger) {
   let title;
   let summary;
   let entries;
+  let editorHtml = "";
   let alertHtml = "<li>The shared pool does not emit budget alerts.</li>";
 
   if (historyId === "pool") {
@@ -790,6 +799,8 @@ function openBudgetHistory(historyId, trigger) {
   } else {
     const budgetState = replay.budgetStates.find((item) => item.stateId === historyId);
     if (!budgetState) return;
+    const budget = scenario.budgets.find((item) => item.id === budgetState.id);
+    if (!budget) return;
     const contributors = currentPeriodResults.filter((item) => item.affectedBudgets.some((impact) => impact.stateKey === historyId));
     const alerts = replay.alerts.filter((item) => item.budgetId === budgetState.id && item.date.startsWith(replay.period) && contributors.some((result) => result.eventId === item.eventId));
     title = `${budgetState.displayName} history`;
@@ -797,7 +808,7 @@ function openBudgetHistory(historyId, trigger) {
       ["Budget Type", budgetTypeLabel(budgetState)],
       ["Budget scope", budgetScopeText(budgetState)],
       ["Budget amount", money(budgetState.amount, "USD")],
-      ["Stop usage", budgetStopsUsage(scenario, budgetState) ? "Enabled" : "Not enabled"],
+      ["Stop usage when budget limit is reached", budgetStopsUsage(scenario, budgetState) ? "Enabled" : "Disabled"],
       ["Current usage", money(budgetState.spent, "USD")],
       ["Remaining", money(budgetState.remaining, "USD")],
       ["Percent", percent(budgetState.percent)],
@@ -808,11 +819,25 @@ function openBudgetHistory(historyId, trigger) {
       return `Added ${money((impact?.after || 0) - (impact?.before || 0), "USD")} to this budget`;
     }, "No usage events are currently contributing to this budget.");
     alertHtml = alerts.length ? alerts.map((alert) => `<li>${alert.date} · ${alert.threshold}% threshold reached</li>`).join("") : "<li>No budget alerts triggered for this control.</li>";
+    const stopLocked = budget.budgetKind === "user";
+    editorHtml = `
+      <form class="budget-history-editor" data-budget-edit-form="${escapeHtml(budget.id)}">
+        <label>Budget amount (USD)<input name="amount" type="number" min="0" step="0.01" value="${escapeHtml(String(budget.amount))}" required></label>
+        <label>Stop usage when budget limit is reached
+          <select name="enforcement" ${stopLocked ? "disabled" : ""}>
+            <option value="hard" ${budgetStopsUsage(scenario, budget) ? "selected" : ""}>Enabled</option>
+            <option value="soft" ${!budgetStopsUsage(scenario, budget) ? "selected" : ""}>Disabled</option>
+          </select>
+        </label>
+        ${stopLocked ? `<small>User-level budgets always stop usage, so this setting cannot be disabled.</small>` : ""}
+        <button type="submit" class="primary">Save budget</button>
+      </form>`;
   }
 
   $("#budget-history-title").textContent = title;
   $("#budget-history-content").innerHTML = `
     <div class="budget-history-summary">${summary.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+    ${editorHtml}
     <div class="history-panel"><h4>Usage and decisions</h4>${entries}</div>
     <div class="history-panel"><h4>Triggered alerts</h4><ul class="history-alert-list">${alertHtml}</ul></div>`;
   budgetHistoryTrigger = trigger || document.activeElement;
@@ -889,9 +914,37 @@ const bucketExpansion = new Map();
 function bucketExpanded(key, fallback = true) {
   return bucketExpansion.has(key) ? bucketExpansion.get(key) : fallback;
 }
-function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "") {
+const optimizedBucketPanelExpansion = new Map();
+function optimizedBucketsExpanded() {
+  return optimizedBucketPanelExpansion.has("credit-buckets")
+    ? optimizedBucketPanelExpansion.get("credit-buckets")
+    : false;
+}
+const optimizedStepPanelExpansion = new Map();
+function optimizedStepDetailsExpanded() {
+  return optimizedStepPanelExpansion.get("current-step") || false;
+}
+function hierarchyBadgeHtml(label, className = "", attributes = "") {
+  const tag = attributes ? "button" : "span";
+  return `<${tag}${attributes ? ` type="button" ${attributes}` : ""} class="hierarchy-badge${className ? ` ${className}` : ""}">${escapeHtml(label)}</${tag}>`;
+}
+function hierarchyMeterHtml(label, value, usedText, limitText, tone = "included", stopState = "") {
+  const stopStatus = stopState ? `<small class="hierarchy-meter-stop ${stopState === "Enabled" ? "enabled" : "disabled"}">Stop usage: ${escapeHtml(stopState)}</small>` : "";
+  return `<div class="hierarchy-meter hierarchy-meter-${escapeHtml(tone)}"><span><b>${escapeHtml(label)}</b><em>${escapeHtml(usedText)} / ${escapeHtml(limitText)} · ${percent(value)}</em>${stopStatus}</span><div class="progress ${statusClass(value)}" role="progressbar" aria-label="${escapeHtml(label)}: ${escapeHtml(usedText)} of ${escapeHtml(limitText)}, ${percent(value)} used${stopState ? `, Stop usage when budget limit is reached: ${escapeHtml(stopState)}` : ""}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"><div style="width:${Math.min(100, value)}%"></div></div></div>`;
+}
+function hierarchyIncludedCreditsMeterHtml(replay) {
+  const enabledCostCenterPools = replay.costCenterPoolStates.filter((item) => item.enabled);
+  const costCenterTotal = enabledCostCenterPools.reduce((sum, item) => sum + item.total, 0);
+  const costCenterConsumed = enabledCostCenterPools.reduce((sum, item) => sum + item.consumed, 0);
+  const total = replay.pool.grandTotal;
+  const segment = (label, consumed, amount, className) => amount > 0
+    ? `<span class="hierarchy-composition-segment ${className} ${statusClass(amount ? consumed / amount * 100 : 0)}" style="width:${total ? amount / total * 100 : 0}%" title="${escapeHtml(label)}: ${consumed.toLocaleString()} of ${amount.toLocaleString()} credits"><i data-progress-fill data-bar-key="included-${className}" style="width:${Math.min(100, amount ? consumed / amount * 100 : 0)}%"></i></span>`
+    : "";
+  return `<div class="hierarchy-meter hierarchy-meter-composed"><span><b>Included AI credits</b><em>${replay.pool.grandConsumed.toLocaleString()} / ${total.toLocaleString()} credits · ${percent(replay.pool.grandPercent)}</em></span><div class="progress hierarchy-composition" role="progressbar" aria-label="Included AI credits: ${replay.pool.grandConsumed.toLocaleString()} of ${total.toLocaleString()} credits, ${percent(replay.pool.grandPercent)} used; ${costCenterConsumed.toLocaleString()} from cost-center pools and ${replay.pool.consumed.toLocaleString()} from the shared pool" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, replay.pool.grandPercent)}">${segment("Cost-center pools", costCenterConsumed, costCenterTotal, "cost-centers")}${segment("Shared pool", replay.pool.consumed, replay.pool.total, "shared")}</div><div class="hierarchy-meter-key"><span class="cost-centers">Cost-center pools ${costCenterConsumed.toLocaleString()} / ${costCenterTotal.toLocaleString()}</span><span class="shared">Shared pool ${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}</span></div></div>`;
+}
+function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "", badges = "", meters = "") {
   const meta = HIERARCHY_KINDS[kind];
-  return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small></div></div>`;
+  return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div class="hierarchy-node-content${meters ? " has-meters" : ""}"><div class="hierarchy-node-main"><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small>${badges}</div>${meters ? `<div class="hierarchy-node-meters">${meters}</div>` : ""}</div></div>`;
 }
 
 function hierarchyLeafHtml(nodeHtml) {
@@ -921,7 +974,7 @@ function hierarchyMatches(filter, ...values) {
 
 // Builds the enterprise → organization → cost center → user/repository tree used by both the
 // dashboard and the optimized page, so the two can never present different structures.
-function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
+function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
   const filter = (hierarchyFilters.get(hostId) || "").trim().toLowerCase();
   const autoCollapse = scenario.users.length > HIERARCHY_AUTO_COLLAPSE_USERS;
   // While filtering, matches are always revealed: a stored collapse from before the search would
@@ -929,6 +982,39 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
   const branchOpen = (key, fallback) => (filter ? true : hierarchyExpanded(key, fallback));
   const scopeAttributes = (type, id, name) => (scopeNodes ? `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"` : "");
   const scopeClass = scopeNodes ? "scope-node" : "";
+  const nodeBudgetShield = (type, id) => {
+    const budgets = replay?.budgetStates.filter((item) => item.budgetKind === "metered" && item.scopeType === type && item.scopeId === id && item.productId === "ai-credits") || [];
+    if (!scopeNodes || !budgets.length) return "";
+    const stopEnabled = budgets.some((item) => budgetStopsUsage(scenario, item));
+    const label = `AI overage budget · Stop usage when budget limit is reached: ${stopEnabled ? "Enabled" : "Disabled"}`;
+    return `<span class="hierarchy-budget-shield" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon(stopEnabled ? "hardStop" : "alertOnly")}</span>`;
+  };
+  const aiOverageBudget = (type, id) => replay?.budgetStates
+    .filter((item) => item.budgetKind === "metered" && item.scopeType === type && item.scopeId === id && item.productId === "ai-credits")
+    .sort((left, right) => right.percent - left.percent)[0];
+  const budgetMeter = (type, id) => {
+    const budget = aiOverageBudget(type, id);
+    const stopState = budget && budgetStopsUsage(scenario, budget) ? "Enabled" : "Disabled";
+    return budget ? hierarchyMeterHtml("AI overage", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD"), "overage", stopState) : "";
+  };
+  const costCenterOverageRoute = (costCenter) => {
+    const scopes = [];
+    const costCenterBudget = aiOverageBudget("costCenter", costCenter.id);
+    const enterpriseBudget = !costCenter.excludeFromEnterpriseBudget && aiOverageBudget("enterprise", scenario.enterprise.id);
+    if (costCenterBudget) scopes.push("Cost center");
+    if (enterpriseBudget) scopes.push("Enterprise");
+    const route = scopes.length ? scopes.join(" + ") : "No aggregate budget (unmetered)";
+    const stopEnabled = [costCenterBudget, enterpriseBudget].filter(Boolean).some((budget) => budgetStopsUsage(scenario, budget));
+    return `<span class="hierarchy-overage-route" title="Paid overage is checked against every listed budget at the same time. Organization budgets do not apply while cost-center attribution exists. A disabled stop does not transfer spend to another budget; usage continues unless another applicable hard stop blocks it.">${icon(stopEnabled ? "hardStop" : "alertOnly")}Overage checks: ${escapeHtml(route)}</span>`;
+  };
+  const userSupplementary = (user) => {
+    if (!scopeNodes || !replay) return { badges: "", meters: "" };
+    const budget = replay.budgetStates.find((item) => item.budgetKind === "user" && item.userId === user.id);
+    return budget ? {
+      badges: `<div class="hierarchy-badges">${hierarchyBadgeHtml("ULB", "user-budget")}</div>`,
+      meters: hierarchyMeterHtml("User-level budget", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD"), "included", "Enabled"),
+    } : { badges: "", meters: "" };
+  };
   let matchCount = 0;
 
   const branches = scenario.organizations.map((org) => {
@@ -938,7 +1024,10 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
     const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
     const orgMatches = hierarchyMatches(filter, org.name);
 
-    const userLeafHtml = (user) => hierarchyLeafHtml(hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeAttributes("user", user.id, user.name), scopeClass));
+    const userLeafHtml = (user) => {
+      const supplementary = userSupplementary(user);
+      return hierarchyLeafHtml(hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeAttributes("user", user.id, user.name), scopeClass, supplementary.badges, supplementary.meters));
+    };
     const visibleUsers = (list) => list.filter((user) => orgMatches || hierarchyMatches(filter, user.name, costCenterForUser(scenario, user)?.name));
 
     const costCenterHtml = costCenters.map((cc) => {
@@ -955,7 +1044,12 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
       const ccUserText = ccTotalUsers === ccUsers.length
         ? `${ccUsers.length} user${ccUsers.length === 1 ? "" : "s"}`
         : `${ccUsers.length} of ${ccTotalUsers} users here`;
-      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUserText} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass);
+      const config = describeCostCenterConfiguration(scenario, cc);
+      const pool = replay?.costCenterPoolStates.find((item) => item.costCenterId === cc.id);
+      const capLabel = `Included cap: ${config.settings.includedUsageCapEnabled ? "On" : "Off"}`;
+      const badges = scopeNodes ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(capLabel, config.settings.includedUsageCapEnabled ? "included-cap-on" : "included-cap-off", `data-toggle-pool="${escapeHtml(cc.id)}" aria-label="${config.settings.includedUsageCapEnabled ? "Turn off" : "Turn on"} AI credit included usage cap for ${escapeHtml(cc.name)}" title="Toggle AI credit included usage cap"`)}${costCenterOverageRoute(cc)}</div>` : "";
+      const includedMeter = scopeNodes && config.settings.includedUsageCapEnabled && pool ? hierarchyMeterHtml("Included allowance", pool.percent, `${pool.consumed.toLocaleString()} credits`, `${pool.total.toLocaleString()} credits`) : "";
+      const node = hierarchyNodeHtml("costCenter", cc.name, ccUserText, scopeAttributes("costCenter", cc.id, cc.name), scopeClass, badges, includedMeter + (scopeNodes ? budgetMeter("costCenter", cc.id) : ""));
       const open = branchOpen(ccKey, !autoCollapse);
       return hierarchyBranchHtml(ccKey, node, open, `${cc.name} members`, () => hierarchyLeafListHtml(ccKey, shownUsers.map(userLeafHtml)) || `<div class="empty">No users assigned.</div>`);
     }).join("");
@@ -977,20 +1071,22 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
     if (visibleRepos.length) {
       matchCount += visibleRepos.length;
       const node = `<div class="hierarchy-node repo"><span>${icon("repo")}</span><div><span class="hierarchy-kind">Repositories</span><strong>${visibleRepos.length} repositor${visibleRepos.length === 1 ? "y" : "ies"}</strong><small>Usage here bills to ${escapeHtml(org.name)}</small></div></div>`;
-      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`)))));
+      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`, "", "", scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("repository", repo.id)}</div>` : "", scopeNodes ? budgetMeter("repository", repo.id) : "")))));
     }
 
     const children = costCenterHtml + unassignedHtml + repoHtml;
     if (filter && !orgMatches && !children) return "";
     if (orgMatches) matchCount += 1;
     const orgOpen = branchOpen(orgKey, true);
-    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass);
+    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass, scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("organization", org.id)}</div>` : "", scopeNodes ? budgetMeter("organization", org.id) : "");
     return hierarchyBranchHtml(orgKey, orgNode, orgOpen, org.name, () => children || `<div class="empty">No cost centers, repositories, or users yet.</div>`);
   }).join("");
 
   const enterpriseKey = `${hostId}:enterprise`;
   const enterpriseOpen = branchOpen(enterpriseKey, true);
-  const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass);
+  const enterpriseBadges = scopeNodes && replay ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(`AI credit paid usage: ${paidUsagePolicyLabel(scenario.enterprise)}`, "paid-usage-setting")}${nodeBudgetShield("enterprise", scenario.enterprise.id)}</div>` : "";
+  const enterpriseMeters = scopeNodes && replay ? `${hierarchyIncludedCreditsMeterHtml(replay)}${budgetMeter("enterprise", scenario.enterprise.id)}` : "";
+  const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass, enterpriseBadges, enterpriseMeters);
   const body = branches || `<div class="empty">${filter ? "No organizations, cost centers, repositories, or users match this filter." : "No organizations configured yet."}</div>`;
 
   const legend = `<div class="hierarchy-legend">${Object.entries(HIERARCHY_KINDS).map(([kind, meta]) => `<span class="${meta.className}">${icon(kind)}${meta.label}</span>`).join("")}</div>`;
@@ -1007,7 +1103,7 @@ function renderHierarchy() {
 // user just activated — otherwise collapsing a branch would drop focus back to the document body.
 function renderHierarchyTrees(focusKey = null) {
   renderHierarchy();
-  if ($("#optimized-hierarchy")) $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
+  if ($("#optimized-hierarchy")) $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true, replay: replayScenario(scenario) });
   if (focusKey) document.querySelector(`[data-tree-toggle="${CSS.escape(focusKey)}"]`)?.focus();
 }
 
@@ -1108,7 +1204,7 @@ function renderConfiguration() {
     const assignment = item.costCenterId ? costCenter?.name : costCenter ? `${costCenter.name} (via organization)` : "No cost center";
     return entityRow(item.name, `${item.licensePlan === "enterprise" ? "3,900" : "1,900"} included credits · ${assignment} · ${seatText} · ${money(charge, scenario.enterprise.currency)} this cycle`, "user", item.id);
   }).join("");
-  $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Budget Type / scope</span><span>Budget amount</span><span>Effective</span><span>Stop usage when limit is reached</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span class="budget-scope-cell">${scopeMarker(item)}${escapeHtml(budgetTypeLabel(item))} · ${escapeHtml(budgetScopeText(item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${budgetStopsUsage(scenario, item) ? "hard" : item.enforcement}">${budgetStopsUsage(scenario, item) ? "Enabled" : "Not enabled"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
+  $("#budget-table").innerHTML = `<div class="budget-table-row header"><span>Name</span><span>Budget Type / scope</span><span>Budget amount</span><span>Effective</span><span>Stop usage when budget limit is reached</span><span></span></div>` + scenario.budgets.map((item) => `<div class="budget-table-row"><strong>${escapeHtml(item.name)}</strong><span class="budget-scope-cell">${scopeMarker(item)}${escapeHtml(budgetTypeLabel(item))} · ${escapeHtml(budgetScopeText(item))}</span><span>${money(item.amount, "USD")}</span><span>${item.effectiveFrom}${item.expiresAt ? ` → ${item.expiresAt}` : ""}</span><span class="tag ${budgetStopsUsage(scenario, item) ? "hard" : item.enforcement}">${budgetStopsUsage(scenario, item) ? "Enabled" : "Disabled"}</span><button class="delete" data-delete="budget" data-id="${item.id}" title="Delete">×</button></div>`).join("");
 }
 
 // The "Enabled for selected products" policy state only makes sense with an explicit product list,
@@ -1227,7 +1323,7 @@ function renderBudgetScopeOptions() {
 
 function budgetIcon(budget) {
   if (budget.stateId === "pool" || budget.budgetKind === "pool") return icon("pool");
-  if (budgetStopsUsage(scenario, budget)) return icon("hardStop");
+  if (budgetStopEnabled(budget)) return icon("hardStop");
   return icon("alertOnly");
 }
 
@@ -1342,14 +1438,12 @@ function renderGlobalScenarioHeader(definition, definitions) {
     selector.disabled = true;
     $("#global-scenario-title").textContent = "No compatible guided scenarios";
     $("#global-scenario-summary").textContent = scenarioCatalogError || `No guided scenarios are available for ${selectedDefaultSetName()}.`;
-    $("#global-scenario-tags").innerHTML = "";
     return;
   }
   selector.disabled = false;
   selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${builtInScenarioDefinitions.includes(item) ? "" : " · custom"}</option>`).join("");
   $("#global-scenario-title").textContent = definition.title;
   $("#global-scenario-summary").textContent = `${definition.summary} · ${definitions.length} available for ${selectedDefaultSetName()}`;
-  $("#global-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
 }
 
 function bucketRowDetail(item) {
@@ -1363,7 +1457,7 @@ function bucketRowDetail(item) {
     const breaching = item.breachingCount ? ` · ${item.breachingCount} over threshold` : "";
     return `${item.userCount} users · highest ${percent(item.percent)}${breaching} · ${money(item.spent, "USD")} of ${money(item.amount, "USD")} combined`;
   }
-  return `${money(item.spent, "USD")} of ${money(item.amount, "USD")} · ${budgetStopLabel(item)}`;
+  return `${money(item.spent, "USD")} of ${money(item.amount, "USD")}`;
 }
 
 function bucketRowHtml(item) {
@@ -1373,7 +1467,8 @@ function bucketRowHtml(item) {
   const icons = { "cost-center": "costCenter", enterprise: "enterprise", user: "hardStop", metered: "alertOnly" };
   const label = labels[type];
   const rowClass = `bucket-row bucket-row-${type}${item.parentId ? " bucket-row-nested" : ""}`;
-  const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${percent(item.percent)}</b>`;
+  const stopStatus = item.budgetKind !== "pool" ? `<span class="budget-stop-label ${budgetStopEnabled(item) ? "enabled" : "disabled"}">${escapeHtml(budgetStopLabel(item))}</span>` : "";
+  const body = `<span class="bucket-icon">${budgetIcon(item)}</span><div><span class="bucket-row-heading"><span class="bucket-type-badge" title="${label}" aria-label="${label}">${icon(icons[type])}</span><strong>${escapeHtml(item.displayName)}</strong>${stopStatus}</span><small>${escapeHtml(detail)}</small><div class="progress ${statusClass(item.percent)}"><div style="width:${Math.min(100, item.percent)}%"></div></div></div><b>${percent(item.percent)}</b>`;
   // Aggregate rows stand in for many per-user budget states (or the rolled-up total pool), so there
   // is no single state whose audit trail could be opened; render them as static rows rather than
   // budget-history triggers.
@@ -1434,10 +1529,17 @@ function updateBucketPanel(groups) {
       const track = row.querySelector(".progress");
       const percentEl = row.querySelector("b");
       const smallEl = row.querySelector("small");
+      const stopEl = row.querySelector(".budget-stop-label");
+      const iconEl = row.querySelector(".bucket-icon");
       if (bar) bar.style.width = `${Math.min(100, item.percent)}%`;
       if (track) track.className = `progress ${statusClass(item.percent)}`;
       if (percentEl) percentEl.textContent = percent(item.percent);
       if (smallEl) smallEl.textContent = bucketRowDetail(item) + (item.routeNote ? ` · ${item.routeNote}` : "");
+      if (stopEl) {
+        stopEl.className = `budget-stop-label ${budgetStopEnabled(item) ? "enabled" : "disabled"}`;
+        stopEl.textContent = budgetStopLabel(item);
+      }
+      if (iconEl) iconEl.innerHTML = budgetIcon(item);
     });
   });
 }
@@ -1486,9 +1588,9 @@ function scopeConfigurationHtml(config) {
     }).join("");
     const capValue = `${settings.capCredits.toLocaleString()} credits`;
     const capDetail = settings.includedUsageCapEnabled
-      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. The cap selects which included credits members draw from; beyond it, the enterprise <strong>AI credit paid usage</strong> policy and applicable budgets decide.`
+      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. The cap selects which included credits members draw from; beyond it, the enterprise <strong>AI credit paid usage</strong> setting and applicable budgets decide.`
       : `Not enabled — this cost center draws from the enterprise shared pool instead. If enabled, the cap would be ${capValue} from ${settings.licenseCount} attributed licenses.`;
-    return `<div class="scope-config"><h5>Resources</h5><div class="config-fact-grid">${resources}</div><h5>Settings</h5><div class="config-fact"><span>AI credit included usage cap</span><b>${settings.includedUsageCapEnabled ? capValue : "Off"}</b></div><p class="muted">${capDetail}</p>${settings.excludeFromEnterpriseBudget ? `<p class="muted">Paid AI overage from this cost center is excluded from the enterprise budget.</p>` : ""}</div>`;
+    return `<div class="scope-config"><h5>Resources</h5><div class="config-fact-grid">${resources}</div><h5>Settings</h5><div class="config-fact config-fact-action"><div><span>AI credit included usage cap</span><b>${settings.includedUsageCapEnabled ? capValue : "Off"}</b></div><button type="button" class="text-button" data-toggle-pool="${escapeHtml(config.id)}">${settings.includedUsageCapEnabled ? "Turn off" : "Turn on"}</button></div><p class="muted">${capDetail}</p></div>`;
   }
   const facts = config.facts.map((fact) => `<div class="config-fact"><span>${escapeHtml(fact.label)}</span><b>${escapeHtml(fact.value)}</b></div>`).join("");
   return `<div class="scope-config"><h5>Settings</h5><div class="config-fact-grid">${facts}</div></div>`;
@@ -1518,7 +1620,7 @@ function renderOptimizedBuckets(replay) {
     spent: item.consumed,
     amount: item.total,
     parentId: poolRootKey,
-    routeNote: item.remaining === 0 ? "At cap · further usage needs the paid usage policy and budgets." : "Included credits available before paid overage.",
+    routeNote: item.remaining === 0 ? "At cap · further usage needs the enterprise paid-usage setting and budgets." : "Included credits available before paid overage.",
   }));
   const scopedUserBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
   const userBudgets = optimizedScope.type === "user" ? scopedUserBudgets : aggregateUserBudgets(scopedUserBudgets);
@@ -1535,12 +1637,21 @@ function renderOptimizedBuckets(replay) {
   const breakdownText = replay.pool.licenseBreakdown.map((entry) => `${Math.round(entry.credits).toLocaleString()} from ${entry.seatCount} ${planLabels[entry.plan] || entry.plan} license${entry.seatCount === 1 ? "" : "s"}`).join(" + ");
   const includedCreditsTitle = `Included credits · ${Math.round(replay.pool.grandTotal).toLocaleString()} total AI credits`;
   const includedCreditsNote = `${Math.round(replay.pool.grandTotal).toLocaleString()} total AI credits come from ${breakdownText || "0 licensed seats"}. ${poolNote}`;
+  const visibleAlertCount = replay.alerts.filter((item) => item.date.startsWith(replay.period)).length;
+  const expanded = optimizedBucketsExpanded();
+  $("#optimized-buckets-summary").textContent = `${1 + visibleCostCenterPools.length} pool${visibleCostCenterPools.length === 0 ? "" : "s"} · ${userBudgets.length + meteredBudgets.length} budget${userBudgets.length + meteredBudgets.length === 1 ? "" : "s"} · ${visibleAlertCount} alert${visibleAlertCount === 1 ? "" : "s"}`;
+  $("#optimized-buckets-toggle").setAttribute("aria-expanded", String(expanded));
+  $("#optimized-buckets-toggle").innerHTML = icon(expanded ? "panelExpand" : "panelCollapse");
+  $("#optimized-buckets-toggle").setAttribute("aria-label", expanded ? "Collapse Credit buckets to the right" : "Expand Credit buckets");
+  $("#optimized-buckets-toggle").title = expanded ? "Collapse Credit buckets" : "Expand Credit buckets";
+  $("#optimized-buckets-content").hidden = !expanded;
+  $("#optimized-layout").classList.toggle("buckets-collapsed", !expanded);
   const configHost = $("#optimized-scope-config");
   if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
     { title: includedCreditsTitle, items: hasCostCenterPools ? (poolExpanded ? [poolRoot, sharedPool, ...costCenterPools] : [poolRoot]) : [poolRoot], note: includedCreditsNote },
     { title: "User-level budgets", items: userBudgets, note: `User-level budgets always stop usage based on total AI-credit value${scopeNote}.` },
-    { title: "Budget controls", items: meteredBudgets, note: `Budgets and alerts track paid metered overage after included credits${scopeNote}.` },
+    { title: "Budget controls", items: meteredBudgets, note: `Budgets track paid metered overage after included credits${scopeNote}. "Stop usage when budget limit is reached: Enabled" blocks at that limit; Disabled allows usage to continue unless another applicable hard stop blocks it. Without an applicable hard stop, paid usage continues unmetered by an aggregate budget.` },
   ]);
 }
 
@@ -1550,15 +1661,102 @@ function renderOptimizedBuckets(replay) {
 // which is what lets every page reflect consumption growth at that point in the month.
 function renderGlobalTimeline(definition) {
   const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
-  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index));
-  $("#global-timeline").innerHTML = definition.steps.map((step, index) => {
-    // Inset the plotted range so the first/last markers (centered via translateX(-50%)) keep their
-    // date labels inside the track instead of overflowing the panel edges.
-    const position = 6 + stepDisplayPosition(definition, dates[index]) * 88;
+  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index, definition.steps.length));
+  const times = dates.map((date) => {
+    const [year, month, day] = date.split("-").map(Number);
+    return Date.UTC(year, month - 1, day);
+  });
+  const min = Math.min(...times);
+  const max = Math.max(...times);
+  const firstDate = new Date(min);
+  const lastDate = new Date(max);
+  const axisStart = Date.UTC(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), 1);
+  const axisEnd = Date.UTC(lastDate.getUTCFullYear(), lastDate.getUTCMonth() + 1, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const axisDays = Math.max(1, Math.round((axisEnd - axisStart) / dayMs) + 1);
+  const axisSpan = Math.max(1, axisEnd - axisStart);
+  const axisRatio = (time) => (time - axisStart) / axisSpan;
+  const axisPosition = (time) => axisRatio(time) * 100;
+  const ticks = [];
+  for (let time = axisStart; time <= axisEnd; time += 7 * dayMs) ticks.push(time);
+  if ((axisEnd - ticks.at(-1)) / dayMs >= 4) ticks.push(axisEnd);
+  const timelineStates = [-1, ...definition.steps.map((_, index) => index)].map((stepIndex) => replayScenario(materializeScenarioForDefaultSet(definition, stepIndex)));
+  const usagePoint = (replay, index) => {
+    const accepted = replay.results.filter((result) => result.status === "accepted");
+    const overage = accepted.reduce((sum, result) => sum + Number(result.meteredQuantity || 0), 0);
+    return {
+      x: index === 0 ? 0 : axisRatio(times[index - 1]) * 1000,
+      included: replay.pool.grandConsumed,
+      overage,
+      total: replay.pool.grandConsumed + overage,
+    };
+  };
+  const usagePoints = timelineStates.map(usagePoint);
+  const maxCredits = Math.max(1, ...usagePoints.map((point) => point.total));
+  const chartY = (value) => 58 - value / maxCredits * 48;
+  const activePointIndex = Math.max(0, activeIndex + 1);
+  const currentUsage = usagePoints[activePointIndex];
+  const aiCreditPrice = Number(materializeScenarioForDefaultSet(definition, -1).products.find((product) => product.id === "ai-credits")?.unitPrice || 0.01);
+  const segmentHtml = [];
+  let previousPoint = usagePoints[0];
+  let lastType = "included";
+  definition.steps.forEach((step, index) => {
+    const replay = timelineStates[index + 1];
+    const currentPoint = usagePoints[index + 1];
+    const previousResultIds = new Set(timelineStates[index].results.map((result) => result.eventId));
+    const newResults = replay.results.filter((result) => result.status === "accepted" && !previousResultIds.has(result.eventId));
+    const includedDelta = newResults.reduce((sum, result) => sum + Number(result.includedQuantity || 0), 0);
+    const meteredDelta = newResults.reduce((sum, result) => sum + Number(result.meteredQuantity || 0), 0);
+    const meteredImpacts = newResults.flatMap((result) => result.affectedBudgets || []).filter((impact) => impact.basis === "Billable metered overage");
+    const budgetDetails = meteredImpacts.map((impact) => {
+      const budget = replay.budgetStates.find((state) => state.id === impact.budgetId);
+      return budget ? `${budget.displayName}: ${money(impact.after, "USD")} of ${money(budget.amount, "USD")}` : impact.budgetId;
+    });
+    const status = index <= activeIndex ? "executed" : "pending";
+    const addSegment = (from, to, type, tooltip) => {
+      const coordinates = `x1="${from.x}" y1="${chartY(from.total)}" x2="${to.x}" y2="${chartY(to.total)}"`;
+      segmentHtml.push(`<g class="usage-segment ${status} ${type}" data-usage-tooltip="${escapeHtml(tooltip)}"><line ${coordinates}/><line class="usage-segment-hit" ${coordinates}><title>${escapeHtml(tooltip)}</title></line></g>`);
+    };
+    let cursor = previousPoint;
+    if (includedDelta > 0) {
+      const includedPoint = { ...currentPoint, total: previousPoint.total + includedDelta };
+      addSegment(cursor, includedPoint, "included", `${status === "pending" ? "Projected " : ""}Included usage · ${includedDelta.toLocaleString()} credits · ${money(includedDelta * aiCreditPrice, "USD")} equivalent · ${currentPoint.included.toLocaleString()} of ${replay.pool.grandTotal.toLocaleString()} included credits`);
+      cursor = includedPoint;
+      lastType = "included";
+    }
+    if (meteredDelta > 0) {
+      const type = meteredImpacts.length ? "metered" : "unmetered";
+      const budgetText = budgetDetails.length ? ` · ${[...new Set(budgetDetails)].join(" · ")}` : " · No aggregate budget applies";
+      addSegment(cursor, currentPoint, type, `${status === "pending" ? "Projected " : ""}${type === "metered" ? "Metered budget usage" : "Unmetered paid usage"} · ${meteredDelta.toLocaleString()} credits · ${money(meteredDelta * aiCreditPrice, "USD")}${budgetText}`);
+      cursor = currentPoint;
+      lastType = type;
+    }
+    if (includedDelta === 0 && meteredDelta === 0) {
+      addSegment(cursor, currentPoint, lastType, `${status === "pending" ? "Projected " : ""}${step.title} · No AI-credit usage change`);
+    }
+    previousPoint = currentPoint;
+  });
+  const unmeteredCredits = timelineStates[activePointIndex].results.filter((result) => result.status === "accepted" && Number(result.meteredQuantity || 0) > 0 && !(result.affectedBudgets || []).some((impact) => impact.basis === "Billable metered overage")).reduce((sum, result) => sum + Number(result.meteredQuantity), 0);
+  const meteredCredits = currentUsage.overage - unmeteredCredits;
+  const chartHtml = `<div class="scenario-usage-chart"><div class="scenario-usage-legend"><span class="included">Included <b>${currentUsage.included.toLocaleString()} credits</b></span><span class="metered">Metered <b>${meteredCredits.toLocaleString()} credits · ${money(meteredCredits * aiCreditPrice, "USD")}</b></span><span class="unmetered">Unmetered <b>${unmeteredCredits.toLocaleString()} credits · ${money(unmeteredCredits * aiCreditPrice, "USD")}</b></span></div><svg viewBox="0 0 1000 64" preserveAspectRatio="none" aria-label="Cumulative AI-credit usage by funding type">${segmentHtml.join("")}</svg><div id="scenario-usage-tooltip" class="scenario-usage-tooltip" role="tooltip" hidden></div></div>`;
+  const axisHtml = `${chartHtml}<div class="scenario-timeline-grid" style="--timeline-days:${axisDays}" aria-hidden="true">${ticks.map((time, index) => {
+    const date = new Date(time);
+    const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    const edgeClass = index === 0 ? " at-start" : index === ticks.length - 1 ? " at-end" : "";
+    return `<span class="scenario-timeline-tick${edgeClass}" style="left:${axisPosition(time)}%"><small>${escapeHtml(label)}</small></span>`;
+  }).join("")}</div>`;
+  const stepsHtml = definition.steps.map((step, index) => {
+    const position = stepDisplayPosition(definition, dates[index]) * 100;
+    const edgeClass = position === 0 ? " at-start" : position === 100 ? " at-end" : "";
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
-    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
+    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}${edgeClass}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");
-  $("#global-timeline-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}`;
+  $("#global-timeline").innerHTML = axisHtml + stepsHtml;
+  const activeStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
+  $("#global-timeline-label").textContent = activeStep ? `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}` : `${definition.steps.length} steps · not started`;
+  $("#global-timeline-step-summary").innerHTML = activeStep
+    ? `<strong>${escapeHtml(activeStep.title)}</strong><span>${escapeHtml(activeStep.description)}</span>`
+    : `<span>Select a step to see its explanation here.</span>`;
   $("#global-timeline-prev").disabled = !scenarioRun.started || activeIndex < 0;
   $("#global-timeline-next").disabled = activeIndex >= definition.steps.length - 1;
 }
@@ -1572,6 +1770,7 @@ function renderGlobalScenarioBar() {
   }
   $("#global-timeline").innerHTML = "";
   $("#global-timeline-label").textContent = "";
+  $("#global-timeline-step-summary").textContent = "";
   $("#global-timeline-prev").disabled = true;
   $("#global-timeline-next").disabled = true;
 }
@@ -1600,16 +1799,24 @@ function renderOptimizedExperience(replay, currency) {
   if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
   setOptions("#optimized-scope", scopeItems, optimizedScope.id);
 
-  const definition = selectedScenarioDefinition();
   renderOptimizedBuckets(replay);
 
-  $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
-
-  if (definition) {
-    renderOptimizedStepDetail(definition, replay);
-  } else {
-    $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
-  }
+  setPanelHtmlWithBarTransitions("#optimized-hierarchy", hierarchyTreeHtml("optimized", { scopeNodes: true, replay }));
+  const definition = selectedScenarioDefinition();
+  const bucketExpanded = optimizedBucketsExpanded();
+  const stepExpanded = optimizedStepDetailsExpanded();
+  $("#optimized-buckets-panel").classList.toggle("is-collapsed", !bucketExpanded);
+  $("#optimized-current-step-panel").classList.toggle("is-collapsed", !stepExpanded);
+  $("#optimized-step-toggle").setAttribute("aria-expanded", String(stepExpanded));
+  $("#optimized-step-toggle").innerHTML = icon(stepExpanded ? "panelExpand" : "panelCollapse");
+  $("#optimized-step-toggle").setAttribute("aria-label", stepExpanded ? "Collapse Current step details" : "Expand Current step details");
+  $("#optimized-step-toggle").title = stepExpanded ? "Collapse Current step details" : "Expand Current step details";
+  $("#optimized-step-detail").hidden = !stepExpanded;
+  $("#optimized-layout").classList.toggle("step-details-expanded", stepExpanded);
+  $("#optimized-layout").classList.toggle("side-panel-expanded", bucketExpanded || stepExpanded);
+  $("#optimized-layout").classList.toggle("side-panels-collapsed", !bucketExpanded && !stepExpanded);
+  if (definition) renderOptimizedStepDetail(definition, replay);
+  else $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
 }
 
 
@@ -1685,6 +1892,24 @@ $("#optimized-scope").addEventListener("change", (event) => {
 });
 $("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
+$("#global-timeline").addEventListener("mousemove", (event) => {
+  const segment = event.target.closest(".usage-segment[data-usage-tooltip]");
+  const tooltip = $("#scenario-usage-tooltip");
+  if (!tooltip) return;
+  if (!segment) {
+    tooltip.hidden = true;
+    return;
+  }
+  const chart = tooltip.parentElement.getBoundingClientRect();
+  tooltip.textContent = segment.dataset.usageTooltip;
+  tooltip.style.left = `${Math.min(chart.width - 12, Math.max(12, event.clientX - chart.left))}px`;
+  tooltip.style.top = `${Math.max(24, event.clientY - chart.top - 12)}px`;
+  tooltip.hidden = false;
+});
+$("#global-timeline").addEventListener("mouseleave", () => {
+  const tooltip = $("#scenario-usage-tooltip");
+  if (tooltip) tooltip.hidden = true;
+});
 $("#assistant-launcher")?.addEventListener("click", () => setAssistantDrawerOpen(!assistantDrawerOpen));
 $("#assistant-collapse")?.addEventListener("click", () => setAssistantDrawerOpen(false));
 $("#assistant-fullscreen")?.addEventListener("click", () => setAssistantFullscreen(!assistantFullscreen));
@@ -1740,6 +1965,20 @@ document.addEventListener("click", (event) => {
     document.querySelector(`[data-bucket-toggle="${CSS.escape(key)}"]`)?.focus();
     return;
   }
+  const optimizedBucketsToggle = event.target.closest("#optimized-buckets-toggle");
+  if (optimizedBucketsToggle) {
+    optimizedBucketPanelExpansion.set("credit-buckets", !optimizedBucketsExpanded());
+    renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+    $("#optimized-buckets-toggle")?.focus();
+    return;
+  }
+  const optimizedStepToggle = event.target.closest("#optimized-step-toggle");
+  if (optimizedStepToggle) {
+    optimizedStepPanelExpansion.set("current-step", !optimizedStepDetailsExpanded());
+    renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+    $("#optimized-step-toggle")?.focus();
+    return;
+  }
   const budgetSectionMore = event.target.closest("[data-budget-section-more]");
   if (budgetSectionMore) {
     const key = budgetSectionMore.dataset.budgetSectionMore;
@@ -1747,6 +1986,15 @@ document.addEventListener("click", (event) => {
     else budgetSectionExpansion.add(key);
     renderBudgets(replayScenario(scenario), scenario.enterprise.currency);
     document.querySelector(`[data-budget-section-more="${CSS.escape(key)}"]`)?.focus();
+    return;
+  }
+  const poolToggle = event.target.closest("[data-toggle-pool]");
+  if (poolToggle) {
+    const target = scenario.costCenters.find((item) => item.id === poolToggle.dataset.togglePool);
+    if (target) {
+      overrideCostCenterIncludedUsageCap(scenario, target.id, !target.aiCreditPoolEnabled);
+      saveAndRender(target.aiCreditPoolEnabled ? "AI credit included usage cap turned on" : "AI credit included usage cap turned off");
+    }
     return;
   }
   const scopeNode = event.target.closest("[data-scope-type][data-scope-id]");
@@ -1770,14 +2018,21 @@ document.addEventListener("click", (event) => {
       saveAndRender(target.excludeFromEnterpriseBudget ? "Cost center excluded from enterprise AI budget" : "Cost center included in enterprise AI budget");
     }
   }
-  const poolToggle = event.target.closest("[data-toggle-pool]"); if (poolToggle) {
-    const target = scenario.costCenters.find((item) => item.id === poolToggle.dataset.togglePool);
-    if (target) {
-      target.aiCreditPoolEnabled = !target.aiCreditPoolEnabled;
-      saveAndRender(target.aiCreditPoolEnabled ? "AI credit included usage cap turned on" : "AI credit included usage cap turned off");
-    }
-  }
   const deletion = event.target.closest("[data-delete]"); if (deletion) deleteEntity(deletion.dataset.delete, deletion.dataset.id);
+});
+
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-budget-edit-form]");
+  if (!form) return;
+  event.preventDefault();
+  const budget = scenario.budgets.find((item) => item.id === form.dataset.budgetEditForm);
+  if (!budget) return;
+  const amount = Number(new FormData(form).get("amount"));
+  if (!Number.isFinite(amount) || amount < 0) return showToast("Budget amount must be zero or greater", { tone: "danger" });
+  budget.amount = amount;
+  if (budget.budgetKind !== "user") budget.enforcement = new FormData(form).get("enforcement") === "hard" ? "hard" : "soft";
+  closeBudgetHistory();
+  saveAndRender("Budget updated");
 });
 
 document.addEventListener("input", (event) => {

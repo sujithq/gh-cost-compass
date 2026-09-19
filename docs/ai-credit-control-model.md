@@ -7,7 +7,7 @@ GitHub AI-credit controls. The visual companion is
 GitHub's product UI and documentation use similar language for controls that measure different
 things. Keep the following four concepts separate:
 
-1. **AI credit paid usage policy** decides whether a request may enter paid usage.
+1. The enterprise-wide **AI credit paid usage** setting decides whether a request may enter paid usage.
 2. **Included usage** is funded by Copilot licenses and produces no additional charge.
 3. **User-level budgets (ULBs)** limit one user's total included plus metered consumption.
 4. **Aggregate budgets** measure and optionally stop metered charges only.
@@ -23,7 +23,7 @@ For each AI-credit-consuming request:
      center's license-funded included allowance.
    - Otherwise, the user draws from the shared enterprise included pool.
 4. Serve the request from the applicable included allowance while capacity remains.
-5. If any part requires overage, evaluate **Copilot settings → AI Controls → Billing & usage →
+5. If any part requires overage, evaluate the enterprise **Copilot settings → AI Controls → Copilot → Billing & usage →
    AI credit paid usage**:
    - **Enabled:** paid usage is permitted for all products.
    - **Enabled for selected products:** paid usage is permitted only for selected products.
@@ -44,7 +44,7 @@ GitHub does not document partial event charging.
 
 | Control | Scope | Included usage counts? | Metered usage counts? | Enforcement |
 | --- | --- | ---: | ---: | --- |
-| AI credit paid usage | Enterprise or organization policy | N/A | Authorizes entry | Policy gate |
+| AI credit paid usage | Enterprise-wide setting | N/A | Authorizes entry | Enabled, enabled for selected products, or disabled |
 | Cost-center included usage cap | Cost-center aggregate | Yes | No | Selects included boundary |
 | Universal ULB | Each licensed user | Yes | Yes | Always hard stop |
 | Cost-center ULB | Each member of one cost center | Yes | Yes | Always hard stop |
@@ -65,7 +65,7 @@ The cost-center definition exposes one relevant setting:
 - **Enabled:** members share only the credits funded by licenses attributed to that cost center.
 
 The enabled cap partitions the enterprise pool; it does not create additional credits. Reaching
-the cap does not itself define a block-versus-overage choice. The paid-usage policy and downstream
+the cap does not itself define a block-versus-overage choice. The enterprise paid-usage setting and downstream
 hard budgets determine whether additional usage continues.
 
 The public cost-center REST schema has no separate `block` versus `allowOverage` transition field.
@@ -165,7 +165,7 @@ Do not create a fragile exhaustive Cartesian suite.
 At minimum, executable scenarios must prove:
 
 1. Included cost-center usage moves the included meter but not aggregate metered budgets.
-2. Exhausted included usage blocks when the paid-usage policy disallows the product.
+2. Exhausted included usage blocks when the enterprise paid-usage setting disallows the product.
 3. Permitted overage increments the selected ULB, cost-center budget, and enterprise budget
    together.
 4. The cost-center hard budget blocks first when it has the least headroom.

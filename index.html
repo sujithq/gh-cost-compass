@@ -40,13 +40,9 @@
       <section id="global-timeline-bar" class="global-timeline-bar">
         <div class="global-timeline-head">
           <div class="global-timeline-titles"><p class="eyebrow">SCENARIO TIMELINE</p><h2 id="global-scenario-title"></h2><p class="muted" id="global-scenario-summary"></p></div>
-          <div class="button-row compact-row">
-            <label>Default set<select id="default-scenario-set"></select></label>
-            <label>Scenario<select id="global-scenario-definition"></select></label>
-          </div>
         </div>
         <div class="timeline-row"><button type="button" id="global-timeline-prev" title="Previous step">‹</button><div id="global-timeline" class="scenario-timeline" role="list"></div><button type="button" id="global-timeline-next" title="Next step">›</button></div>
-        <div class="global-timeline-foot"><div id="global-scenario-tags" class="scenario-tags"></div><span id="global-timeline-label"></span></div>
+        <div class="global-timeline-foot"><div class="global-timeline-selectors"><label><span>Default set</span><select id="default-scenario-set"></select></label><label><span>Scenario</span><select id="global-scenario-definition"></select></label><small>Scenario steps define the dates; the default set supplies the baseline data.</small></div><div class="global-timeline-current"><span id="global-timeline-label"></span><p id="global-timeline-step-summary" aria-live="polite"></p></div></div>
       </section>
 
       <section id="dashboard" class="view active">
@@ -62,25 +58,26 @@
       <section id="optimized" class="view">
         <div class="section-heading"><div><p class="eyebrow">OPTIMIZED EXPERIENCE</p><h2>Hierarchy, buckets & consumption</h2></div><span class="pill">Non-breaking preview</span></div>
 
-        <div class="optimized-layout">
+        <div id="optimized-layout" class="optimized-layout">
           <article class="panel optimized-map-panel">
             <div class="panel-title"><h3>Enterprise hierarchy</h3><span>Included credits + controls</span></div>
             <div id="optimized-hierarchy" class="optimized-hierarchy"></div>
           </article>
           <aside class="optimized-side">
-            <article class="panel">
-              <div class="panel-title"><h3>Credit buckets</h3><span>Current period</span></div>
+            <article id="optimized-buckets-panel" class="panel optimized-side-panel optimized-buckets-panel">
+              <div class="panel-title optimized-buckets-panel-title"><div><h3>Credit buckets</h3><span id="optimized-buckets-summary">Current period</span></div><button id="optimized-buckets-toggle" type="button" class="icon-button" aria-expanded="true" aria-controls="optimized-buckets-content" aria-label="Collapse Credit buckets to the right" title="Collapse Credit buckets"></button></div>
+              <div id="optimized-buckets-content">
               <div class="scrubber-controls">
                 <label>Scope type<select id="optimized-scope-type"><option value="enterprise">Enterprise</option><option value="organization">Organization</option><option value="costCenter">Cost center</option><option value="user">User</option></select></label>
                 <label>Scope<select id="optimized-scope"></select></label>
               </div>
               <div id="optimized-scope-config" class="optimized-scope-config"></div>
               <div id="optimized-buckets" class="optimized-buckets"></div>
+              </div>
             </article>
-            <article class="panel">
-              <div class="panel-title"><h3>Current step</h3><span>Bucket attribution</span></div>
-              <p class="muted timeline-hint">Use the scenario timeline above the page to step through the month and watch thresholds and alerts being reached.</p>
-              <div id="optimized-step-detail" class="optimized-event-detail"></div>
+            <article id="optimized-current-step-panel" class="panel optimized-side-panel optimized-step-panel is-collapsed">
+              <div class="panel-title optimized-step-panel-title"><div><h3>Current step</h3><span>Full attribution</span></div><button id="optimized-step-toggle" type="button" class="icon-button" aria-expanded="false" aria-controls="optimized-step-detail" aria-label="Expand Current step details" title="Expand Current step details"></button></div>
+              <div id="optimized-step-detail" class="optimized-event-detail" hidden></div>
             </article>
           </aside>
         </div>
