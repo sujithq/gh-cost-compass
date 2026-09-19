@@ -904,6 +904,16 @@ function hierarchyBadgeHtml(label, className = "", attributes = "") {
 function hierarchyMeterHtml(label, value, usedText, limitText, tone = "included") {
   return `<div class="hierarchy-meter hierarchy-meter-${escapeHtml(tone)}"><span><b>${escapeHtml(label)}</b><em>${escapeHtml(usedText)} / ${escapeHtml(limitText)} · ${percent(value)}</em></span><div class="progress ${statusClass(value)}" role="progressbar" aria-label="${escapeHtml(label)}: ${escapeHtml(usedText)} of ${escapeHtml(limitText)}, ${percent(value)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"><div style="width:${Math.min(100, value)}%"></div></div></div>`;
 }
+function hierarchyIncludedCreditsMeterHtml(replay) {
+  const enabledCostCenterPools = replay.costCenterPoolStates.filter((item) => item.enabled);
+  const costCenterTotal = enabledCostCenterPools.reduce((sum, item) => sum + item.total, 0);
+  const costCenterConsumed = enabledCostCenterPools.reduce((sum, item) => sum + item.consumed, 0);
+  const total = replay.pool.grandTotal;
+  const segment = (label, consumed, amount, className) => amount > 0
+    ? `<span class="hierarchy-composition-segment ${className}" style="width:${total ? amount / total * 100 : 0}%" title="${escapeHtml(label)}: ${consumed.toLocaleString()} of ${amount.toLocaleString()} credits"><i style="width:${Math.min(100, amount ? consumed / amount * 100 : 0)}%"></i></span>`
+    : "";
+  return `<div class="hierarchy-meter hierarchy-meter-composed"><span><b>Included AI credits</b><em>${replay.pool.grandConsumed.toLocaleString()} / ${total.toLocaleString()} credits · ${percent(replay.pool.grandPercent)}</em></span><div class="progress hierarchy-composition" role="progressbar" aria-label="Included AI credits: ${replay.pool.grandConsumed.toLocaleString()} of ${total.toLocaleString()} credits, ${percent(replay.pool.grandPercent)} used; ${costCenterConsumed.toLocaleString()} from cost-center pools and ${replay.pool.consumed.toLocaleString()} from the shared pool" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, replay.pool.grandPercent)}">${segment("Cost-center pools", costCenterConsumed, costCenterTotal, "cost-centers")}${segment("Shared pool", replay.pool.consumed, replay.pool.total, "shared")}</div><div class="hierarchy-meter-key"><span class="cost-centers">Cost-center pools ${costCenterConsumed.toLocaleString()} / ${costCenterTotal.toLocaleString()}</span><span class="shared">Shared pool ${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}</span></div></div>`;
+}
 function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "", badges = "", meters = "") {
   const meta = HIERARCHY_KINDS[kind];
   return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div class="hierarchy-node-content${meters ? " has-meters" : ""}"><div class="hierarchy-node-main"><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small>${badges}</div>${meters ? `<div class="hierarchy-node-meters">${meters}</div>` : ""}</div></div>`;
@@ -955,6 +965,13 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
     const budget = aiOverageBudget(type, id);
     return budget ? hierarchyMeterHtml("AI overage", budget.percent, money(budget.spent, "USD"), money(budget.amount, "USD"), "overage") : "";
   };
+  const costCenterOverageRoute = (costCenter) => {
+    const scopes = [];
+    if (aiOverageBudget("costCenter", costCenter.id)) scopes.push("Cost center");
+    if (!costCenter.excludeFromEnterpriseBudget && aiOverageBudget("enterprise", scenario.enterprise.id)) scopes.push("Enterprise");
+    const route = scopes.length ? scopes.join(" + ") : "No aggregate budget";
+    return `<span class="hierarchy-overage-route" title="Paid overage is checked against every listed budget. Organization budgets do not apply while cost-center attribution exists.">${icon("hardStop")}Overage checks: ${escapeHtml(route)}</span>`;
+  };
   const userSupplementary = (user) => {
     if (!scopeNodes || !replay) return { badges: "", meters: "" };
     const budget = replay.budgetStates.find((item) => item.budgetKind === "user" && item.userId === user.id);
@@ -995,7 +1012,7 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
       const config = describeCostCenterConfiguration(scenario, cc);
       const pool = replay?.costCenterPoolStates.find((item) => item.costCenterId === cc.id);
       const capLabel = `Included cap: ${config.settings.includedUsageCapEnabled ? "On" : "Off"}`;
-      const badges = scopeNodes ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(capLabel, config.settings.includedUsageCapEnabled ? "included-cap-on" : "included-cap-off", `data-toggle-pool="${escapeHtml(cc.id)}" aria-label="${config.settings.includedUsageCapEnabled ? "Turn off" : "Turn on"} AI credit included usage cap for ${escapeHtml(cc.name)}" title="Toggle AI credit included usage cap"`)}${nodeBudgetShield("costCenter", cc.id)}</div>` : "";
+      const badges = scopeNodes ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(capLabel, config.settings.includedUsageCapEnabled ? "included-cap-on" : "included-cap-off", `data-toggle-pool="${escapeHtml(cc.id)}" aria-label="${config.settings.includedUsageCapEnabled ? "Turn off" : "Turn on"} AI credit included usage cap for ${escapeHtml(cc.name)}" title="Toggle AI credit included usage cap"`)}${costCenterOverageRoute(cc)}</div>` : "";
       const includedMeter = scopeNodes && config.settings.includedUsageCapEnabled && pool ? hierarchyMeterHtml("Included allowance", pool.percent, `${pool.consumed.toLocaleString()} credits`, `${pool.total.toLocaleString()} credits`) : "";
       const node = hierarchyNodeHtml("costCenter", cc.name, ccUserText, scopeAttributes("costCenter", cc.id, cc.name), scopeClass, badges, includedMeter + (scopeNodes ? budgetMeter("costCenter", cc.id) : ""));
       const open = branchOpen(ccKey, !autoCollapse);
@@ -1032,9 +1049,8 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
 
   const enterpriseKey = `${hostId}:enterprise`;
   const enterpriseOpen = branchOpen(enterpriseKey, true);
-  const costCenterAllowanceMeters = scopeNodes && replay ? replay.costCenterPoolStates.filter((item) => item.enabled).map((item) => hierarchyMeterHtml(`${scenario.costCenters.find((cc) => cc.id === item.costCenterId)?.name || "Cost center"} allowance`, item.percent, `${item.consumed.toLocaleString()} credits`, `${item.total.toLocaleString()} credits`, "allowance")).join("") : "";
   const enterpriseBadges = scopeNodes && replay ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(`AI credit paid usage: ${paidUsagePolicyLabel(scenario.enterprise)}`, "paid-usage-setting")}${nodeBudgetShield("enterprise", scenario.enterprise.id)}</div>` : "";
-  const enterpriseMeters = scopeNodes && replay ? `${hierarchyMeterHtml("Shared included pool", replay.pool.percent, `${replay.pool.consumed.toLocaleString()} credits`, `${replay.pool.total.toLocaleString()} credits`)}${costCenterAllowanceMeters}${budgetMeter("enterprise", scenario.enterprise.id)}` : "";
+  const enterpriseMeters = scopeNodes && replay ? `${hierarchyIncludedCreditsMeterHtml(replay)}${budgetMeter("enterprise", scenario.enterprise.id)}` : "";
   const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass, enterpriseBadges, enterpriseMeters);
   const body = branches || `<div class="empty">${filter ? "No organizations, cost centers, repositories, or users match this filter." : "No organizations configured yet."}</div>`;
 
