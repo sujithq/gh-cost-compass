@@ -978,9 +978,14 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /class="scenario-timeline-tick\$\{edgeClass\}"/);
   assert.match(app, /class="scenario-usage-chart"/);
   assert.match(app, /result\.meteredQuantity/);
-  assert.match(app, /currentUsage\.overage \* aiCreditPrice/);
+  assert.match(app, /basis === "Billable metered overage"/);
+  assert.match(app, /class="usage-segment \$\{status\} \$\{type\}"/);
+  assert.match(app, /class="usage-segment-hit"/);
+  assert.match(app, /id="scenario-usage-tooltip"/);
+  assert.match(app, /closest\("\.usage-segment\[data-usage-tooltip\]"\)/);
+  assert.match(app, /No aggregate budget applies/);
   assert.match(styles, /background-size:calc\(100% \/ var\(--timeline-days\)\)/);
-  assert.match(styles, /\.usage-line\.pending\{stroke:#b8c0cc/);
+  assert.match(styles, /\.usage-segment\.pending line:first-child\{stroke:#b8c0cc/);
   assert.match(app, /function updateBucketPanel\(/);
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);

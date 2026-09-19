@@ -1633,21 +1633,64 @@ function renderGlobalTimeline(definition) {
   for (let time = axisStart; time <= axisEnd; time += 7 * dayMs) ticks.push(time);
   if ((axisEnd - ticks.at(-1)) / dayMs >= 4) ticks.push(axisEnd);
   const timelineStates = [-1, ...definition.steps.map((_, index) => index)].map((stepIndex) => replayScenario(materializeScenarioForDefaultSet(definition, stepIndex)));
-  const usagePoints = timelineStates.map((replay, index) => ({
-    x: index === 0 ? 0 : axisRatio(times[index - 1]) * 1000,
-    included: replay.pool.grandConsumed,
-    overage: replay.results.reduce((sum, result) => sum + (result.status === "accepted" ? Number(result.meteredQuantity || 0) : 0), 0),
-  }));
-  const maxCredits = Math.max(1, ...usagePoints.map((point) => point.included + point.overage));
+  const usagePoint = (replay, index) => {
+    const accepted = replay.results.filter((result) => result.status === "accepted");
+    const overage = accepted.reduce((sum, result) => sum + Number(result.meteredQuantity || 0), 0);
+    return {
+      x: index === 0 ? 0 : axisRatio(times[index - 1]) * 1000,
+      included: replay.pool.grandConsumed,
+      overage,
+      total: replay.pool.grandConsumed + overage,
+    };
+  };
+  const usagePoints = timelineStates.map(usagePoint);
+  const maxCredits = Math.max(1, ...usagePoints.map((point) => point.total));
   const chartY = (value) => 58 - value / maxCredits * 48;
-  const points = (items, valueFor) => items.map((point) => `${point.x},${chartY(valueFor(point))}`).join(" ");
   const activePointIndex = Math.max(0, activeIndex + 1);
-  const executedPoints = usagePoints.slice(0, activePointIndex + 1);
-  const pendingPoints = usagePoints.slice(activePointIndex);
   const currentUsage = usagePoints[activePointIndex];
   const aiCreditPrice = Number(materializeScenarioForDefaultSet(definition, -1).products.find((product) => product.id === "ai-credits")?.unitPrice || 0.01);
-  const executedOverageLine = currentUsage.overage > 0 ? `<polyline class="usage-line executed total" points="${points(executedPoints, (point) => point.included + point.overage)}"/>` : "";
-  const chartHtml = `<div class="scenario-usage-chart"><div class="scenario-usage-legend"><span class="included">Included <b>${currentUsage.included.toLocaleString()} credits</b></span><span class="overage">Paid overage <b>${currentUsage.overage.toLocaleString()} credit-equivalent · ${money(currentUsage.overage * aiCreditPrice, "USD")}</b></span></div><svg viewBox="0 0 1000 64" preserveAspectRatio="none" aria-label="Cumulative included and paid-overage AI credit usage"><polyline class="usage-line pending total" points="${points(pendingPoints, (point) => point.included + point.overage)}"/><polyline class="usage-line pending included" points="${points(pendingPoints, (point) => point.included)}"/>${executedOverageLine}<polyline class="usage-line executed included" points="${points(executedPoints, (point) => point.included)}"/></svg></div>`;
+  const segmentHtml = [];
+  let previousPoint = usagePoints[0];
+  let lastType = "included";
+  definition.steps.forEach((step, index) => {
+    const replay = timelineStates[index + 1];
+    const currentPoint = usagePoints[index + 1];
+    const previousResultIds = new Set(timelineStates[index].results.map((result) => result.eventId));
+    const newResults = replay.results.filter((result) => result.status === "accepted" && !previousResultIds.has(result.eventId));
+    const includedDelta = newResults.reduce((sum, result) => sum + Number(result.includedQuantity || 0), 0);
+    const meteredDelta = newResults.reduce((sum, result) => sum + Number(result.meteredQuantity || 0), 0);
+    const meteredImpacts = newResults.flatMap((result) => result.affectedBudgets || []).filter((impact) => impact.basis === "Billable metered overage");
+    const budgetDetails = meteredImpacts.map((impact) => {
+      const budget = replay.budgetStates.find((state) => state.id === impact.budgetId);
+      return budget ? `${budget.displayName}: ${money(impact.after, "USD")} of ${money(budget.amount, "USD")}` : impact.budgetId;
+    });
+    const status = index <= activeIndex ? "executed" : "pending";
+    const addSegment = (from, to, type, tooltip) => {
+      const coordinates = `x1="${from.x}" y1="${chartY(from.total)}" x2="${to.x}" y2="${chartY(to.total)}"`;
+      segmentHtml.push(`<g class="usage-segment ${status} ${type}" data-usage-tooltip="${escapeHtml(tooltip)}"><line ${coordinates}/><line class="usage-segment-hit" ${coordinates}><title>${escapeHtml(tooltip)}</title></line></g>`);
+    };
+    let cursor = previousPoint;
+    if (includedDelta > 0) {
+      const includedPoint = { ...currentPoint, total: previousPoint.total + includedDelta };
+      addSegment(cursor, includedPoint, "included", `${status === "pending" ? "Projected " : ""}Included usage · ${includedDelta.toLocaleString()} credits · ${money(includedDelta * aiCreditPrice, "USD")} equivalent · ${currentPoint.included.toLocaleString()} of ${replay.pool.grandTotal.toLocaleString()} included credits`);
+      cursor = includedPoint;
+      lastType = "included";
+    }
+    if (meteredDelta > 0) {
+      const type = meteredImpacts.length ? "metered" : "unmetered";
+      const budgetText = budgetDetails.length ? ` · ${[...new Set(budgetDetails)].join(" · ")}` : " · No aggregate budget applies";
+      addSegment(cursor, currentPoint, type, `${status === "pending" ? "Projected " : ""}${type === "metered" ? "Metered budget usage" : "Unmetered paid usage"} · ${meteredDelta.toLocaleString()} credits · ${money(meteredDelta * aiCreditPrice, "USD")}${budgetText}`);
+      cursor = currentPoint;
+      lastType = type;
+    }
+    if (includedDelta === 0 && meteredDelta === 0) {
+      addSegment(cursor, currentPoint, lastType, `${status === "pending" ? "Projected " : ""}${step.title} · No AI-credit usage change`);
+    }
+    previousPoint = currentPoint;
+  });
+  const unmeteredCredits = timelineStates[activePointIndex].results.filter((result) => result.status === "accepted" && Number(result.meteredQuantity || 0) > 0 && !(result.affectedBudgets || []).some((impact) => impact.basis === "Billable metered overage")).reduce((sum, result) => sum + Number(result.meteredQuantity), 0);
+  const meteredCredits = currentUsage.overage - unmeteredCredits;
+  const chartHtml = `<div class="scenario-usage-chart"><div class="scenario-usage-legend"><span class="included">Included <b>${currentUsage.included.toLocaleString()} credits</b></span><span class="metered">Metered <b>${meteredCredits.toLocaleString()} credits · ${money(meteredCredits * aiCreditPrice, "USD")}</b></span><span class="unmetered">Unmetered <b>${unmeteredCredits.toLocaleString()} credits · ${money(unmeteredCredits * aiCreditPrice, "USD")}</b></span></div><svg viewBox="0 0 1000 64" preserveAspectRatio="none" aria-label="Cumulative AI-credit usage by funding type">${segmentHtml.join("")}</svg><div id="scenario-usage-tooltip" class="scenario-usage-tooltip" role="tooltip" hidden></div></div>`;
   const axisHtml = `${chartHtml}<div class="scenario-timeline-grid" style="--timeline-days:${axisDays}" aria-hidden="true">${ticks.map((time, index) => {
     const date = new Date(time);
     const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -1801,6 +1844,24 @@ $("#optimized-scope").addEventListener("change", (event) => {
 });
 $("#global-timeline-prev").addEventListener("click", () => runScenarioToStep(scenarioRun.stepIndex - 1, "Returned to the previous scenario step"));
 $("#global-timeline-next").addEventListener("click", () => runScenarioToStep(scenarioRun.started ? scenarioRun.stepIndex + 1 : 0, "Scenario advanced one step"));
+$("#global-timeline").addEventListener("mousemove", (event) => {
+  const segment = event.target.closest(".usage-segment[data-usage-tooltip]");
+  const tooltip = $("#scenario-usage-tooltip");
+  if (!tooltip) return;
+  if (!segment) {
+    tooltip.hidden = true;
+    return;
+  }
+  const chart = tooltip.parentElement.getBoundingClientRect();
+  tooltip.textContent = segment.dataset.usageTooltip;
+  tooltip.style.left = `${Math.min(chart.width - 12, Math.max(12, event.clientX - chart.left))}px`;
+  tooltip.style.top = `${Math.max(24, event.clientY - chart.top - 12)}px`;
+  tooltip.hidden = false;
+});
+$("#global-timeline").addEventListener("mouseleave", () => {
+  const tooltip = $("#scenario-usage-tooltip");
+  if (tooltip) tooltip.hidden = true;
+});
 $("#assistant-launcher")?.addEventListener("click", () => setAssistantDrawerOpen(!assistantDrawerOpen));
 $("#assistant-collapse")?.addEventListener("click", () => setAssistantDrawerOpen(false));
 $("#assistant-fullscreen")?.addEventListener("click", () => setAssistantFullscreen(!assistantFullscreen));
