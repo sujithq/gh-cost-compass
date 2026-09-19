@@ -16,7 +16,7 @@
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
   ],
   "environmentId": "synthetic-compact",
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "setup": [
     {
       "target": "budget",
@@ -31,10 +31,10 @@
       "id": "progress-40",
       "type": "usage",
       "title": "Reach 40%",
-      "description": "Alice consumes 2,000 AI credits from the shared pool.",
+      "description": "Alice consumes 2,000 AI credits from the shared pool a week into the billing period.",
       "expected": "The individual ULB reaches $20 of $50 (40%) without an alert.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-08",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -48,7 +48,7 @@
       "description": "Another 2,000 credits raise total user consumption to $40.",
       "expected": "The ULB reaches 80% and its 75% alert fires.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-14",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -62,7 +62,7 @@
       "description": "A 500-credit event raises the budget to 90%.",
       "expected": "The 90% alert fires and only $5 of headroom remains.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-19",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -83,7 +83,7 @@
       "description": "The final 500 credits consume the remaining $5 of user budget.",
       "expected": "The event is accepted at the exact limit and the 100% alert fires.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-26",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",

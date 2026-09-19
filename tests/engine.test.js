@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, daysInMonth, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
@@ -843,13 +843,13 @@ test("control evaluation explainers use shared outcome-aware cards across app su
 
 test("cost-center pool history includes blocked attempts against the selected pool", () => {
   const definition = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-blocks");
-  const scenario = materializeScenario(definition, 1, { defaultSetId: "enterprise" });
+  const scenario = materializeScenario(definition, definition.steps.length - 1, { defaultSetId: "enterprise" });
   const replay = replayScenario(scenario);
   const results = includedPoolHistoryResults(replay.results, { poolType: "costCenter", stateId: "cc-ai:2026-09" });
 
-  assert.deepEqual(results.map((result) => result.status), ["accepted", "blocked"]);
-  assert.equal(results[1].includedQuantity, 100);
-  assert.ok(results[1].controlEvaluations.some((evaluation) => evaluation.outcome === "blocked"));
+  assert.deepEqual(results.map((result) => result.status), ["accepted", "accepted", "accepted", "accepted", "blocked"]);
+  assert.equal(results.at(-1).includedQuantity, 100);
+  assert.ok(results.at(-1).controlEvaluations.some((evaluation) => evaluation.outcome === "blocked"));
 });
 
 test("the Included credits panel renders the pool as a collapsible tree with cost-center reservations nested underneath", async () => {
@@ -904,6 +904,7 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /data-scenario-timeline-step="\$\{index\}"/);
   assert.match(app, /closest\("\[data-scenario-timeline-step\]"\)/);
   assert.match(app, /function stepDisplayDate\(/);
+  assert.match(app, /function stepDisplayPosition\(/);
   assert.match(app, /function updateBucketPanel\(/);
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);
@@ -1231,12 +1232,17 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.ok(atHundred.alerts.some((alert) => alert.budgetId === "ulb-alice" && alert.threshold === 100));
 
   const hardStop = BUILT_IN_SCENARIOS.find((item) => item.id === "hard-stop-boundary");
-  const blocked = replayScenario(compactAt(hardStop, 1));
+  const hardStopRamp = replayScenario(compactAt(hardStop, 2));
+  assert.equal(hardStopRamp.budgetStates.find((item) => item.id === "ulb-alice").percent, 75);
+  assert.ok(hardStopRamp.alerts.some((alert) => alert.budgetId === "ulb-alice" && alert.threshold === 75));
+  const hardStopAtLimit = replayScenario(compactAt(hardStop, 3));
+  assert.equal(hardStopAtLimit.budgetStates.find((item) => item.id === "ulb-alice").percent, 100);
+  const blocked = replayScenario(compactAt(hardStop, 4));
   assert.equal(blocked.results.at(-1).status, "blocked");
   assert.match(blocked.results.at(-1).reason, /Stop usage when budget limit is reached/);
 
   const poolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-blocks");
-  const blockedAtPool = replayScenario(compactAt(poolBlocks, 1));
+  const blockedAtPool = replayScenario(compactAt(poolBlocks, 4));
   assert.equal(blockedAtPool.results.at(-1).status, "blocked");
   assert.match(blockedAtPool.results.at(-1).reason, /AI credit paid usage is disabled/);
 
@@ -1249,7 +1255,7 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.deepEqual(sharedPoolOverage.results.at(-1).affectedBudgets.map((item) => item.budgetId), ["ulb-alice", "metered-enterprise", "metered-ai-team"]);
 
   const poolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "cost-center-pool-to-overage");
-  const overage = replayScenario(compactAt(poolOverage, 1));
+  const overage = replayScenario(compactAt(poolOverage, 4));
   assert.equal(overage.results.at(-1).status, "accepted");
   assert.equal(overage.results.at(-1).meteredQuantity, 2400);
   assert.ok(overage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
@@ -1272,20 +1278,20 @@ test("guided scenarios are declarative, reversible, and produce their documented
   assert.equal(enterpriseOverage.results.at(-1).poolTotal, 666000);
 
   const enterprisePoolBlocks = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-blocks");
-  const enterpriseBlockedAtPool = replayScenario(enterpriseAt(enterprisePoolBlocks, 1));
+  const enterpriseBlockedAtPool = replayScenario(enterpriseAt(enterprisePoolBlocks, 4));
   assert.equal(enterpriseBlockedAtPool.results.at(-1).status, "blocked");
   assert.match(enterpriseBlockedAtPool.results.at(-1).reason, /AI credit paid usage is disabled/);
   assert.equal(enterpriseBlockedAtPool.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").total, 38900);
 
   const enterprisePoolOverage = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-cost-center-pool-to-overage");
-  const enterpriseCostCenterOverage = replayScenario(enterpriseAt(enterprisePoolOverage, 1));
+  const enterpriseCostCenterOverage = replayScenario(enterpriseAt(enterprisePoolOverage, 4));
   assert.equal(enterpriseCostCenterOverage.results.at(-1).status, "accepted");
   assert.equal(enterpriseCostCenterOverage.results.at(-1).meteredQuantity, 2400);
   assert.equal(enterpriseCostCenterOverage.results.at(-1).cost, 24);
   assert.ok(enterpriseCostCenterOverage.alerts.some((alert) => alert.budgetId === "metered-ai-team" && alert.threshold === 75));
 
   const enterpriseHardStop = BUILT_IN_SCENARIOS.find((item) => item.id === "enterprise-hard-stop-boundary");
-  const enterpriseBlocked = replayScenario(enterpriseAt(enterpriseHardStop, 1));
+  const enterpriseBlocked = replayScenario(enterpriseAt(enterpriseHardStop, 4));
   assert.equal(enterpriseBlocked.results.at(-1).status, "blocked");
   assert.match(enterpriseBlocked.results.at(-1).reason, /Stop usage when budget limit is reached/);
 
@@ -1302,8 +1308,27 @@ test("guided scenarios are declarative, reversible, and produce their documented
   }
 });
 
-test("guided enterprise mutations honor the legacy paid-usage boolean", () => {
-  const definition = {
+test("guided scenario usage ramps naturally across the billing period", () => {
+  for (const definition of BUILT_IN_SCENARIOS) {
+    const dates = definition.steps.filter((step) => step.type === "usage").map((step) => step.event.date);
+    if (dates.length === 0) continue;
+
+    // The period must open at zero spend, so no scenario may start on the 1st of the month.
+    assert.equal(definition.startDate, `${dates[0].slice(0, 7)}-01`, `${definition.id} should start its billing period before any usage`);
+    assert.ok(Number(dates[0].slice(8, 10)) >= 7, `${definition.id} should not consume credits in the first days of the month`);
+
+    // The story should also close before the period ends rather than on the final day.
+    const lastDay = Number(dates.at(-1).slice(8, 10));
+    const monthLength = daysInMonth(`${dates.at(-1).slice(0, 7)}-01`);
+    assert.ok(monthLength - lastDay >= 3, `${definition.id} should finish at least three days before the month ends`);
+
+    assert.ok(dates.length >= 3, `${definition.id} should ramp through at least three usage events`);
+    assert.deepEqual(dates, [...dates].sort(), `${definition.id} usage events must stay chronological`);
+    assert.equal(new Set(dates).size, dates.length, `${definition.id} should spread usage across distinct days`);
+  }
+});
+
+test("guided enterprise mutations honor the legacy paid-usage boolean", () => {  const definition = {
     version: 1,
     id: "legacy-paid-usage",
     title: "Legacy paid usage",

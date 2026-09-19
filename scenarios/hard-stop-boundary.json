@@ -16,7 +16,7 @@
   "sourceUrls": [
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
   ],
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "setup": [
     {
       "target": "budget",
@@ -28,17 +28,59 @@
   ],
   "steps": [
     {
-      "id": "reach-limit",
+      "id": "first-usage",
       "type": "usage",
-      "title": "Reach the exact limit",
-      "description": "Alice consumes 1,000 AI credits, worth $10 for ULB accounting.",
-      "expected": "The event is accepted and the ULB reaches exactly 100%.",
+      "title": "Start using credits",
+      "description": "A week into the billing period Alice consumes her first 300 AI credits, worth $3.",
+      "expected": "The event is accepted and the ULB reaches 30% with $7 of headroom.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-07",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
-        "quantity": 1000
+        "quantity": 300
+      }
+    },
+    {
+      "id": "midmonth-usage",
+      "type": "usage",
+      "title": "Keep working through mid-month",
+      "description": "Alice consumes another 250 credits, worth $2.50.",
+      "expected": "The event is accepted and the ULB reaches 55% without an alert.",
+      "event": {
+        "date": "2026-09-13",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 250
+      }
+    },
+    {
+      "id": "cross-warning",
+      "type": "usage",
+      "title": "Cross the warning threshold",
+      "description": "A further 200 credits, worth $2, push Alice past the warning threshold.",
+      "expected": "The event is accepted, the ULB reaches exactly 75%, and its 75% alert fires.",
+      "event": {
+        "date": "2026-09-19",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 200
+      }
+    },
+    {
+      "id": "reach-limit",
+      "type": "usage",
+      "title": "Reach the exact limit",
+      "description": "Alice consumes the last 250 AI credits, worth $2.50, bringing her total to $10.",
+      "expected": "The event is accepted and the ULB reaches exactly 100%.",
+      "event": {
+        "date": "2026-09-24",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 250
       }
     },
     {
@@ -48,7 +90,7 @@
       "description": "Alice attempts to consume one additional AI credit.",
       "expected": "The complete event is rejected by the user-level hard stop and no counter changes.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-27",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",

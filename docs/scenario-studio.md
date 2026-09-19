@@ -66,7 +66,7 @@ Scenario definitions use version 1:
   "sourceUrls": [
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
   ],
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "setup": [
     {
       "target": "budget",
@@ -82,7 +82,7 @@ Scenario definitions use version 1:
       "description": "Alice consumes 500 AI credits.",
       "expected": "The user budget increases by $5.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-08",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -92,6 +92,12 @@ Scenario definitions use version 1:
   ]
 }
 ```
+
+Step dates drive the scenario timeline directly, so author them to read like a real billing
+period: set `startDate` to the first of the month so the period opens at zero spend, place the
+first usage event at least six days later, keep the final usage event three or four days before
+the month ends, and ramp consumption through at least three usage events rather than one large
+opening event. `tests/engine.test.js` enforces these conventions for every catalog scenario.
 
 `compatibleDefaultSetIds` declares which selectable default sets can support the definition. It is
 required for definitions with `defaultSetId`, `environmentId`, or `baseline`, and each ID must

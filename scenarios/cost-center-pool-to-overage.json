@@ -16,7 +16,7 @@
   "sourceUrls": [
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets"
   ],
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "setup": [
     {
       "target": "budget",
@@ -35,17 +35,59 @@
   ],
   "steps": [
     {
-      "id": "pool-used",
+      "id": "first-draw",
       "type": "usage",
-      "title": "Use the cost center pool",
-      "description": "Alice consumes all 3,900 included credits available to the AI Innovation cost center.",
-      "expected": "The cost center included pool reaches 100%, while paid overage remains $0.",
+      "title": "Open the month with a first draw",
+      "description": "A week into the billing period Alice consumes 1,200 of the 3,900 credits included for the AI Innovation cost center.",
+      "expected": "Usage is accepted from the cost center included pool and paid overage remains $0.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-07",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
-        "quantity": 3900
+        "quantity": 1200
+      }
+    },
+    {
+      "id": "second-draw",
+      "type": "usage",
+      "title": "Continue drawing down the pool",
+      "description": "Alice consumes another 900 included credits.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 1,800 credits.",
+      "event": {
+        "date": "2026-09-12",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 900
+      }
+    },
+    {
+      "id": "third-draw",
+      "type": "usage",
+      "title": "Pass the halfway mark",
+      "description": "A further 1,000 included credits are consumed.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 800 credits.",
+      "event": {
+        "date": "2026-09-17",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "pool-used",
+      "type": "usage",
+      "title": "Use the cost center pool",
+      "description": "The final 800 included credits available to the AI Innovation cost center are consumed.",
+      "expected": "The cost center included pool reaches 100%, while paid overage remains $0.",
+      "event": {
+        "date": "2026-09-22",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 800
       }
     },
     {
@@ -55,7 +97,7 @@
       "description": "Alice consumes 2,400 more AI credits after the cost center included pool is exhausted.",
       "expected": "$24 of paid overage is attributed to the cost-center and enterprise metered budgets, and the cost-center budget crosses its 75% threshold.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-26",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",

@@ -25,7 +25,7 @@
       }
     }
   ],
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "steps": [
     {
       "id": "pool-mostly-used",
@@ -34,7 +34,7 @@
       "description": "Alice consumes 665,000 of the Enterprise shared pool's 666,000 included credits.",
       "expected": "The event is accepted from included credits, no paid overage is created, and 1,000 pooled credits remain.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-07",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -48,7 +48,7 @@
       "description": "The remaining 1,000 included credits are consumed.",
       "expected": "The Enterprise shared pool reaches 100%, while metered cost remains $0.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-17",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -62,7 +62,7 @@
       "description": "A further 1,000 credits can no longer use the Enterprise shared pool.",
       "expected": "The event is accepted as 1,000 metered credits and creates $10 of paid overage.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-26",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",

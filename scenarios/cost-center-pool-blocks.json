@@ -17,7 +17,7 @@
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets",
     "https://docs.github.com/en/enterprise-cloud@latest/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing"
   ],
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "setup": [
     {
       "target": "budget",
@@ -42,17 +42,59 @@
   ],
   "steps": [
     {
-      "id": "near-cap",
+      "id": "first-draw",
       "type": "usage",
-      "title": "Consume most cost center credits",
-      "description": "Alice consumes 3,800 of the AI Innovation cost center's 3,900 included credits.",
-      "expected": "Usage is accepted from the cost center included pool, leaving 100 credits.",
+      "title": "Open the month with a first draw",
+      "description": "A week into the billing period Alice consumes 1,100 of the AI Innovation cost center's 3,900 included credits.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 2,800 credits.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-07",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
-        "quantity": 3800
+        "quantity": 1100
+      }
+    },
+    {
+      "id": "second-draw",
+      "type": "usage",
+      "title": "Continue drawing down the pool",
+      "description": "Alice consumes another 900 included credits.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 1,900 credits.",
+      "event": {
+        "date": "2026-09-12",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 900
+      }
+    },
+    {
+      "id": "third-draw",
+      "type": "usage",
+      "title": "Pass the halfway mark",
+      "description": "A further 1,000 included credits are consumed.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 900 credits.",
+      "event": {
+        "date": "2026-09-18",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 1000
+      }
+    },
+    {
+      "id": "near-cap",
+      "type": "usage",
+      "title": "Consume most cost center credits",
+      "description": "Alice consumes 800 more credits, bringing cost center consumption to 3,800 of 3,900.",
+      "expected": "Usage is accepted from the cost center included pool, leaving 100 credits.",
+      "event": {
+        "date": "2026-09-23",
+        "userId": "user-alice",
+        "repositoryId": "repo-portal",
+        "productId": "ai-credits",
+        "quantity": 800
       }
     },
     {
@@ -62,7 +104,7 @@
       "description": "Alice tries to consume 200 more AI credits after only 100 remain in the cost center pool.",
       "expected": "The complete event is blocked because the cost-center included allowance is exhausted and the enterprise AI credit paid usage policy is disabled.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-27",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",

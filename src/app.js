@@ -1290,16 +1290,26 @@ function daysInMonth(yearMonth) {
   return new Date(year, month, 0).getDate();
 }
 
-// Real scenario step dates in the built-in catalog are frequently identical (e.g. every usage
-// step landing on the same "2026-09-15" test date), which collapses the timeline onto a single
-// point. To actually show progress across the month, spread steps evenly across the days of the
-// scenario's starting month by step order, regardless of the step's real recorded date.
-function stepDisplayDate(definition, step, index, totalSteps) {
-  const anchor = (definition.startDate || scenario.simulationDate || "2026-09-01").slice(0, 7);
+// Guided scenario steps carry their own authored dates, so the timeline plots those real dates
+// rather than synthesising evenly-spaced ones. Steps without a date of their own (checkpoint and
+// configuration) inherit the most recent dated step, falling back to the scenario start date.
+function stepDisplayDate(definition, step, index) {
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    const current = definition.steps[cursor];
+    const date = current.type === "usage" ? current.event?.date : current.type === "advance-date" ? current.date : null;
+    if (date) return date;
+  }
+  return definition.startDate || scenario.simulationDate || "2026-09-01";
+}
+
+// Plot positions run across the whole starting month so a scenario that opens at zero spend on day
+// one and finishes a few days before month end reads that way, instead of being stretched to fill
+// the track from edge to edge.
+function stepDisplayPosition(definition, date) {
+  const anchor = (definition.startDate || scenario.simulationDate || date).slice(0, 7);
   const total = daysInMonth(anchor);
-  const slot = totalSteps > 1 ? Math.round((index * (total - 1)) / (totalSteps - 1)) : 0;
-  const day = Math.min(total, Math.max(1, slot + 1));
-  return `${anchor}-${String(day).padStart(2, "0")}`;
+  const day = date.slice(0, 7) === anchor ? Number(date.slice(8, 10)) : total;
+  return (day - 1) / Math.max(1, total - 1);
 }
 
 function changeScenarioDefinition(id) {
@@ -1540,15 +1550,11 @@ function renderOptimizedBuckets(replay) {
 // which is what lets every page reflect consumption growth at that point in the month.
 function renderGlobalTimeline(definition) {
   const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
-  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index, definition.steps.length));
-  const times = dates.map((date) => new Date(`${date}T00:00:00`).getTime());
-  const min = Math.min(...times);
-  const max = Math.max(...times);
-  const span = Math.max(1, max - min);
+  const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index));
   $("#global-timeline").innerHTML = definition.steps.map((step, index) => {
     // Inset the plotted range so the first/last markers (centered via translateX(-50%)) keep their
     // date labels inside the track instead of overflowing the panel edges.
-    const position = 6 + ((times[index] - min) / span) * 88;
+    const position = 6 + stepDisplayPosition(definition, dates[index]) * 88;
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
     return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");

@@ -50,7 +50,7 @@ Guided scenarios reference reusable topology through `environmentId` whenever po
   "title": "Example scenario",
   "summary": "What this scenario demonstrates.",
   "environmentId": "synthetic-compact",
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "seed": [],
   "setup": [],
   "steps": []
@@ -95,7 +95,7 @@ Setup entries use the same mutation shape. Mutation targets are `enterprise`, `b
    exist in it, and prefer stable seeds such as `user-alice`, `user-bob`, `org-product`,
    `org-platform`, `repo-portal`, `repo-tools`, `cc-ai`, and `cc-core` when the exact persona is
    not material.
-3. Use ISO `YYYY-MM-DD` dates and a coherent chronological sequence. Remember that materialization clears baseline events, applies `setup`, and rebuilds from the baseline through each selected step.
+3. Use ISO `YYYY-MM-DD` dates and a coherent chronological sequence. Remember that materialization clears baseline events, applies `setup`, and rebuilds from the baseline through each selected step. Author dates so the scenario reads like a real billing period: set `startDate` to the first of the month so it opens at zero spend, place the first usage event at least six days later, keep the last usage event three or four days before the month ends, and ramp through at least three usage events on distinct days instead of one large opening event.
 4. Keep setup minimal and behavior-focused. Mutate existing entities only; the runner does not create entities through mutations.
 5. Make `description` state the action and `expected` state a falsifiable result with exact values when the lesson depends on a threshold, cost, pool transition, alert, or hard stop.
 6. Ground GitHub billing claims in official HTTPS documentation under `sourceUrls`. Distinguish documented behavior from explicit simulator assumptions.

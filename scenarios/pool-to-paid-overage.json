@@ -16,7 +16,7 @@
     "https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing"
   ],
   "environmentId": "synthetic-compact",
-  "startDate": "2026-09-15",
+  "startDate": "2026-09-01",
   "setup": [
     {
       "target": "budget",
@@ -34,7 +34,7 @@
       "description": "Alice consumes 5,000 of the 5,800 pooled credits.",
       "expected": "No paid overage is created and 800 pooled credits remain.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-07",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -48,7 +48,7 @@
       "description": "The remaining 800 included credits are consumed.",
       "expected": "The pool reaches 100%, while metered cost remains $0.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-17",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
@@ -62,7 +62,7 @@
       "description": "A further 1,000 credits can no longer use the pool.",
       "expected": "$10 of paid overage is attributed to the cost-center and enterprise budgets.",
       "event": {
-        "date": "2026-09-15",
+        "date": "2026-09-26",
         "userId": "user-alice",
         "repositoryId": "repo-portal",
         "productId": "ai-credits",
