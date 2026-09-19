@@ -1,4 +1,4 @@
-import { DEFAULT_SCENARIO_SET_ID, budgetInScope, paidUsageAllowedForProduct, paidUsagePolicyLabel, budgetStopsUsage, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
+import { DEFAULT_SCENARIO_SET_ID, budgetInScope, paidUsageAllowedForProduct, paidUsagePolicyLabel, budgetStopsUsage, bucketsForEvent, costCenterForUser, createDefaultScenario, createId, defaultScenarioSetOptions, describeCostCenterConfiguration, describeScope, describeScopeConfiguration, eventInScope, isSeatActiveForDate, money, normalizeScenario, overrideCostCenterIncludedUsageCap, percent, replayScenario, scopeLabels, seatChargeForPeriod, seatLifecycleEvents, userPoolContribution, usersInScope, validateScenario } from "./engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, validateScenarioDefinition } from "./scenario-runner.js";
 import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
@@ -1825,7 +1825,7 @@ document.addEventListener("click", (event) => {
   if (poolToggle) {
     const target = scenario.costCenters.find((item) => item.id === poolToggle.dataset.togglePool);
     if (target) {
-      target.aiCreditPoolEnabled = !target.aiCreditPoolEnabled;
+      overrideCostCenterIncludedUsageCap(scenario, target.id, !target.aiCreditPoolEnabled);
       saveAndRender(target.aiCreditPoolEnabled ? "AI credit included usage cap turned on" : "AI credit included usage cap turned off");
     }
     return;

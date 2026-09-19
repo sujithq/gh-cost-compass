@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, overrideCostCenterIncludedUsageCap, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
@@ -802,7 +802,7 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"/);
   assert.match(app, /budgetRowHtml\(\{ stateId: "pool", kind: "shared-pool"/);
   assert.match(app, /budgetRowHtml\(\{ stateId: budget\.stateId, kind: "budget"/);
-  assert.match(app, /money, normalizeScenario, percent, replayScenario/);
+  assert.match(app, /money, normalizeScenario, [^}]*percent, replayScenario/);
   for (const callSite of ["percent(replay.pool.percent)", "percent(percentValue)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
     assert.match(app, new RegExp(callSite.replaceAll("(", "\\(").replaceAll(")", "\\)")));
   }
@@ -866,6 +866,7 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   assert.match(app, /data-toggle-pool="\$\{escapeHtml\(config\.id\)\}"/);
   assert.match(app, /AI credit paid usage<\/strong> setting and applicable budgets decide/);
   assert.doesNotMatch(app, /Enterprise budget routing/);
+  assert.match(app, /overrideCostCenterIncludedUsageCap\(scenario, target\.id, !target\.aiCreditPoolEnabled\)/);
   assert.match(app, /saveAndRender\(target\.aiCreditPoolEnabled \? "AI credit included usage cap turned on"/);
   assert.match(app, /const optimizedBucketPanelExpansion = new Map\(\)/);
   assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
@@ -1450,6 +1451,33 @@ test("guided scenarios preserve historical cost-center pool consumption after di
   assert.equal(pool.consumed, 1000);
   assert.equal(pool.enabled, false);
   assert.equal(replay.pool.consumed, 0);
+});
+
+test("interactive included-cap overrides replay guided usage through the selected pool route", async () => {
+  const definition = JSON.parse(await readFile(new URL("../scenarios/cost-center-pool-to-overage.json", import.meta.url), "utf8"));
+  const scenario = materializeScenario(definition, definition.steps.length - 1, { defaultSetId: "compact" });
+
+  overrideCostCenterIncludedUsageCap(scenario, "cc-ai", false);
+  let replay = replayScenario(scenario);
+  assert.equal(scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled, false);
+  assert.ok(scenario.events.every((event) => event.scenarioSnapshot.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled === false));
+  assert.equal(replay.pool.consumed, 5800);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.includedQuantity, 0), 5800);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.meteredQuantity, 0), 500);
+  assert.equal(replay.pool.meteredCost, 5);
+  assert.ok(replay.results.every((result) => result.status === "accepted"));
+  assert.deepEqual(replay.results.at(-1).affectedBudgets.map((item) => item.budgetId).sort(), ["metered-ai-team", "metered-enterprise", "ulb-alice"]);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 5);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 5);
+
+  overrideCostCenterIncludedUsageCap(scenario, "cc-ai", true);
+  replay = replayScenario(scenario);
+  assert.equal(replay.pool.consumed, 0);
+  assert.equal(replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").consumed, 3900);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.meteredQuantity, 0), 2400);
+  assert.equal(replay.pool.meteredCost, 24);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 24);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 24);
 });
 
 test("cost-center pool enablement does not create extra included-credit capacity", () => {

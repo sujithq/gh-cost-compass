@@ -106,6 +106,16 @@ export function normalizeScenario(scenario) {
   return scenario;
 }
 
+export function overrideCostCenterIncludedUsageCap(scenario, costCenterId, enabled) {
+  const update = (candidate) => {
+    const costCenter = candidate?.costCenters?.find((item) => item.id === costCenterId);
+    if (costCenter) costCenter.aiCreditPoolEnabled = Boolean(enabled);
+  };
+  update(scenario);
+  for (const event of scenario.events || []) update(event.scenarioSnapshot);
+  return scenario;
+}
+
 function eventScenario(scenario, event) {
   return normalizeScenario(event.scenarioSnapshot ? structuredClone(event.scenarioSnapshot) : scenario);
 }
