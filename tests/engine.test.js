@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
+import { budgetInScope, budgetStopsUsage, bucketsForEvent, costCenterForUser, costCenterIncludedPoolFor, describeCostCenterConfiguration, describeScopeConfiguration, createDefaultScenario, defaultScenarioSetOptions, eventInScope, isSeatActiveForDate, overrideCostCenterIncludedUsageCap, percent, replayScenario, replayScenarioThroughEvent, seatChargeForPeriod, userPoolContribution, usersInScope, validateScenario } from "../src/engine.js";
 import { isScenarioCompatibleWithDefaultSet, materializeScenario, resolveScenarioDefaultSetId, validateScenarioDefinition } from "../src/scenario-runner.js";
 import { loadScenarioCatalog } from "../src/scenario-catalog.js";
 import { registerEnvironment, validateMaterializedScenario, validateEnvironment } from "../src/environment.js";
@@ -589,7 +589,7 @@ test("cost-center overage remains visible while enterprise pool has headroom", (
   assert.equal(result.cost, 1);
 });
 
-test("paid usage policy blocks overage regardless of budget headroom", () => {
+test("enterprise paid-usage setting blocks overage regardless of budget headroom", () => {
   const scenario = createDefaultScenario();
   scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
@@ -802,7 +802,7 @@ test("dashboard includes an accessible budget history dialog", async () => {
   assert.match(app, /data-history-id="\$\{escapeHtml\(stateId\)\}"/);
   assert.match(app, /budgetRowHtml\(\{ stateId: "pool", kind: "shared-pool"/);
   assert.match(app, /budgetRowHtml\(\{ stateId: budget\.stateId, kind: "budget"/);
-  assert.match(app, /money, normalizeScenario, percent, replayScenario/);
+  assert.match(app, /money, normalizeScenario, [^}]*percent, replayScenario/);
   for (const callSite of ["percent(replay.pool.percent)", "percent(percentValue)", "percent(budgetState.percent)", "percent(item.percent)", "percent(impact.percent)"]) {
     assert.match(app, new RegExp(callSite.replaceAll("(", "\\(").replaceAll(")", "\\)")));
   }
@@ -822,7 +822,64 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /Stop usage when budget limit is reached/);
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
-  assert.match(app, /further usage needs the paid usage policy and budgets/);
+  assert.match(app, /further usage needs the enterprise paid-usage setting and budgets/);
+});
+
+test("optimized hierarchy surfaces AI-credit settings and consumption without changing the dashboard tree", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false, replay = null \} = \{\}\)/);
+  assert.match(app, /hierarchyTreeHtml\("dashboard"\)/);
+  assert.match(app, /hierarchyTreeHtml\("optimized", \{ scopeNodes: true, replay \}\)/);
+  assert.match(app, /AI credit paid usage: \$\{paidUsagePolicyLabel\(scenario\.enterprise\)\}/);
+  assert.match(app, /Included cap: \$\{config\.settings\.includedUsageCapEnabled \? "On" : "Off"\}/);
+  assert.match(app, /hierarchyBadgeHtml\("ULB", "user-budget"\)/);
+  assert.match(app, /function hierarchyIncludedCreditsMeterHtml\(replay\)/);
+  assert.match(app, /<b>Included AI credits<\/b>/);
+  assert.match(app, /replay\.pool\.grandConsumed\.toLocaleString\(\)/);
+  assert.match(app, /class="hierarchy-composition-segment \$\{className\}"/);
+  assert.match(app, /Cost-center pools \$\{costCenterConsumed\.toLocaleString\(\)\} \/ \$\{costCenterTotal\.toLocaleString\(\)\}/);
+  assert.match(app, /Shared pool \$\{replay\.pool\.consumed\.toLocaleString\(\)\} \/ \$\{replay\.pool\.total\.toLocaleString\(\)\}/);
+  assert.match(app, /hierarchyMeterHtml\("Included allowance", pool\.percent, `\$\{pool\.consumed\.toLocaleString\(\)\} credits`/);
+  assert.match(app, /hierarchyMeterHtml\("AI overage", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\), "overage"\)/);
+  assert.doesNotMatch(app, /costCenterAllowanceMeters/);
+  assert.match(app, /Overage checks: \$\{escapeHtml\(route\)\}/);
+  assert.match(app, /Organization budgets do not apply while cost-center attribution exists/);
+  assert.match(app, /hierarchyMeterHtml\("User-level budget", budget\.percent, money\(budget\.spent, "USD"\), money\(budget\.amount, "USD"\)\)/);
+  assert.match(app, /data-toggle-pool="\$\{escapeHtml\(cc\.id\)\}"/);
+  assert.doesNotMatch(app, /Enterprise budget: \$\{/);
+  assert.match(styles, /\.hierarchy-meter \.progress\{height:5px/);
+  assert.match(styles, /\.hierarchy-node-content\.has-meters\{display:grid;grid-template-columns:/);
+  assert.match(styles, /\.hierarchy-meter-overage/);
+  assert.match(styles, /\.hierarchy-composition-segment\.cost-centers/);
+  assert.match(styles, /\.hierarchy-overage-route/);
+  assert.match(styles, /\.hierarchy-badge\.included-cap-on\{/);
+  assert.match(html, /id="optimized-hierarchy"/);
+});
+
+test("optimized cost-center settings replay and Credit buckets preserve their collapsed state", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.match(app, /data-toggle-pool="\$\{escapeHtml\(config\.id\)\}"/);
+  assert.match(app, /AI credit paid usage<\/strong> setting and applicable budgets decide/);
+  assert.doesNotMatch(app, /Enterprise budget routing/);
+  assert.match(app, /overrideCostCenterIncludedUsageCap\(scenario, target\.id, !target\.aiCreditPoolEnabled\)/);
+  assert.match(app, /saveAndRender\(target\.aiCreditPoolEnabled \? "AI credit included usage cap turned on"/);
+  assert.match(app, /const optimizedBucketPanelExpansion = new Map\(\)/);
+  assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
+  assert.match(app, /optimizedBucketPanelExpansion\.set\("credit-buckets"/);
+  assert.match(app, /classList\.toggle\("buckets-collapsed", !expanded\)/);
+  assert.match(app, /#optimized-current-step-panel"\)\.hidden = !expanded/);
+  assert.match(app, /innerHTML = icon\(expanded \? "panelCollapse" : "panelExpand"\)/);
+  assert.match(app, /const poolToggle = event\.target\.closest\("\[data-toggle-pool\]"\);[\s\S]{0,500}const scopeNode/);
+  assert.match(html, /id="optimized-buckets-toggle"/);
+  assert.match(html, /class="icon-button"/);
+  assert.match(html, /id="optimized-layout"/);
+  assert.match(html, /aria-controls="optimized-buckets-content"/);
+  assert.match(html, /id="optimized-buckets-content"/);
 });
 
 test("control evaluation explainers use shared outcome-aware cards across app surfaces", async () => {
@@ -1019,9 +1076,9 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   }
   // Both pages must build their tree from the same function, so structure, icons, colors, and type
   // labels can never drift apart between the dashboard and the optimized page.
-  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false \} = \{\}\)/);
+  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false, replay = null \} = \{\}\)/);
   assert.match(app, /\$\("#hierarchy"\)\.innerHTML = hierarchyTreeHtml\("dashboard"\);/);
-  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true \}\);/);
+  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true, replay \}\);/);
   assert.match(app, /hierarchy-kind/);
   assert.doesNotMatch(app, /class="tree-org"/);
   // Organization and cost-center glyphs were previously near-identical briefcases.
@@ -1394,6 +1451,33 @@ test("guided scenarios preserve historical cost-center pool consumption after di
   assert.equal(pool.consumed, 1000);
   assert.equal(pool.enabled, false);
   assert.equal(replay.pool.consumed, 0);
+});
+
+test("interactive included-cap overrides replay guided usage through the selected pool route", async () => {
+  const definition = JSON.parse(await readFile(new URL("../scenarios/cost-center-pool-to-overage.json", import.meta.url), "utf8"));
+  const scenario = materializeScenario(definition, definition.steps.length - 1, { defaultSetId: "compact" });
+
+  overrideCostCenterIncludedUsageCap(scenario, "cc-ai", false);
+  let replay = replayScenario(scenario);
+  assert.equal(scenario.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled, false);
+  assert.ok(scenario.events.every((event) => event.scenarioSnapshot.costCenters.find((item) => item.id === "cc-ai").aiCreditPoolEnabled === false));
+  assert.equal(replay.pool.consumed, 5800);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.includedQuantity, 0), 5800);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.meteredQuantity, 0), 500);
+  assert.equal(replay.pool.meteredCost, 5);
+  assert.ok(replay.results.every((result) => result.status === "accepted"));
+  assert.deepEqual(replay.results.at(-1).affectedBudgets.map((item) => item.budgetId).sort(), ["metered-ai-team", "metered-enterprise", "ulb-alice"]);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 5);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 5);
+
+  overrideCostCenterIncludedUsageCap(scenario, "cc-ai", true);
+  replay = replayScenario(scenario);
+  assert.equal(replay.pool.consumed, 0);
+  assert.equal(replay.costCenterPoolStates.find((item) => item.costCenterId === "cc-ai").consumed, 3900);
+  assert.equal(replay.results.reduce((sum, result) => sum + result.meteredQuantity, 0), 2400);
+  assert.equal(replay.pool.meteredCost, 24);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-ai-team").spent, 24);
+  assert.equal(replay.budgetStates.find((item) => item.id === "metered-enterprise").spent, 24);
 });
 
 test("cost-center pool enablement does not create extra included-credit capacity", () => {

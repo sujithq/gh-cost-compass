@@ -17,7 +17,7 @@
 
 1. Check the most specific applicable ULB: individual, cost-center, then universal.
 2. Check the shared pool or cost-center included-usage cap.
-3. When included allowance is exhausted, check the AI-credit paid-usage policy.
+3. When included allowance is exhausted, check the enterprise AI-credit paid-usage setting.
 4. Check the applicable cost-center or organization metered budget.
 5. Check the enterprise metered budget when applicable.
 6. The applicable hard control with the least remaining headroom blocks first.
@@ -37,4 +37,3 @@
 
 Keep separate measures for included-pool consumption, total AI consumption, metered
 overage, ULB utilization, unassigned usage, and forecast exposure.
-

@@ -10,7 +10,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Cost-center included usage controls with a license-funded **AI credit included usage cap**
 - Universal, cost-center, and individual user-level budgets (ULBs)
 - Separate enterprise, organization, and cost-center metered-overage budgets
-- AI paid-usage policy, effective dates, monthly resets, alerts, and hard stops
+- Enterprise AI credit paid-usage setting, effective dates, monthly resets, alerts, and hard stops
 - Clear split between included AI credits and paid overage
 - Dated usage simulation, live progress, attribution details, included-usage health, budget threshold alerts, and audit timeline
 - Clickable budget and shared-pool cards with an accessible history dialog showing the current-period events that drove their state
@@ -97,7 +97,7 @@ Markdown control model is authoritative for engine behavior and scenario expecta
 - A ULB measures one user's **total** AI-credit consumption across both included and metered phases. It is always a hard stop.
 - ULB precedence is individual → cost-center ULB → universal ULB.
 - Enterprise, organization, and cost-center spending budgets measure **only paid overage after the shared pool is exhausted**.
-- Disabling the AI credits paid-usage policy blocks usage when the pool is exhausted regardless of metered-budget headroom.
+- Disabling the enterprise AI credit paid-usage setting blocks usage when the pool is exhausted regardless of metered-budget headroom.
 - Budgets count usage only from their creation/effective date onward. Standard alerts use 75%, 90%, and 100% thresholds.
 - Alerts are raised once per threshold crossing per budget per month. GitHub delivers metered budget alerts in the UI and by email, and states that user-level budget alert delivery is not guaranteed; the simulator repeats that caveat in the alert toast and timeline.
 - Organization attribution for AI credits uses the organization granting the user's Copilot license. A cost-center budget takes precedence over the organization budget.

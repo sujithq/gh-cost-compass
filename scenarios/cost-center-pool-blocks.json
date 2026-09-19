@@ -60,7 +60,7 @@
       "type": "usage",
       "title": "Try to exceed the included allowance",
       "description": "Alice tries to consume 200 more AI credits after only 100 remain in the cost center pool.",
-      "expected": "The complete event is blocked because the cost-center included allowance is exhausted and the enterprise AI credit paid usage policy is disabled.",
+      "expected": "The complete event is blocked because the cost-center included allowance is exhausted and the enterprise AI credit paid usage setting is disabled.",
       "event": {
         "date": "2026-09-15",
         "userId": "user-alice",
