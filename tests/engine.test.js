@@ -589,7 +589,7 @@ test("cost-center overage remains visible while enterprise pool has headroom", (
   assert.equal(result.cost, 1);
 });
 
-test("paid usage policy blocks overage regardless of budget headroom", () => {
+test("enterprise paid-usage setting blocks overage regardless of budget headroom", () => {
   const scenario = createDefaultScenario();
   scenario.enterprise.aiCreditPaidUsage = "disabled";
   scenario.budgets.find((item) => item.id === "ulb-alice").amount = 10000;
@@ -822,7 +822,44 @@ test("optimized UI is isolated from legacy pages and exposes bucket attribution 
   assert.match(app, /Stop usage when budget limit is reached/);
   assert.match(app, /scenario\.events\.find\(\(item\) => item\.id === result\.eventId\)/);
   assert.match(app, /visibleCostCenterPools/);
-  assert.match(app, /further usage needs the paid usage policy and budgets/);
+  assert.match(app, /further usage needs the enterprise paid-usage setting and budgets/);
+});
+
+test("optimized hierarchy surfaces AI-credit settings and consumption without changing the dashboard tree", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false, replay = null \} = \{\}\)/);
+  assert.match(app, /hierarchyTreeHtml\("dashboard"\)/);
+  assert.match(app, /hierarchyTreeHtml\("optimized", \{ scopeNodes: true, replay \}\)/);
+  assert.match(app, /AI credit paid usage: \$\{paidUsagePolicyLabel\(scenario\.enterprise\)\}/);
+  assert.match(app, /Included cap: \$\{config\.settings\.includedUsageCapEnabled \? "On" : "Off"\}/);
+  assert.match(app, /hierarchyBadgeHtml\("ULB", "user-budget"\)/);
+  assert.match(app, /nodeBudgetShield\("costCenter", cc\.id\)/);
+  assert.match(app, /hierarchyMeterHtml\("Shared included pool", replay\.pool\.percent\)/);
+  assert.match(app, /hierarchyMeterHtml\("Included allowance", pool\.percent\)/);
+  assert.match(app, /hierarchyMeterHtml\("User-level budget", budget\.percent\)/);
+  assert.match(styles, /\.hierarchy-meter \.progress\{height:4px/);
+  assert.match(styles, /\.hierarchy-badge\.included-cap-on\{/);
+  assert.match(html, /id="optimized-hierarchy"/);
+});
+
+test("optimized cost-center settings replay and Credit buckets preserve their collapsed state", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.match(app, /data-toggle-pool="\$\{escapeHtml\(config\.id\)\}"/);
+  assert.match(app, /data-toggle-costcenter="\$\{escapeHtml\(config\.id\)\}"/);
+  assert.match(app, /AI credit paid usage<\/strong> setting and applicable budgets decide/);
+  assert.match(app, /it does not enable paid usage/);
+  assert.match(app, /saveAndRender\(target\.aiCreditPoolEnabled \? "AI credit included usage cap turned on"/);
+  assert.match(app, /const optimizedBucketPanelExpansion = new Map\(\)/);
+  assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
+  assert.match(app, /optimizedBucketPanelExpansion\.set\("credit-buckets"/);
+  assert.match(html, /id="optimized-buckets-toggle"/);
+  assert.match(html, /aria-controls="optimized-buckets-content"/);
+  assert.match(html, /id="optimized-buckets-content"/);
 });
 
 test("control evaluation explainers use shared outcome-aware cards across app surfaces", async () => {
@@ -1019,9 +1056,9 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   }
   // Both pages must build their tree from the same function, so structure, icons, colors, and type
   // labels can never drift apart between the dashboard and the optimized page.
-  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false \} = \{\}\)/);
+  assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false, replay = null \} = \{\}\)/);
   assert.match(app, /\$\("#hierarchy"\)\.innerHTML = hierarchyTreeHtml\("dashboard"\);/);
-  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true \}\);/);
+  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true, replay \}\);/);
   assert.match(app, /hierarchy-kind/);
   assert.doesNotMatch(app, /class="tree-org"/);
   // Organization and cost-center glyphs were previously near-identical briefcases.

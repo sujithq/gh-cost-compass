@@ -68,14 +68,16 @@
             <div id="optimized-hierarchy" class="optimized-hierarchy"></div>
           </article>
           <aside class="optimized-side">
-            <article class="panel">
-              <div class="panel-title"><h3>Credit buckets</h3><span>Current period</span></div>
+            <article class="panel optimized-buckets-panel">
+              <div class="panel-title optimized-buckets-panel-title"><div><h3>Credit buckets</h3><span id="optimized-buckets-summary">Current period</span></div><button id="optimized-buckets-toggle" type="button" class="text-button" aria-expanded="true" aria-controls="optimized-buckets-content">Collapse</button></div>
+              <div id="optimized-buckets-content">
               <div class="scrubber-controls">
                 <label>Scope type<select id="optimized-scope-type"><option value="enterprise">Enterprise</option><option value="organization">Organization</option><option value="costCenter">Cost center</option><option value="user">User</option></select></label>
                 <label>Scope<select id="optimized-scope"></select></label>
               </div>
               <div id="optimized-scope-config" class="optimized-scope-config"></div>
               <div id="optimized-buckets" class="optimized-buckets"></div>
+              </div>
             </article>
             <article class="panel">
               <div class="panel-title"><h3>Current step</h3><span>Bucket attribution</span></div>

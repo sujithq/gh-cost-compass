@@ -889,9 +889,21 @@ const bucketExpansion = new Map();
 function bucketExpanded(key, fallback = true) {
   return bucketExpansion.has(key) ? bucketExpansion.get(key) : fallback;
 }
-function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "") {
+const optimizedBucketPanelExpansion = new Map();
+function optimizedBucketsExpanded() {
+  return optimizedBucketPanelExpansion.has("credit-buckets")
+    ? optimizedBucketPanelExpansion.get("credit-buckets")
+    : scenario.users.length <= HIERARCHY_AUTO_COLLAPSE_USERS;
+}
+function hierarchyBadgeHtml(label, className = "") {
+  return `<span class="hierarchy-badge${className ? ` ${className}` : ""}">${escapeHtml(label)}</span>`;
+}
+function hierarchyMeterHtml(label, value) {
+  return `<div class="hierarchy-meter"><span>${escapeHtml(label)} <b>${percent(value)}</b></span><div class="progress ${statusClass(value)}" role="progressbar" aria-label="${escapeHtml(label)}: ${percent(value)} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"><div style="width:${Math.min(100, value)}%"></div></div></div>`;
+}
+function hierarchyNodeHtml(kind, name, detail, attributes = "", extraClass = "", supplementary = "") {
   const meta = HIERARCHY_KINDS[kind];
-  return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small></div></div>`;
+  return `<div class="hierarchy-node ${meta.className}${extraClass ? ` ${extraClass}` : ""}"${attributes ? ` ${attributes}` : ""}><span>${icon(kind)}</span><div class="hierarchy-node-content"><span class="hierarchy-kind">${meta.label}</span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detail)}</small>${supplementary}</div></div>`;
 }
 
 function hierarchyLeafHtml(nodeHtml) {
@@ -921,7 +933,7 @@ function hierarchyMatches(filter, ...values) {
 
 // Builds the enterprise → organization → cost center → user/repository tree used by both the
 // dashboard and the optimized page, so the two can never present different structures.
-function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
+function hierarchyTreeHtml(hostId, { scopeNodes = false, replay = null } = {}) {
   const filter = (hierarchyFilters.get(hostId) || "").trim().toLowerCase();
   const autoCollapse = scenario.users.length > HIERARCHY_AUTO_COLLAPSE_USERS;
   // While filtering, matches are always revealed: a stored collapse from before the search would
@@ -929,6 +941,15 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
   const branchOpen = (key, fallback) => (filter ? true : hierarchyExpanded(key, fallback));
   const scopeAttributes = (type, id, name) => (scopeNodes ? `data-scope-type="${escapeHtml(type)}" data-scope-id="${escapeHtml(id)}"${optimizedScope.type === type && optimizedScope.id === id ? " active" : ""} tabindex="0" role="button" aria-label="Inspect ${escapeHtml(name)} scope"` : "");
   const scopeClass = scopeNodes ? "scope-node" : "";
+  const nodeBudgetShield = (type, id) => {
+    if (!scopeNodes || !replay?.budgetStates.some((item) => item.budgetKind === "metered" && item.scopeType === type && item.scopeId === id)) return "";
+    return `<span class="hierarchy-budget-shield" title="Metered budget configured" aria-label="Metered budget configured">${icon("hardStop")}</span>`;
+  };
+  const userSupplementary = (user) => {
+    if (!scopeNodes || !replay) return "";
+    const budget = replay.budgetStates.find((item) => item.budgetKind === "user" && item.userId === user.id);
+    return budget ? `<div class="hierarchy-badges">${hierarchyBadgeHtml("ULB", "user-budget")}</div>${hierarchyMeterHtml("User-level budget", budget.percent)}` : "";
+  };
   let matchCount = 0;
 
   const branches = scenario.organizations.map((org) => {
@@ -938,7 +959,7 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
     const costCenters = scenario.costCenters.filter((cc) => (cc.organizationIds || []).includes(org.id) || users.some((user) => user.costCenterId === cc.id));
     const orgMatches = hierarchyMatches(filter, org.name);
 
-    const userLeafHtml = (user) => hierarchyLeafHtml(hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeAttributes("user", user.id, user.name), scopeClass));
+    const userLeafHtml = (user) => hierarchyLeafHtml(hierarchyNodeHtml("user", user.name, `${costCenterForUser(scenario, user)?.name || "No cost center"} · ${user.licensePlan} seat`, scopeAttributes("user", user.id, user.name), scopeClass, userSupplementary(user)));
     const visibleUsers = (list) => list.filter((user) => orgMatches || hierarchyMatches(filter, user.name, costCenterForUser(scenario, user)?.name));
 
     const costCenterHtml = costCenters.map((cc) => {
@@ -955,7 +976,11 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
       const ccUserText = ccTotalUsers === ccUsers.length
         ? `${ccUsers.length} user${ccUsers.length === 1 ? "" : "s"}`
         : `${ccUsers.length} of ${ccTotalUsers} users here`;
-      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUserText} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass);
+      const config = describeCostCenterConfiguration(scenario, cc);
+      const pool = replay?.costCenterPoolStates.find((item) => item.costCenterId === cc.id);
+      const badges = scopeNodes ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(`Included cap: ${config.settings.includedUsageCapEnabled ? "On" : "Off"}`, config.settings.includedUsageCapEnabled ? "included-cap-on" : "included-cap-off")}${hierarchyBadgeHtml(config.settings.excludeFromEnterpriseBudget ? "Enterprise budget: Excluded" : "Enterprise budget: Included")}${nodeBudgetShield("costCenter", cc.id)}</div>` : "";
+      const meter = scopeNodes && config.settings.includedUsageCapEnabled && pool ? hierarchyMeterHtml("Included allowance", pool.percent) : "";
+      const node = hierarchyNodeHtml("costCenter", cc.name, `${ccUserText} · ${cc.excludeFromEnterpriseBudget ? "Excluded from enterprise overage" : "Rolls up to enterprise overage"}`, scopeAttributes("costCenter", cc.id, cc.name), scopeClass, badges + meter);
       const open = branchOpen(ccKey, !autoCollapse);
       return hierarchyBranchHtml(ccKey, node, open, `${cc.name} members`, () => hierarchyLeafListHtml(ccKey, shownUsers.map(userLeafHtml)) || `<div class="empty">No users assigned.</div>`);
     }).join("");
@@ -977,20 +1002,21 @@ function hierarchyTreeHtml(hostId, { scopeNodes = false } = {}) {
     if (visibleRepos.length) {
       matchCount += visibleRepos.length;
       const node = `<div class="hierarchy-node repo"><span>${icon("repo")}</span><div><span class="hierarchy-kind">Repositories</span><strong>${visibleRepos.length} repositor${visibleRepos.length === 1 ? "y" : "ies"}</strong><small>Usage here bills to ${escapeHtml(org.name)}</small></div></div>`;
-      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`)))));
+      repoHtml = hierarchyBranchHtml(repoKey, node, repoOpen, `${org.name} repositories`, () => hierarchyLeafListHtml(repoKey, visibleRepos.map((repo) => hierarchyLeafHtml(hierarchyNodeHtml("repo", repo.name, `Bills to ${org.name}`, "", "", scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("repository", repo.id)}</div>` : "")))));
     }
 
     const children = costCenterHtml + unassignedHtml + repoHtml;
     if (filter && !orgMatches && !children) return "";
     if (orgMatches) matchCount += 1;
     const orgOpen = branchOpen(orgKey, true);
-    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass);
+    const orgNode = hierarchyNodeHtml("organization", org.name, `${users.length} user${users.length === 1 ? "" : "s"} · ${repos.length} repositor${repos.length === 1 ? "y" : "ies"} · ${costCenters.length} cost center${costCenters.length === 1 ? "" : "s"}`, scopeAttributes("organization", org.id, org.name), scopeClass, scopeNodes ? `<div class="hierarchy-badges">${nodeBudgetShield("organization", org.id)}</div>` : "");
     return hierarchyBranchHtml(orgKey, orgNode, orgOpen, org.name, () => children || `<div class="empty">No cost centers, repositories, or users yet.</div>`);
   }).join("");
 
   const enterpriseKey = `${hostId}:enterprise`;
   const enterpriseOpen = branchOpen(enterpriseKey, true);
-  const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass);
+  const enterpriseSupplementary = scopeNodes && replay ? `<div class="hierarchy-badges">${hierarchyBadgeHtml(`AI credit paid usage: ${paidUsagePolicyLabel(scenario.enterprise)}`, "paid-usage-setting")}${nodeBudgetShield("enterprise", scenario.enterprise.id)}</div>${hierarchyMeterHtml("Shared included pool", replay.pool.percent)}` : "";
+  const enterpriseNode = hierarchyNodeHtml("enterprise", scenario.enterprise.name, `${scenario.organizations.length} organization${scenario.organizations.length === 1 ? "" : "s"} · ${scenario.costCenters.length} cost center${scenario.costCenters.length === 1 ? "" : "s"} · ${scenario.users.length} user${scenario.users.length === 1 ? "" : "s"}`, scopeAttributes("enterprise", scenario.enterprise.id, scenario.enterprise.name), scopeClass, enterpriseSupplementary);
   const body = branches || `<div class="empty">${filter ? "No organizations, cost centers, repositories, or users match this filter." : "No organizations configured yet."}</div>`;
 
   const legend = `<div class="hierarchy-legend">${Object.entries(HIERARCHY_KINDS).map(([kind, meta]) => `<span class="${meta.className}">${icon(kind)}${meta.label}</span>`).join("")}</div>`;
@@ -1007,7 +1033,7 @@ function renderHierarchy() {
 // user just activated — otherwise collapsing a branch would drop focus back to the document body.
 function renderHierarchyTrees(focusKey = null) {
   renderHierarchy();
-  if ($("#optimized-hierarchy")) $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
+  if ($("#optimized-hierarchy")) $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true, replay: replayScenario(scenario) });
   if (focusKey) document.querySelector(`[data-tree-toggle="${CSS.escape(focusKey)}"]`)?.focus();
 }
 
@@ -1476,9 +1502,9 @@ function scopeConfigurationHtml(config) {
     }).join("");
     const capValue = `${settings.capCredits.toLocaleString()} credits`;
     const capDetail = settings.includedUsageCapEnabled
-      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. The cap selects which included credits members draw from; beyond it, the enterprise <strong>AI credit paid usage</strong> policy and applicable budgets decide.`
+      ? `Caps included usage at the ${capValue} that come with the ${settings.licenseCount} Copilot licenses attributed to this cost center. The cap selects which included credits members draw from; beyond it, the enterprise <strong>AI credit paid usage</strong> setting and applicable budgets decide.`
       : `Not enabled — this cost center draws from the enterprise shared pool instead. If enabled, the cap would be ${capValue} from ${settings.licenseCount} attributed licenses.`;
-    return `<div class="scope-config"><h5>Resources</h5><div class="config-fact-grid">${resources}</div><h5>Settings</h5><div class="config-fact"><span>AI credit included usage cap</span><b>${settings.includedUsageCapEnabled ? capValue : "Off"}</b></div><p class="muted">${capDetail}</p>${settings.excludeFromEnterpriseBudget ? `<p class="muted">Paid AI overage from this cost center is excluded from the enterprise budget.</p>` : ""}</div>`;
+    return `<div class="scope-config"><h5>Resources</h5><div class="config-fact-grid">${resources}</div><h5>Settings</h5><div class="config-fact config-fact-action"><div><span>AI credit included usage cap</span><b>${settings.includedUsageCapEnabled ? capValue : "Off"}</b></div><button type="button" class="text-button" data-toggle-pool="${escapeHtml(config.id)}">${settings.includedUsageCapEnabled ? "Turn off" : "Turn on"}</button></div><p class="muted">${capDetail}</p><div class="config-fact config-fact-action"><div><span>Enterprise budget routing</span><b>${settings.excludeFromEnterpriseBudget ? "Excluded" : "Included"}</b></div><button type="button" class="text-button" data-toggle-costcenter="${escapeHtml(config.id)}">${settings.excludeFromEnterpriseBudget ? "Include" : "Exclude"}</button></div><p class="muted">This controls whether paid AI overage from this cost center counts against the enterprise budget; it does not enable paid usage.</p></div>`;
   }
   const facts = config.facts.map((fact) => `<div class="config-fact"><span>${escapeHtml(fact.label)}</span><b>${escapeHtml(fact.value)}</b></div>`).join("");
   return `<div class="scope-config"><h5>Settings</h5><div class="config-fact-grid">${facts}</div></div>`;
@@ -1508,7 +1534,7 @@ function renderOptimizedBuckets(replay) {
     spent: item.consumed,
     amount: item.total,
     parentId: poolRootKey,
-    routeNote: item.remaining === 0 ? "At cap · further usage needs the paid usage policy and budgets." : "Included credits available before paid overage.",
+    routeNote: item.remaining === 0 ? "At cap · further usage needs the enterprise paid-usage setting and budgets." : "Included credits available before paid overage.",
   }));
   const scopedUserBudgets = replay.budgetStates.filter((item) => item.budgetKind === "user" && inScope(item));
   const userBudgets = optimizedScope.type === "user" ? scopedUserBudgets : aggregateUserBudgets(scopedUserBudgets);
@@ -1525,6 +1551,12 @@ function renderOptimizedBuckets(replay) {
   const breakdownText = replay.pool.licenseBreakdown.map((entry) => `${Math.round(entry.credits).toLocaleString()} from ${entry.seatCount} ${planLabels[entry.plan] || entry.plan} license${entry.seatCount === 1 ? "" : "s"}`).join(" + ");
   const includedCreditsTitle = `Included credits · ${Math.round(replay.pool.grandTotal).toLocaleString()} total AI credits`;
   const includedCreditsNote = `${Math.round(replay.pool.grandTotal).toLocaleString()} total AI credits come from ${breakdownText || "0 licensed seats"}. ${poolNote}`;
+  const visibleAlertCount = replay.alerts.filter((item) => item.date.startsWith(replay.period)).length;
+  const expanded = optimizedBucketsExpanded();
+  $("#optimized-buckets-summary").textContent = `${1 + visibleCostCenterPools.length} pool${visibleCostCenterPools.length === 0 ? "" : "s"} · ${userBudgets.length + meteredBudgets.length} budget${userBudgets.length + meteredBudgets.length === 1 ? "" : "s"} · ${visibleAlertCount} alert${visibleAlertCount === 1 ? "" : "s"}`;
+  $("#optimized-buckets-toggle").setAttribute("aria-expanded", String(expanded));
+  $("#optimized-buckets-toggle").textContent = expanded ? "Collapse" : "Expand";
+  $("#optimized-buckets-content").hidden = !expanded;
   const configHost = $("#optimized-scope-config");
   if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
@@ -1597,7 +1629,7 @@ function renderOptimizedExperience(replay, currency) {
   const definition = selectedScenarioDefinition();
   renderOptimizedBuckets(replay);
 
-  $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true });
+  $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true, replay });
 
   if (definition) {
     renderOptimizedStepDetail(definition, replay);
@@ -1732,6 +1764,13 @@ document.addEventListener("click", (event) => {
     bucketExpansion.set(key, !open);
     renderOptimizedBuckets(replayScenario(scenario));
     document.querySelector(`[data-bucket-toggle="${CSS.escape(key)}"]`)?.focus();
+    return;
+  }
+  const optimizedBucketsToggle = event.target.closest("#optimized-buckets-toggle");
+  if (optimizedBucketsToggle) {
+    optimizedBucketPanelExpansion.set("credit-buckets", !optimizedBucketsExpanded());
+    renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+    $("#optimized-buckets-toggle")?.focus();
     return;
   }
   const budgetSectionMore = event.target.closest("[data-budget-section-more]");

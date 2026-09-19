@@ -444,7 +444,7 @@ export function replayScenario(scenario) {
             { label: "Included allowance", value: `${poolTotal.toLocaleString()} credits funded by attributed licenses` },
           ],
           result: exceedsPool
-            ? `The cost center has consumed ${poolBefore.toLocaleString()} of ${poolTotal.toLocaleString()} included AI credits. This event needs ${meteredQuantity.toLocaleString()} credits beyond the included allowance, so the AI credit paid usage policy and any applicable budgets decide what happens next. The cap selects the included pool; it is not a total-usage hard stop.`
+            ? `The cost center has consumed ${poolBefore.toLocaleString()} of ${poolTotal.toLocaleString()} included AI credits. This event needs ${meteredQuantity.toLocaleString()} credits beyond the included allowance, so the enterprise AI credit paid usage setting and any applicable budgets decide what happens next. The cap selects the included pool; it is not a total-usage hard stop.`
             : `The event uses ${includedQuantity.toLocaleString()} included AI credits and remains within the ${poolTotal.toLocaleString()}-credit cost center included allowance.`,
           outcome: exceedsPool ? "continued" : "passed",
         });
@@ -633,6 +633,7 @@ export function describeCostCenterConfiguration(scenario, costCenter, atDate = s
   const attributedUsers = scenario.users.filter((user) => costCenterForUser(scenario, user)?.id === costCenter.id);
   const licensedUsers = attributedUsers.filter((user) => isSeatActiveForDate(user, atDate));
   return {
+    id: costCenter.id,
     name: costCenter.name,
     resources: [
       { label: "Enterprise teams", names: namesFor(scenario.enterpriseTeams, costCenter.enterpriseTeamIds) },
