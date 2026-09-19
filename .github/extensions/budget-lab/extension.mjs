@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas } from "@github/copilot-sdk/extension";
-import { sendAndWaitForTurn } from "./copilot-request.mjs";
+import { askInIsolatedSession } from "./copilot-request.mjs";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_QUESTION_LENGTH = 2_000;
@@ -96,12 +96,8 @@ async function applyModelSettings(settings = {}) {
 function askCopilot(question, context, settings) {
     const request = conversationQueue.then(async () => {
         await applyModelSettings(settings);
-        const response = await sendAndWaitForTurn(session, {
-            prompt: buildPrompt(question, context),
-            displayPrompt: `[Budget Lab] ${question}`,
-            mode: "enqueue",
-            agentMode: "interactive",
-        }, 120_000);
+        const currentModel = await session.rpc.model.getCurrent();
+        const response = await askInIsolatedSession(session, buildPrompt(question, context), currentModel.modelId, 120_000);
         const text = response?.data?.content?.trim();
         if (!text) throw new Error("Copilot did not return an answer.");
         return text;

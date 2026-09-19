@@ -8,7 +8,7 @@ import { registerEnvironment, validateMaterializedScenario, validateEnvironment 
 import { trimToastStack } from "../src/toast-stack.js";
 import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend, validateAssistantDraft } from "../src/assistant.js";
 import { includedPoolHistoryResults } from "../src/history.js";
-import { sendAndWaitForTurn } from "../.github/extensions/budget-lab/copilot-request.mjs";
+import { askInIsolatedSession } from "../.github/extensions/budget-lab/copilot-request.mjs";
 
 async function fileFetch(url) {
   try {
@@ -89,28 +89,32 @@ test("assistant backend stays scripted unless Copilot is explicitly selected", (
   assert.equal(resolveAssistantBackend("?assistantBackend=copilot"), ASSISTANT_BACKENDS.copilot);
 });
 
-test("Copilot canvas requests resolve from their own completed turn without waiting for session idle", async () => {
-  const listeners = new Set();
-  const session = {
-    on(handler) {
-      listeners.add(handler);
-      return () => listeners.delete(handler);
-    },
-    async send() {
-      const emit = (event) => listeners.forEach((handler) => handler(event));
-      emit({ type: "user.message", data: { messageId: "unrelated", turnId: "turn-1" } });
-      emit({ type: "assistant.message", data: { content: "Ignore me", turnId: "turn-1" } });
-      emit({ type: "assistant.turn_end", data: { turnId: "turn-1" } });
-      emit({ type: "user.message", data: { messageId: "request-2", turnId: "turn-2" } });
-      emit({ type: "assistant.message", data: { content: "Budget answer", turnId: "turn-2" } });
-      emit({ type: "assistant.turn_end", data: { turnId: "turn-2" } });
-      return "request-2";
+test("Copilot canvas requests run in an isolated session and return its final answer", async () => {
+  const calls = [];
+  const connection = {
+    async sendRequest(method, params) {
+      calls.push({ method, params });
+      if (method === "session.create") return { sessionId: params.sessionId };
+      if (method === "session.send") return { messageId: "request-1" };
+      if (method === "session.eventLog.read") {
+        return {
+          cursor: "tail",
+          events: [
+            { type: "assistant.message", data: { content: "Budget answer" } },
+            { type: "session.idle", data: { mode: "interactive" } },
+          ],
+        };
+      }
+      if (method === "session.delete") return { success: true };
+      throw new Error(`Unexpected method: ${method}`);
     },
   };
 
-  const response = await sendAndWaitForTurn(session, { prompt: "Question" }, 50);
+  const response = await askInIsolatedSession({ connection }, "Question", "auto", 50);
   assert.equal(response.data.content, "Budget answer");
-  assert.equal(listeners.size, 0);
+  assert.deepEqual(calls.map((call) => call.method), ["session.create", "session.send", "session.eventLog.read", "session.delete"]);
+  assert.deepEqual(calls[0].params.availableTools, ["skill"]);
+  assert.equal(calls[1].params.sessionId, calls[0].params.sessionId);
 });
 
 test("Copilot assistant provider posts bounded context and validates its response", async () => {
@@ -1120,7 +1124,7 @@ test("assistant is available globally as a collapsible side panel", async () => 
   assert.equal(styles.includes(".assistant-bubble strong"), false);
   assert.match(extension, /enum: \["scripted", "copilot"\]/);
   assert.match(extension, /ctx\.input\?\.assistantBackend === "scripted" \? "scripted" : "copilot"/);
-  assert.match(extension, /sendAndWaitForTurn\(session,/);
+  assert.match(extension, /askInIsolatedSession\(session,/);
   assert.doesNotMatch(extension, /session\.sendAndWait/);
   assert.match(extension, /github-ai-credit-finops/);
   assert.match(extension, /session\.rpc\.model\.list/);

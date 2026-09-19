@@ -1,59 +1,57 @@
-export async function sendAndWaitForTurn(session, options, timeoutMs = 120_000) {
-    const userTurns = new Map();
-    const assistantMessages = new Map();
-    const completedTurns = new Set();
-    let expectedMessageId;
-    let expectedTurnId;
-    let resolveOutcome;
-    let rejectOutcome;
+import { randomUUID } from "node:crypto";
 
-    const outcome = new Promise((resolve, reject) => {
-        resolveOutcome = resolve;
-        rejectOutcome = reject;
-    });
+export async function askInIsolatedSession(parentSession, prompt, model, timeoutMs = 120_000) {
+    const connection = parentSession.connection;
+    if (!connection?.sendRequest) throw new Error("Copilot session connection is unavailable.");
 
-    const finishCompletedTurn = () => {
-        if (!expectedTurnId || !completedTurns.has(expectedTurnId)) return;
-        const response = assistantMessages.get(expectedTurnId);
-        const text = response?.data?.content?.trim();
-        if (!text) rejectOutcome(new Error("Copilot did not return an answer."));
-        else resolveOutcome(response);
-    };
-
-    const unsubscribe = session.on((event) => {
-        if (event.type === "user.message" && event.data.messageId && event.data.turnId) {
-            userTurns.set(event.data.messageId, event.data.turnId);
-            if (event.data.messageId === expectedMessageId) {
-                expectedTurnId = event.data.turnId;
-                finishCompletedTurn();
-            }
-            return;
-        }
-        if (!event.agentId && event.type === "assistant.message" && event.data.turnId) {
-            assistantMessages.set(event.data.turnId, event);
-            return;
-        }
-        if (!event.agentId && event.type === "assistant.turn_end") {
-            completedTurns.add(event.data.turnId);
-            finishCompletedTurn();
-            return;
-        }
-        if (event.type === "session.error") {
-            rejectOutcome(new Error(event.data.message));
-        }
-    });
-
-    const timeout = setTimeout(() => {
-        rejectOutcome(new Error(`Timeout after ${timeoutMs}ms waiting for the Copilot turn to complete.`));
-    }, timeoutMs);
+    const sessionId = randomUUID();
+    const startedAt = Date.now();
+    let cursor;
+    let lastAssistantMessage;
 
     try {
-        expectedMessageId = await session.send(options);
-        expectedTurnId = userTurns.get(expectedMessageId);
-        finishCompletedTurn();
-        return await outcome;
+        await connection.sendRequest("session.create", {
+            sessionId,
+            clientName: "budget-lab-assistant",
+            model,
+            availableTools: ["skill"],
+            enableConfigDiscovery: true,
+            enableSkills: true,
+            requestPermission: false,
+            workingDirectory: process.cwd(),
+            systemMessage: {
+                mode: "append",
+                content: "Answer only the embedded Budget Lab question. Do not modify files or state.",
+            },
+        });
+        await connection.sendRequest("session.send", {
+            sessionId,
+            prompt,
+            mode: "immediate",
+            agentMode: "interactive",
+        });
+
+        while (Date.now() - startedAt < timeoutMs) {
+            const remaining = timeoutMs - (Date.now() - startedAt);
+            const page = await connection.sendRequest("session.eventLog.read", {
+                sessionId,
+                cursor,
+                max: 200,
+                waitMs: Math.min(30_000, Math.max(1, remaining)),
+                agentScope: "primary",
+            });
+            cursor = page.cursor;
+            for (const event of page.events) {
+                if (event.type === "assistant.message" && event.data.content?.trim()) lastAssistantMessage = event;
+                if (event.type === "session.error") throw new Error(event.data.message);
+                if (event.type === "session.idle") {
+                    if (!lastAssistantMessage) throw new Error("Copilot did not return an answer.");
+                    return lastAssistantMessage;
+                }
+            }
+        }
+        throw new Error(`Timeout after ${timeoutMs}ms waiting for the Copilot answer.`);
     } finally {
-        clearTimeout(timeout);
-        unsubscribe();
+        await connection.sendRequest("session.delete", { sessionId }).catch(() => undefined);
     }
 }
