@@ -15,6 +15,7 @@ Files directly under `scenarios/` are guided Scenario Studio definitions, except
 - Setup and configuration steps may mutate existing enterprise, budget, user, organization, repository, cost-center, or product data. They cannot create entities.
 - Verify every referenced entity exists in each promised default-set baseline. Prefer stable seed IDs when the exact persona is not material.
 - Keep dates chronological and replay deterministic. Materialization clears baseline events and rebuilds from the baseline through the selected step.
+- Author dates so the timeline reads naturally: `startDate` on the first of the month so the period opens at zero spend, the first usage event at least six days later, the last usage event three or four days before the month ends, and at least three usage events on distinct days.
 - Use official HTTPS GitHub documentation in `sourceUrls` for billing claims and identify simulator assumptions explicitly.
 - Add focused assertions in `tests/engine.test.js` for all documented outcomes, including status, blocking reason, pool movement, cost, affected budgets, percentages, or alerts as applicable.
 - Run `npm test` after any definition, catalog, or schema change.
