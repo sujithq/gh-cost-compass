@@ -872,13 +872,18 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
   assert.match(app, /optimizedBucketPanelExpansion\.set\("credit-buckets"/);
   assert.match(app, /classList\.toggle\("buckets-collapsed", !expanded\)/);
+  assert.match(app, /#optimized-buckets-panel"\)\.classList\.toggle\("is-collapsed", !bucketExpanded\)/);
   assert.match(app, /const optimizedStepPanelExpansion = new Map\(\)/);
   assert.match(app, /optimizedStepPanelExpansion\.get\("current-step"\) \|\| false/);
   assert.match(app, /classList\.toggle\("step-details-expanded", stepExpanded\)/);
+  assert.match(app, /classList\.toggle\("side-panel-expanded", bucketExpanded \|\| stepExpanded\)/);
+  assert.match(app, /classList\.toggle\("side-panels-collapsed", !bucketExpanded && !stepExpanded\)/);
   assert.match(app, /renderOptimizedStepDetail\(definition, replay\)/);
   assert.match(app, /innerHTML = icon\(expanded \? "panelCollapse" : "panelExpand"\)/);
   assert.match(app, /const poolToggle = event\.target\.closest\("\[data-toggle-pool\]"\);[\s\S]{0,500}const scopeNode/);
   assert.match(html, /id="optimized-buckets-toggle"/);
+  assert.match(html, /id="optimized-buckets-panel"/);
+  assert.match(html, /optimized-side-panel optimized-buckets-panel/);
   assert.match(html, /class="icon-button"/);
   assert.match(html, /id="optimized-layout"/);
   assert.match(html, /aria-controls="optimized-buckets-content"/);
@@ -968,6 +973,10 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /closest\("\[data-scenario-timeline-step\]"\)/);
   assert.match(app, /function stepDisplayDate\(/);
   assert.match(app, /activeStep\.description/);
+  assert.match(app, /class="scenario-timeline-grid"/);
+  assert.match(app, /class="scenario-timeline-tick"/);
+  assert.match(app, /return `calc\(\$\{ratio \* 100\}% \$\{inset < 0 \? "-" : "\+"\} \$\{Math\.abs\(inset\)\}px\)`/);
+  assert.match(styles, /background-size:calc\(100% \/ var\(--timeline-days\)\)/);
   assert.match(app, /function updateBucketPanel\(/);
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);

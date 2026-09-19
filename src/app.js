@@ -1616,17 +1616,40 @@ function renderOptimizedBuckets(replay) {
 function renderGlobalTimeline(definition) {
   const activeIndex = scenarioRun.started ? scenarioRun.stepIndex : -1;
   const dates = definition.steps.map((step, index) => stepDisplayDate(definition, step, index, definition.steps.length));
-  const times = dates.map((date) => new Date(`${date}T00:00:00`).getTime());
+  const times = dates.map((date) => {
+    const [year, month, day] = date.split("-").map(Number);
+    return Date.UTC(year, month - 1, day);
+  });
   const min = Math.min(...times);
   const max = Math.max(...times);
-  const span = Math.max(1, max - min);
-  $("#global-timeline").innerHTML = definition.steps.map((step, index) => {
-    // Inset the plotted range so the first/last markers (centered via translateX(-50%)) keep their
-    // date labels inside the track instead of overflowing the panel edges.
-    const position = 6 + ((times[index] - min) / span) * 88;
+  const firstDate = new Date(min);
+  const lastDate = new Date(max);
+  const axisStart = Date.UTC(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), 1);
+  const axisEnd = Date.UTC(lastDate.getUTCFullYear(), lastDate.getUTCMonth() + 1, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const axisDays = Math.max(1, Math.round((axisEnd - axisStart) / dayMs) + 1);
+  const axisSpan = Math.max(1, axisEnd - axisStart);
+  const axisRatio = (time) => (time - axisStart) / axisSpan;
+  const axisPosition = (time) => 3 + axisRatio(time) * 94;
+  const stepPosition = (time) => {
+    const ratio = axisRatio(time);
+    const inset = 26 - ratio * 52;
+    return `calc(${ratio * 100}% ${inset < 0 ? "-" : "+"} ${Math.abs(inset)}px)`;
+  };
+  const ticks = [];
+  for (let time = axisStart; time <= axisEnd; time += 7 * dayMs) ticks.push(time);
+  if ((axisEnd - ticks.at(-1)) / dayMs >= 4) ticks.push(axisEnd);
+  const axisHtml = `<div class="scenario-timeline-grid" style="--timeline-days:${axisDays}" aria-hidden="true">${ticks.map((time) => {
+    const date = new Date(time);
+    const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    return `<span class="scenario-timeline-tick" style="left:${axisPosition(time)}%"><small>${escapeHtml(label)}</small></span>`;
+  }).join("")}</div>`;
+  const stepsHtml = definition.steps.map((step, index) => {
+    const position = stepPosition(times[index]);
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
-    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
+    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");
+  $("#global-timeline").innerHTML = axisHtml + stepsHtml;
   const activeStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
   $("#global-timeline-label").textContent = activeStep ? `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}` : `${definition.steps.length} steps · not started`;
   $("#global-timeline-step-summary").innerHTML = activeStep
@@ -1678,7 +1701,9 @@ function renderOptimizedExperience(replay, currency) {
 
   setPanelHtmlWithBarTransitions("#optimized-hierarchy", hierarchyTreeHtml("optimized", { scopeNodes: true, replay }));
   const definition = selectedScenarioDefinition();
+  const bucketExpanded = optimizedBucketsExpanded();
   const stepExpanded = optimizedStepDetailsExpanded();
+  $("#optimized-buckets-panel").classList.toggle("is-collapsed", !bucketExpanded);
   $("#optimized-current-step-panel").classList.toggle("is-collapsed", !stepExpanded);
   $("#optimized-step-toggle").setAttribute("aria-expanded", String(stepExpanded));
   $("#optimized-step-toggle").innerHTML = icon(stepExpanded ? "panelCollapse" : "panelExpand");
@@ -1686,6 +1711,8 @@ function renderOptimizedExperience(replay, currency) {
   $("#optimized-step-toggle").title = stepExpanded ? "Collapse Current step details" : "Expand Current step details";
   $("#optimized-step-detail").hidden = !stepExpanded;
   $("#optimized-layout").classList.toggle("step-details-expanded", stepExpanded);
+  $("#optimized-layout").classList.toggle("side-panel-expanded", bucketExpanded || stepExpanded);
+  $("#optimized-layout").classList.toggle("side-panels-collapsed", !bucketExpanded && !stepExpanded);
   if (definition) renderOptimizedStepDetail(definition, replay);
   else $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
 }
