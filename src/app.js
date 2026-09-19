@@ -896,7 +896,7 @@ const optimizedBucketPanelExpansion = new Map();
 function optimizedBucketsExpanded() {
   return optimizedBucketPanelExpansion.has("credit-buckets")
     ? optimizedBucketPanelExpansion.get("credit-buckets")
-    : scenario.users.length <= HIERARCHY_AUTO_COLLAPSE_USERS;
+    : false;
 }
 const optimizedStepPanelExpansion = new Map();
 function optimizedStepDetailsExpanded() {
@@ -1398,14 +1398,12 @@ function renderGlobalScenarioHeader(definition, definitions) {
     selector.disabled = true;
     $("#global-scenario-title").textContent = "No compatible guided scenarios";
     $("#global-scenario-summary").textContent = scenarioCatalogError || `No guided scenarios are available for ${selectedDefaultSetName()}.`;
-    $("#global-scenario-tags").innerHTML = "";
     return;
   }
   selector.disabled = false;
   selector.innerHTML = definitions.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === definition.id ? "selected" : ""}>${escapeHtml(item.title)}${builtInScenarioDefinitions.includes(item) ? "" : " · custom"}</option>`).join("");
   $("#global-scenario-title").textContent = definition.title;
   $("#global-scenario-summary").textContent = `${definition.summary} · ${definitions.length} available for ${selectedDefaultSetName()}`;
-  $("#global-scenario-tags").innerHTML = (definition.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
 }
 
 function bucketRowDetail(item) {
@@ -1595,7 +1593,7 @@ function renderOptimizedBuckets(replay) {
   const expanded = optimizedBucketsExpanded();
   $("#optimized-buckets-summary").textContent = `${1 + visibleCostCenterPools.length} pool${visibleCostCenterPools.length === 0 ? "" : "s"} · ${userBudgets.length + meteredBudgets.length} budget${userBudgets.length + meteredBudgets.length === 1 ? "" : "s"} · ${visibleAlertCount} alert${visibleAlertCount === 1 ? "" : "s"}`;
   $("#optimized-buckets-toggle").setAttribute("aria-expanded", String(expanded));
-  $("#optimized-buckets-toggle").innerHTML = icon(expanded ? "panelCollapse" : "panelExpand");
+  $("#optimized-buckets-toggle").innerHTML = icon(expanded ? "panelExpand" : "panelCollapse");
   $("#optimized-buckets-toggle").setAttribute("aria-label", expanded ? "Collapse Credit buckets to the right" : "Expand Credit buckets");
   $("#optimized-buckets-toggle").title = expanded ? "Collapse Credit buckets" : "Expand Credit buckets";
   $("#optimized-buckets-content").hidden = !expanded;
@@ -1630,24 +1628,37 @@ function renderGlobalTimeline(definition) {
   const axisDays = Math.max(1, Math.round((axisEnd - axisStart) / dayMs) + 1);
   const axisSpan = Math.max(1, axisEnd - axisStart);
   const axisRatio = (time) => (time - axisStart) / axisSpan;
-  const axisPosition = (time) => 3 + axisRatio(time) * 94;
-  const stepPosition = (time) => {
-    const ratio = axisRatio(time);
-    const inset = 26 - ratio * 52;
-    return `calc(${ratio * 100}% ${inset < 0 ? "-" : "+"} ${Math.abs(inset)}px)`;
-  };
+  const axisPosition = (time) => axisRatio(time) * 100;
   const ticks = [];
   for (let time = axisStart; time <= axisEnd; time += 7 * dayMs) ticks.push(time);
   if ((axisEnd - ticks.at(-1)) / dayMs >= 4) ticks.push(axisEnd);
-  const axisHtml = `<div class="scenario-timeline-grid" style="--timeline-days:${axisDays}" aria-hidden="true">${ticks.map((time) => {
+  const timelineStates = [-1, ...definition.steps.map((_, index) => index)].map((stepIndex) => replayScenario(materializeScenarioForDefaultSet(definition, stepIndex)));
+  const usagePoints = timelineStates.map((replay, index) => ({
+    x: index === 0 ? 0 : axisRatio(times[index - 1]) * 1000,
+    included: replay.pool.grandConsumed,
+    overage: replay.results.reduce((sum, result) => sum + (result.status === "accepted" ? Number(result.meteredQuantity || 0) : 0), 0),
+  }));
+  const maxCredits = Math.max(1, ...usagePoints.map((point) => point.included + point.overage));
+  const chartY = (value) => 58 - value / maxCredits * 48;
+  const points = (items, valueFor) => items.map((point) => `${point.x},${chartY(valueFor(point))}`).join(" ");
+  const activePointIndex = Math.max(0, activeIndex + 1);
+  const executedPoints = usagePoints.slice(0, activePointIndex + 1);
+  const pendingPoints = usagePoints.slice(activePointIndex);
+  const currentUsage = usagePoints[activePointIndex];
+  const aiCreditPrice = Number(materializeScenarioForDefaultSet(definition, -1).products.find((product) => product.id === "ai-credits")?.unitPrice || 0.01);
+  const executedOverageLine = currentUsage.overage > 0 ? `<polyline class="usage-line executed total" points="${points(executedPoints, (point) => point.included + point.overage)}"/>` : "";
+  const chartHtml = `<div class="scenario-usage-chart"><div class="scenario-usage-legend"><span class="included">Included <b>${currentUsage.included.toLocaleString()} credits</b></span><span class="overage">Paid overage <b>${currentUsage.overage.toLocaleString()} credit-equivalent · ${money(currentUsage.overage * aiCreditPrice, "USD")}</b></span></div><svg viewBox="0 0 1000 64" preserveAspectRatio="none" aria-label="Cumulative included and paid-overage AI credit usage"><polyline class="usage-line pending total" points="${points(pendingPoints, (point) => point.included + point.overage)}"/><polyline class="usage-line pending included" points="${points(pendingPoints, (point) => point.included)}"/>${executedOverageLine}<polyline class="usage-line executed included" points="${points(executedPoints, (point) => point.included)}"/></svg></div>`;
+  const axisHtml = `${chartHtml}<div class="scenario-timeline-grid" style="--timeline-days:${axisDays}" aria-hidden="true">${ticks.map((time, index) => {
     const date = new Date(time);
     const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-    return `<span class="scenario-timeline-tick" style="left:${axisPosition(time)}%"><small>${escapeHtml(label)}</small></span>`;
+    const edgeClass = index === 0 ? " at-start" : index === ticks.length - 1 ? " at-end" : "";
+    return `<span class="scenario-timeline-tick${edgeClass}" style="left:${axisPosition(time)}%"><small>${escapeHtml(label)}</small></span>`;
   }).join("")}</div>`;
   const stepsHtml = definition.steps.map((step, index) => {
-    const position = stepPosition(times[index]);
+    const position = axisPosition(times[index]);
+    const edgeClass = position === 0 ? " at-start" : position === 100 ? " at-end" : "";
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
-    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
+    return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}${edgeClass}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");
   $("#global-timeline").innerHTML = axisHtml + stepsHtml;
   const activeStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
@@ -1706,7 +1717,7 @@ function renderOptimizedExperience(replay, currency) {
   $("#optimized-buckets-panel").classList.toggle("is-collapsed", !bucketExpanded);
   $("#optimized-current-step-panel").classList.toggle("is-collapsed", !stepExpanded);
   $("#optimized-step-toggle").setAttribute("aria-expanded", String(stepExpanded));
-  $("#optimized-step-toggle").innerHTML = icon(stepExpanded ? "panelCollapse" : "panelExpand");
+  $("#optimized-step-toggle").innerHTML = icon(stepExpanded ? "panelExpand" : "panelCollapse");
   $("#optimized-step-toggle").setAttribute("aria-label", stepExpanded ? "Collapse Current step details" : "Expand Current step details");
   $("#optimized-step-toggle").title = stepExpanded ? "Collapse Current step details" : "Expand Current step details";
   $("#optimized-step-detail").hidden = !stepExpanded;

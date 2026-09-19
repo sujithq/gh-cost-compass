@@ -869,7 +869,7 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   assert.match(app, /overrideCostCenterIncludedUsageCap\(scenario, target\.id, !target\.aiCreditPoolEnabled\)/);
   assert.match(app, /saveAndRender\(target\.aiCreditPoolEnabled \? "AI credit included usage cap turned on"/);
   assert.match(app, /const optimizedBucketPanelExpansion = new Map\(\)/);
-  assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
+  assert.match(app, /optimizedBucketPanelExpansion\.get\("credit-buckets"\)[\s\S]{0,100}: false/);
   assert.match(app, /optimizedBucketPanelExpansion\.set\("credit-buckets"/);
   assert.match(app, /classList\.toggle\("buckets-collapsed", !expanded\)/);
   assert.match(app, /#optimized-buckets-panel"\)\.classList\.toggle\("is-collapsed", !bucketExpanded\)/);
@@ -879,7 +879,8 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   assert.match(app, /classList\.toggle\("side-panel-expanded", bucketExpanded \|\| stepExpanded\)/);
   assert.match(app, /classList\.toggle\("side-panels-collapsed", !bucketExpanded && !stepExpanded\)/);
   assert.match(app, /renderOptimizedStepDetail\(definition, replay\)/);
-  assert.match(app, /innerHTML = icon\(expanded \? "panelCollapse" : "panelExpand"\)/);
+  assert.match(app, /innerHTML = icon\(expanded \? "panelExpand" : "panelCollapse"\)/);
+  assert.match(app, /innerHTML = icon\(stepExpanded \? "panelExpand" : "panelCollapse"\)/);
   assert.match(app, /const poolToggle = event\.target\.closest\("\[data-toggle-pool\]"\);[\s\S]{0,500}const scopeNode/);
   assert.match(html, /id="optimized-buckets-toggle"/);
   assert.match(html, /id="optimized-buckets-panel"/);
@@ -974,9 +975,12 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   assert.match(app, /function stepDisplayDate\(/);
   assert.match(app, /activeStep\.description/);
   assert.match(app, /class="scenario-timeline-grid"/);
-  assert.match(app, /class="scenario-timeline-tick"/);
-  assert.match(app, /return `calc\(\$\{ratio \* 100\}% \$\{inset < 0 \? "-" : "\+"\} \$\{Math\.abs\(inset\)\}px\)`/);
+  assert.match(app, /class="scenario-timeline-tick\$\{edgeClass\}"/);
+  assert.match(app, /class="scenario-usage-chart"/);
+  assert.match(app, /result\.meteredQuantity/);
+  assert.match(app, /currentUsage\.overage \* aiCreditPrice/);
   assert.match(styles, /background-size:calc\(100% \/ var\(--timeline-days\)\)/);
+  assert.match(styles, /\.usage-line\.pending\{stroke:#b8c0cc/);
   assert.match(app, /function updateBucketPanel\(/);
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);

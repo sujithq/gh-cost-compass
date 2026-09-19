@@ -40,13 +40,9 @@
       <section id="global-timeline-bar" class="global-timeline-bar">
         <div class="global-timeline-head">
           <div class="global-timeline-titles"><p class="eyebrow">SCENARIO TIMELINE</p><h2 id="global-scenario-title"></h2><p class="muted" id="global-scenario-summary"></p></div>
-          <div class="button-row compact-row">
-            <label>Default set<select id="default-scenario-set"></select></label>
-            <label>Scenario<select id="global-scenario-definition"></select></label>
-          </div>
         </div>
         <div class="timeline-row"><button type="button" id="global-timeline-prev" title="Previous step">‹</button><div id="global-timeline" class="scenario-timeline" role="list"></div><button type="button" id="global-timeline-next" title="Next step">›</button></div>
-        <div class="global-timeline-foot"><div id="global-scenario-tags" class="scenario-tags"></div><div class="global-timeline-current"><span id="global-timeline-label"></span><p id="global-timeline-step-summary" aria-live="polite"></p></div></div>
+        <div class="global-timeline-foot"><div class="button-row compact-row global-timeline-selectors"><label>Default set<select id="default-scenario-set"></select></label><label>Scenario<select id="global-scenario-definition"></select></label></div><div class="global-timeline-current"><span id="global-timeline-label"></span><p id="global-timeline-step-summary" aria-live="polite"></p></div></div>
       </section>
 
       <section id="dashboard" class="view active">
