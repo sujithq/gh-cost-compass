@@ -217,14 +217,15 @@ function progressBarKey(bar, index) {
 function setPanelHtmlWithBarTransitions(selector, html) {
   const container = $(selector);
   if (!container) return;
+  const progressFills = (host) => [...host.querySelectorAll(".progress > div, .progress [data-progress-fill]")];
   const previous = new Map();
-  [...container.querySelectorAll(".progress > div")].forEach((bar, index) => {
+  progressFills(container).forEach((bar, index) => {
     previous.set(progressBarKey(bar, index), bar.style.width);
   });
 
   container.innerHTML = html;
 
-  const pending = [...container.querySelectorAll(".progress > div")].map((bar, index) => ({ bar, target: bar.style.width, before: previous.get(progressBarKey(bar, index)) }))
+  const pending = progressFills(container).map((bar, index) => ({ bar, target: bar.style.width, before: previous.get(progressBarKey(bar, index)) }))
     .filter((item) => item.before !== undefined && item.before !== item.target);
   if (!pending.length) return;
   pending.forEach((item) => { item.bar.style.width = item.before; });
@@ -897,6 +898,10 @@ function optimizedBucketsExpanded() {
     ? optimizedBucketPanelExpansion.get("credit-buckets")
     : scenario.users.length <= HIERARCHY_AUTO_COLLAPSE_USERS;
 }
+const optimizedStepPanelExpansion = new Map();
+function optimizedStepDetailsExpanded() {
+  return optimizedStepPanelExpansion.get("current-step") || false;
+}
 function hierarchyBadgeHtml(label, className = "", attributes = "") {
   const tag = attributes ? "button" : "span";
   return `<${tag}${attributes ? ` type="button" ${attributes}` : ""} class="hierarchy-badge${className ? ` ${className}` : ""}">${escapeHtml(label)}</${tag}>`;
@@ -910,7 +915,7 @@ function hierarchyIncludedCreditsMeterHtml(replay) {
   const costCenterConsumed = enabledCostCenterPools.reduce((sum, item) => sum + item.consumed, 0);
   const total = replay.pool.grandTotal;
   const segment = (label, consumed, amount, className) => amount > 0
-    ? `<span class="hierarchy-composition-segment ${className}" style="width:${total ? amount / total * 100 : 0}%" title="${escapeHtml(label)}: ${consumed.toLocaleString()} of ${amount.toLocaleString()} credits"><i style="width:${Math.min(100, amount ? consumed / amount * 100 : 0)}%"></i></span>`
+    ? `<span class="hierarchy-composition-segment ${className} ${statusClass(amount ? consumed / amount * 100 : 0)}" style="width:${total ? amount / total * 100 : 0}%" title="${escapeHtml(label)}: ${consumed.toLocaleString()} of ${amount.toLocaleString()} credits"><i data-progress-fill data-bar-key="included-${className}" style="width:${Math.min(100, amount ? consumed / amount * 100 : 0)}%"></i></span>`
     : "";
   return `<div class="hierarchy-meter hierarchy-meter-composed"><span><b>Included AI credits</b><em>${replay.pool.grandConsumed.toLocaleString()} / ${total.toLocaleString()} credits · ${percent(replay.pool.grandPercent)}</em></span><div class="progress hierarchy-composition" role="progressbar" aria-label="Included AI credits: ${replay.pool.grandConsumed.toLocaleString()} of ${total.toLocaleString()} credits, ${percent(replay.pool.grandPercent)} used; ${costCenterConsumed.toLocaleString()} from cost-center pools and ${replay.pool.consumed.toLocaleString()} from the shared pool" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, replay.pool.grandPercent)}">${segment("Cost-center pools", costCenterConsumed, costCenterTotal, "cost-centers")}${segment("Shared pool", replay.pool.consumed, replay.pool.total, "shared")}</div><div class="hierarchy-meter-key"><span class="cost-centers">Cost-center pools ${costCenterConsumed.toLocaleString()} / ${costCenterTotal.toLocaleString()}</span><span class="shared">Shared pool ${replay.pool.consumed.toLocaleString()} / ${replay.pool.total.toLocaleString()}</span></div></div>`;
 }
@@ -1595,7 +1600,6 @@ function renderOptimizedBuckets(replay) {
   $("#optimized-buckets-toggle").title = expanded ? "Collapse Credit buckets" : "Expand Credit buckets";
   $("#optimized-buckets-content").hidden = !expanded;
   $("#optimized-layout").classList.toggle("buckets-collapsed", !expanded);
-  $("#optimized-current-step-panel").hidden = !expanded;
   const configHost = $("#optimized-scope-config");
   if (configHost) configHost.innerHTML = scopeConfigurationHtml(describeScopeConfiguration(scenario, optimizedScope));
   updateBucketPanel([
@@ -1623,7 +1627,11 @@ function renderGlobalTimeline(definition) {
     const status = index < activeIndex ? "complete" : index === activeIndex ? "active" : "pending";
     return `<button type="button" class="scenario-timeline-step ${status} type-${escapeHtml(step.type)}" style="left:${position}%" data-scenario-timeline-step="${index}" title="${escapeHtml(step.title)} · ${escapeHtml(dates[index])} · ${escapeHtml(step.type)}" role="listitem" aria-current="${index === activeIndex ? "step" : "false"}"><span class="scenario-timeline-dot">${index + 1}</span><small>${escapeHtml(dates[index].slice(5))}</small></button>`;
   }).join("");
-  $("#global-timeline-label").textContent = activeIndex < 0 ? `${definition.steps.length} steps · not started` : `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}`;
+  const activeStep = activeIndex >= 0 ? definition.steps[activeIndex] : null;
+  $("#global-timeline-label").textContent = activeStep ? `Step ${activeIndex + 1} of ${definition.steps.length} · ${dates[activeIndex]}` : `${definition.steps.length} steps · not started`;
+  $("#global-timeline-step-summary").innerHTML = activeStep
+    ? `<strong>${escapeHtml(activeStep.title)}</strong><span>${escapeHtml(activeStep.description)}</span>`
+    : `<span>Select a step to see its explanation here.</span>`;
   $("#global-timeline-prev").disabled = !scenarioRun.started || activeIndex < 0;
   $("#global-timeline-next").disabled = activeIndex >= definition.steps.length - 1;
 }
@@ -1637,6 +1645,7 @@ function renderGlobalScenarioBar() {
   }
   $("#global-timeline").innerHTML = "";
   $("#global-timeline-label").textContent = "";
+  $("#global-timeline-step-summary").textContent = "";
   $("#global-timeline-prev").disabled = true;
   $("#global-timeline-next").disabled = true;
 }
@@ -1665,16 +1674,20 @@ function renderOptimizedExperience(replay, currency) {
   if (!scopeItems.some((item) => item.id === optimizedScope.id)) optimizedScope.id = scopeItems[0]?.id || "";
   setOptions("#optimized-scope", scopeItems, optimizedScope.id);
 
-  const definition = selectedScenarioDefinition();
   renderOptimizedBuckets(replay);
 
-  $("#optimized-hierarchy").innerHTML = hierarchyTreeHtml("optimized", { scopeNodes: true, replay });
-
-  if (definition) {
-    renderOptimizedStepDetail(definition, replay);
-  } else {
-    $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
-  }
+  setPanelHtmlWithBarTransitions("#optimized-hierarchy", hierarchyTreeHtml("optimized", { scopeNodes: true, replay }));
+  const definition = selectedScenarioDefinition();
+  const stepExpanded = optimizedStepDetailsExpanded();
+  $("#optimized-current-step-panel").classList.toggle("is-collapsed", !stepExpanded);
+  $("#optimized-step-toggle").setAttribute("aria-expanded", String(stepExpanded));
+  $("#optimized-step-toggle").innerHTML = icon(stepExpanded ? "panelCollapse" : "panelExpand");
+  $("#optimized-step-toggle").setAttribute("aria-label", stepExpanded ? "Collapse Current step details" : "Expand Current step details");
+  $("#optimized-step-toggle").title = stepExpanded ? "Collapse Current step details" : "Expand Current step details";
+  $("#optimized-step-detail").hidden = !stepExpanded;
+  $("#optimized-layout").classList.toggle("step-details-expanded", stepExpanded);
+  if (definition) renderOptimizedStepDetail(definition, replay);
+  else $("#optimized-step-detail").innerHTML = `<div class="empty">No scenario selected.</div>`;
 }
 
 
@@ -1810,6 +1823,13 @@ document.addEventListener("click", (event) => {
     optimizedBucketPanelExpansion.set("credit-buckets", !optimizedBucketsExpanded());
     renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
     $("#optimized-buckets-toggle")?.focus();
+    return;
+  }
+  const optimizedStepToggle = event.target.closest("#optimized-step-toggle");
+  if (optimizedStepToggle) {
+    optimizedStepPanelExpansion.set("current-step", !optimizedStepDetailsExpanded());
+    renderOptimizedExperience(replayScenario(scenario), scenario.enterprise.currency);
+    $("#optimized-step-toggle")?.focus();
     return;
   }
   const budgetSectionMore = event.target.closest("[data-budget-section-more]");

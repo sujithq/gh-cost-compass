@@ -839,7 +839,7 @@ test("optimized hierarchy surfaces AI-credit settings and consumption without ch
   assert.match(app, /function hierarchyIncludedCreditsMeterHtml\(replay\)/);
   assert.match(app, /<b>Included AI credits<\/b>/);
   assert.match(app, /replay\.pool\.grandConsumed\.toLocaleString\(\)/);
-  assert.match(app, /class="hierarchy-composition-segment \$\{className\}"/);
+  assert.match(app, /class="hierarchy-composition-segment \$\{className\} \$\{statusClass/);
   assert.match(app, /Cost-center pools \$\{costCenterConsumed\.toLocaleString\(\)\} \/ \$\{costCenterTotal\.toLocaleString\(\)\}/);
   assert.match(app, /Shared pool \$\{replay\.pool\.consumed\.toLocaleString\(\)\} \/ \$\{replay\.pool\.total\.toLocaleString\(\)\}/);
   assert.match(app, /hierarchyMeterHtml\("Included allowance", pool\.percent, `\$\{pool\.consumed\.toLocaleString\(\)\} credits`/);
@@ -872,7 +872,10 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   assert.match(app, /scenario\.users\.length <= HIERARCHY_AUTO_COLLAPSE_USERS/);
   assert.match(app, /optimizedBucketPanelExpansion\.set\("credit-buckets"/);
   assert.match(app, /classList\.toggle\("buckets-collapsed", !expanded\)/);
-  assert.match(app, /#optimized-current-step-panel"\)\.hidden = !expanded/);
+  assert.match(app, /const optimizedStepPanelExpansion = new Map\(\)/);
+  assert.match(app, /optimizedStepPanelExpansion\.get\("current-step"\) \|\| false/);
+  assert.match(app, /classList\.toggle\("step-details-expanded", stepExpanded\)/);
+  assert.match(app, /renderOptimizedStepDetail\(definition, replay\)/);
   assert.match(app, /innerHTML = icon\(expanded \? "panelCollapse" : "panelExpand"\)/);
   assert.match(app, /const poolToggle = event\.target\.closest\("\[data-toggle-pool\]"\);[\s\S]{0,500}const scopeNode/);
   assert.match(html, /id="optimized-buckets-toggle"/);
@@ -880,6 +883,9 @@ test("optimized cost-center settings replay and Credit buckets preserve their co
   assert.match(html, /id="optimized-layout"/);
   assert.match(html, /aria-controls="optimized-buckets-content"/);
   assert.match(html, /id="optimized-buckets-content"/);
+  assert.match(html, /id="optimized-current-step-panel"/);
+  assert.match(html, /id="optimized-step-toggle"/);
+  assert.match(html, /id="optimized-step-detail"[^>]*hidden/);
 });
 
 test("control evaluation explainers use shared outcome-aware cards across app surfaces", async () => {
@@ -954,13 +960,14 @@ test("scenario timeline lives in the app header so it scrubs every page, not jus
   const barIndex = html.indexOf('id="global-timeline-bar"');
   const firstViewIndex = html.indexOf('class="view');
   assert.ok(barIndex > -1 && firstViewIndex > barIndex, "global timeline bar should precede the page sections");
-  for (const id of ["global-scenario-definition", "global-timeline", "global-timeline-label"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["global-scenario-definition", "global-timeline", "global-timeline-label", "global-timeline-step-summary"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.doesNotMatch(html, /id="optimized-scrubber"/);
   assert.doesNotMatch(html, /id="optimized-timeline"/);
 
   assert.match(app, /data-scenario-timeline-step="\$\{index\}"/);
   assert.match(app, /closest\("\[data-scenario-timeline-step\]"\)/);
   assert.match(app, /function stepDisplayDate\(/);
+  assert.match(app, /activeStep\.description/);
   assert.match(app, /function updateBucketPanel\(/);
   // Rendered on every render() pass rather than from renderOptimizedExperience.
   assert.match(app, /renderGlobalScenarioBar\(\);/);
@@ -1078,7 +1085,7 @@ test("hierarchy nodes name their own entity type and share one icon set across p
   // labels can never drift apart between the dashboard and the optimized page.
   assert.match(app, /function hierarchyTreeHtml\(hostId, \{ scopeNodes = false, replay = null \} = \{\}\)/);
   assert.match(app, /\$\("#hierarchy"\)\.innerHTML = hierarchyTreeHtml\("dashboard"\);/);
-  assert.match(app, /\$\("#optimized-hierarchy"\)\.innerHTML = hierarchyTreeHtml\("optimized", \{ scopeNodes: true, replay \}\);/);
+  assert.match(app, /setPanelHtmlWithBarTransitions\("#optimized-hierarchy", hierarchyTreeHtml\("optimized", \{ scopeNodes: true, replay \}\)\);/);
   assert.match(app, /hierarchy-kind/);
   assert.doesNotMatch(app, /class="tree-org"/);
   // Organization and cost-center glyphs were previously near-identical briefcases.
@@ -1182,9 +1189,14 @@ test("progress bars across every page animate from their previous width", async 
   // bars jump instead of transitioning.
   assert.match(app, /setPanelHtmlWithBarTransitions\("#budget-grid"/);
   assert.match(app, /setPanelHtmlWithBarTransitions\("#scenario-outcome"/);
+  assert.match(app, /setPanelHtmlWithBarTransitions\("#optimized-hierarchy"/);
+  assert.match(app, /\.progress > div, \.progress \[data-progress-fill\]/);
+  assert.match(app, /data-progress-fill data-bar-key="included-\$\{className\}"/);
   assert.doesNotMatch(app, /\$\("#budget-grid"\)\.innerHTML =/);
   assert.match(app, /requestAnimationFrame\(\(\) => requestAnimationFrame\(/);
   assert.match(css, /prefers-reduced-motion:reduce\)\{[^}]*\}\.progress>div[^{]*\{transition:none\}/);
+  assert.match(css, /\.hierarchy-composition-segment\.warning i\{background:var\(--yellow\)\}/);
+  assert.match(css, /\.hierarchy-composition-segment\.danger i\{background:var\(--red\)\}/);
 });
 
 test("eventInScope and budgetInScope correlate usage and budgets by scope, not by fragile name matching", () => {

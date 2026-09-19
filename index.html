@@ -46,7 +46,7 @@
           </div>
         </div>
         <div class="timeline-row"><button type="button" id="global-timeline-prev" title="Previous step">‹</button><div id="global-timeline" class="scenario-timeline" role="list"></div><button type="button" id="global-timeline-next" title="Next step">›</button></div>
-        <div class="global-timeline-foot"><div id="global-scenario-tags" class="scenario-tags"></div><span id="global-timeline-label"></span></div>
+        <div class="global-timeline-foot"><div id="global-scenario-tags" class="scenario-tags"></div><div class="global-timeline-current"><span id="global-timeline-label"></span><p id="global-timeline-step-summary" aria-live="polite"></p></div></div>
       </section>
 
       <section id="dashboard" class="view active">
@@ -79,10 +79,9 @@
               <div id="optimized-buckets" class="optimized-buckets"></div>
               </div>
             </article>
-            <article id="optimized-current-step-panel" class="panel">
-              <div class="panel-title"><h3>Current step</h3><span>Bucket attribution</span></div>
-              <p class="muted timeline-hint">Use the scenario timeline above the page to step through the month and watch thresholds and alerts being reached.</p>
-              <div id="optimized-step-detail" class="optimized-event-detail"></div>
+            <article id="optimized-current-step-panel" class="panel optimized-step-panel is-collapsed">
+              <div class="panel-title optimized-step-panel-title"><div><h3>Current step</h3><span>Full attribution</span></div><button id="optimized-step-toggle" type="button" class="icon-button" aria-expanded="false" aria-controls="optimized-step-detail" aria-label="Expand Current step details" title="Expand Current step details"></button></div>
+              <div id="optimized-step-detail" class="optimized-event-detail" hidden></div>
             </article>
           </aside>
         </div>
