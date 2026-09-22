@@ -73,35 +73,53 @@ per-day `ai_credits_used` field is **already a direct, exact dollar-chargeable f
 user_daily_cost_usd = ai_credits_used * 0.01
 ```
 
-This is the number cost-centre owners should see for chargeback: sum `ai_credits_used * $0.01`
-per user, per cost centre, per period — no modeling or estimation required, and no legacy
-premium-request multiplier involved. This is the primary chargeback metric this data source should
-produce.
+This is the exact **usage-valued consumption** figure per user, per cost centre, per period — no
+modeling or estimation required, and no legacy premium-request multiplier involved. Note carefully
+that it answers "what did this user consume," which is **not** the same as "what should this user
+be charged": because each tier's included credits are prepaid inside the seat price, full chargeback
+of the invoiced Copilot cost allocates the seat charge and the metered charge by different drivers.
+See the "Allocation model" subsection in §5 for that formula and the conditions under which it
+reduces back to this one.
 
 ### Remaining limitation: no *per-model* breakdown of that dollar total
 
 What `ai_credits_used` does **not** give is a *model-level* split of that already-exact dollar
 figure — GitHub's docs state it explicitly: the field is "not broken down by feature, model, or
 surface" and is meant for consumption analysis, not a line-item invoice. Answering "how" a
-cost centre spends (expensive frontier model on trivial tasks vs. lightweight model on the same
-work) therefore still requires estimation, but must use the **current UBB per-token pricing**
-tables, not the legacy multiplier:
+cost centre spends (frontier model vs. lightweight model for comparable work) therefore requires
+an explicit, stated heuristic, using the **current UBB per-token pricing** tables rather than the
+legacy multiplier. Be clear about the gap being bridged: the per-model rows carry **interaction
+counts**, while pricing is **per token**, split across input / cached-input / cache-write / output
+rates. There is no "price per interaction" in the source data, so one must be assumed.
 
 1. Take the per-user, per-model **interaction counts** from `totals_by_model_feature` /
    `totals_by_language_model` (these carry `model` and `feature`/`language` dimensions with
    `*_count` and `loc_*_sum` metrics — no token counts at the per-model level).
-2. Weight each model's share using GitHub's published [per-model, per-token pricing tables](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing)
-   (USD per 1M input/cached-input/cache-write/output tokens, converted to AI credits at the same
-   1 credit = $0.01 rate), since heavier/frontier models are priced markedly higher per token than
-   lightweight models.
+2. Derive a documented **cost weight per interaction** for each model: assume an average token
+   count per interaction and an input/cached/output token mix (differentiated by `feature`, since a
+   chat turn and a completion differ substantially), then price that assumed mix with GitHub's
+   published [per-model, per-token pricing tables](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing).
+   These assumed values are the heuristic — version and date them alongside the pricing table, keep
+   them in one reviewable place rather than scattered through code, and publish a sensitivity range
+   (for example the split under ±50% assumed tokens per interaction) so readers can see how much of
+   the result is assumption rather than data.
 3. Normalize the weighted mix so it sums to the user's **actual, exact** `ai_credits_used` for that
-   day — the per-token pricing table drives the *relative split*, while the *total* dollar amount
-   always comes from the real `ai_credits_used` figure, never from the model-pricing estimate
-   itself. GitHub updates per-model pricing over time, so this reference table must be versioned
-   and dated, not hard-coded once.
+   day — the weights drive only the *relative split*, while the *total* dollar amount always comes
+   from the real `ai_credits_used` figure, never from the model-pricing estimate itself. Where a
+   user's credits cannot be attributed to any model row, surface the remainder as an explicit
+   `unattributed by model` bucket rather than spreading it.
 
-Any UI surfacing the model-level split must clearly distinguish the **exact, direct** total
-chargeback figure from the **estimated** per-model breakdown of it, consistent with this repo's
+If that heuristic cannot be agreed, the honest fallback is to report **model interaction mix only**
+(no dollars below the user level) and leave all dollar consumption at the user total — still enough
+to see a cost centre favouring frontier models, without implying a precision the data lacks.
+
+Note also what this analysis can and cannot say: the reports show *which model was used for which
+feature*, not how complex the task was. "Expensive model on a trivial task" is therefore a
+hypothesis this data can *flag for review* (via model mix per feature), not a conclusion it can
+prove; pair it with human review or a separate complexity signal before acting on it.
+
+Any UI surfacing the model-level split must clearly distinguish the **exact** user-level
+usage-valued figure from the **estimated** per-model breakdown of it, consistent with this repo's
 existing practice of labeling simulator assumptions separately from documented GitHub behavior.
 
 ## 3. Cost-centre attribution
@@ -153,17 +171,11 @@ Azure spend for FinOps teams:
   can sit next to native Azure Cost Management exports in the same reporting/chargeback pipeline
   rather than requiring a separate dashboard.
 - Use **Azure Cost Management exports** (to storage) for the actual invoiced Azure-side Copilot
-  line item, and reconcile it against our own data with two **distinct, separately labeled**
-  measures rather than one number — conflating them is a known trap (see §7 V2):
-  - **usage-valued consumption** = all `ai_credits_used * $0.01`, including usage covered by the
-    pooled included-credit allowance (this is the number a cost-centre chargeback report wants);
-  - **invoiced metered cost** = what Azure actually bills, which only reflects usage **after** the
-    shared included-credit pool is exhausted.
-  These two will *not* match while the pool has headroom, and that is expected, not a defect — only
-  the **metered-overage portion**, aligned to the same billing period and pool-exhaustion state,
-  should be reconciled against the Azure invoice line. A persistent mismatch in that narrower
-  comparison (for example, missing cost-centre coverage, a stale included-credit reset date, or a
-  miscounted seat) is worth investigating.
+  charges, and reconcile against the **fully-loaded cost using AI credits as the allocation key**
+  (see the "Allocation model" subsection below). Reconciliation is against the **sum of both Copilot
+  charge types** (seat subscription + metered AI credits), not against the metered line alone —
+  charging back only the metered line would bill nobody at all while the included pool still has
+  headroom, even though real, seat-funded consumption is happening.
 - Mirror Azure's tagging convention: assign our derived per-cost-centre rows a `cost_center` tag
   matching Azure's tag-based cost allocation model, so a FinOps toolkit-style chargeback report can
   key off the same tag whether the cost came from Azure resources or from this GitHub Copilot feed.
@@ -171,6 +183,88 @@ Azure spend for FinOps teams:
   a **custom ingestion + FOCUS-shaped export** (e.g. into the same storage account/Data Explorer or
   Power BI dataset the FinOps toolkit's Hubs already reads from), not a marketplace/native
   integration.
+
+### Allocation model: credits are the allocation key, not the invoice total
+
+**Confirmed against official docs** ([GitHub Copilot billing through Azure](https://docs.github.com/en/copilot/reference/copilot-billing/azure-billing),
+[Azure GitHub Enterprise pricing](https://azure.microsoft.com/en-us/pricing/details/githubenterprise/)):
+Copilot reaches the Azure invoice as **two distinct charge types**, not one:
+
+1. a **seat subscription** charge — "Copilot license usage is measured as the number of active
+   seats" — which already includes each tier's monthly AI-credit allowance (Business 1,900 /
+   Enterprise 3,900 credits per seat, pooled at the enterprise level); and
+2. a **metered GitHub AI Credits** charge — Azure lists "GitHub AI Credits" as its own priced
+   component — covering consumption *after* the pooled included allowance is exhausted.
+
+This matters because included credits are **not free** — they are **prepaid inside the seat
+price**. So `all ai_credits_used * $0.01` maps cleanly onto *neither* invoice line: part of that
+consumption was already bought via the seat charge, the remainder lands on the metered charge.
+Reconciling it against the metered line alone is wrong, and so is treating it as the whole invoice.
+
+The correct treatment is the standard FinOps one — allocate the **fully-loaded** cost, but allocate
+each charge type by the driver that actually generates it. Allocating *everything* by credit share
+is tempting and wrong: it would assign **zero** seat cost to a seated user with no usage, which
+inverts the single most valuable finding a chargeback report produces (seats paid for and not
+used), and it is undefined when nobody used any credits.
+
+```
+# Computed per (billing_entity, invoice_period) partition — never across partitions.
+
+# 1. Seat charge follows seat ownership, prorated by time held.
+user_seat_cost  = seat_charge_for_tier * (user_seat_days_in_tier / total_seat_days_in_tier)
+
+# 2. Metered charge follows consumption, because that is what caused it.
+user_metered    = metered_ai_credit_charge * (user_ai_credits_used / entity_ai_credits_used)
+
+user_chargeback = user_seat_cost + user_metered
+```
+
+Required definitions for this to be well-posed:
+
+- **Partition first.** `seat_charge`, `metered_ai_credit_charge`, and both denominators must come
+  from the *same* billing entity and invoice period. Never mix billing profiles, tiers, currencies,
+  or invoice months into one ratio. For a report spanning multiple invoice periods, allocate within
+  each period and only then sum the results.
+- **Seat-days, not seat counts**, so mid-period joiners/leavers and tier changes prorate correctly;
+  allocate per tier, since Business and Enterprise seats differ in both price and included credits.
+- **Zero-usage guard.** If `entity_ai_credits_used == 0`, the metered charge is necessarily zero
+  too, so `user_metered = 0`; never evaluate the ratio. Chargeback that period is purely seat cost.
+- **Usage without a current seat** (a user who consumed credits and then lost their seat, or whose
+  login changed) must still be attributed — keep a stable user identity key and effective-dated
+  seat records rather than joining to today's seat roster.
+
+Two properties worth stating explicitly:
+
+- **Allocation conserves the invoice by construction**: per partition, allocated seat cost sums to
+  the seat charge and allocated metered cost sums to the metered charge. Note carefully what this
+  check does **not** prove — see the completeness caveat below.
+- **It degrades gracefully as included credits go away.** If GitHub moves toward pure metered
+  consumption, the seat component shrinks and the metered component becomes the whole invoice. In
+  the limiting case where the seat charge reaches zero *and* the metered charge equals
+  `entity_ai_credits_used * $0.01`, the formula reduces to exactly `user_ai_credits_used * $0.01`.
+  Both conditions are required — "included credits go away" does not by itself imply the seat
+  subscription disappears — but the pipeline shape does not change either way, so building the
+  allocation model now makes that transition a parameter change rather than a migration.
+
+**Conservation is not completeness.** Because the denominator is computed from the rows actually
+ingested, allocated shares always sum to the invoice *even if users or whole days are missing* —
+the missing users' cost is silently redistributed onto everyone else. The sums-to-invoice assertion
+is an **allocation-conservation** check, not a source-completeness check. Completeness needs
+independent controls, checked *before* allocation:
+
+- compare the summed per-user daily credits against an independently fetched entity-level daily
+  total, and fail on divergence beyond a stated tolerance;
+- keep an expected-day extraction manifest so a missing ingestion day is an explicit gap, not an
+  implicit zero;
+- assert unique source keys and expected row counts per downloaded report;
+- report the `unallocated` (no resolvable cost centre) bucket as a visible measure with an agreed
+  acceptable threshold, rather than letting it vanish into the normalization.
+
+Report both measures side by side so the difference stays visible and explainable:
+`usage-valued consumption` (`ai_credits_used * $0.01`, what the user actually consumed) and
+`allocated chargeback` (seat + metered share of the fully-loaded invoice). For a seat-holder with
+little usage the second exceeds the first — that gap **is** the story a cost-centre owner needs,
+and the seat-days component above is what keeps it visible.
 
 ## 6. Related prior art
 
@@ -223,11 +317,11 @@ prototype, not a historically correct chargeback** — see the caveat below.
 - Fetch **current** cost-centre membership from GitHub's cost-centre APIs and join it onto
   `user_id` in a spreadsheet or a short Python/Node script (no scheduling, no storage — this run is
   disposable and re-fetched each time it's needed).
-- Compute the exact chargeback figure per user (summed over the 28-day window):
+- Compute the exact usage-valued consumption figure per user (summed over the 28-day window):
   `ai_credits_used * $0.01`, roll up to cost-centre and enterprise totals using **today's**
   membership snapshot.
-- Compute the *estimated* per-model split (§2) from `totals_by_model_feature`, using the current
-  per-token pricing table, purely to sanity-check the "expensive model on trivial task" question —
+- Compute the *estimated* per-model split (§2) from `totals_by_model_feature`, using the stated
+  per-interaction cost-weight heuristic, purely to flag the "frontier model on simple work" question —
   clearly labeled as an estimate in any output.
 - Visualize/share as a single Power BI Desktop `.pbix` (or Excel workbook) with a Sankey/decomposition
   visual mirroring the reference screenshot's flow (cost centre → user → feature → model), published
@@ -298,11 +392,13 @@ across both sources.
   GitHub-specific dimensions such as `user_login`, `cost_center`, `model`, `feature`), consistent
   with how the Azure FOCUS export already shapes native costs, per FOCUS Foundation guidance
   referenced by the Fabric guide.
-- Reconcile against the Azure invoice's Copilot line item from the FOCUS export (§5) using the
-  **two-measure model from §5**: compare the metered-overage portion of `ai_credits_used * $0.01`
-  (usage beyond the included pool, aligned to the same billing period) against the invoiced amount,
-  and alert on persistent drift there — not on the full usage-valued total, which is expected to
-  exceed the invoice whenever the included pool still has headroom.
+- Reconcile against the Azure invoice using the **allocation model from §5**: sum the invoiced
+  Copilot seat-subscription charge and the metered AI-credit charge from the FOCUS export, allocate
+  that fully-loaded total across users by their `ai_credits_used` share, and assert that allocated
+  shares sum back to the invoiced total (a by-construction check that catches missing users,
+  unmapped cost centres, or a dropped ingestion day). Carry `usage-valued consumption` alongside
+  `allocated chargeback` as separate measures so the included-pool gap stays visible rather than
+  being averaged away.
 - Extend the Power BI report so the existing charge-breakdown Sankey (cost centre → service →
   ...) includes GitHub Copilot as a service branch that further decomposes into user → feature →
   model, matching the reference screenshot's drill pattern end to end — but keep the exactness
@@ -316,8 +412,9 @@ across both sources.
 - Attribute every row to a `user_login`/`cost_center`/business-owner name, not just a dollar figure
   (the FOCUS-blog naming principle, §6) so finance can answer "who" as easily as "how much."
 - **Exit criteria**: one Power BI model, one charge-breakdown report, native Azure and GitHub
-  Copilot costs both present, the metered-overage portion reconciled against the Azure invoice line,
-  and cost-centre attribution end to end down to the exact user-level total.
+  Copilot costs both present, the fully-loaded Copilot cost allocated by credit share and
+  reconciling by construction to the invoiced total, and cost-centre attribution end to end down to
+  the exact user-level credit figure.
 - **Known gap accepted at this version**: reporting only — budgets are still configured manually
   in GitHub, with no closed-loop connection back to what the report reveals.
 
@@ -355,7 +452,8 @@ one large issue, so each can be scoped, reviewed, and shipped independently:
    invariant check, idempotent upsert pipeline, refreshable Power BI report, Azure FOCUS export
    configured alongside it.
 3. **V2 issue**: FOCUS-shaped Copilot rows joined with the native Azure FOCUS export in one model,
-   metered-overage-only reconciliation check against the invoice line, single cross-source
+   fully-loaded cost (seat + metered AI credits) allocated by credit share with a
+   sums-to-invoice reconciliation assertion, single cross-source
    charge-breakdown report with the exact/estimated boundary visible in the Sankey. This issue also
    extends Cost Compass's existing budget/cost-centre UI to optionally visualize the ingested,
    reconciled data side-by-side with the simulator, reusing the existing cost-centre and budget
@@ -364,3 +462,142 @@ one large issue, so each can be scoped, reviewed, and shipped independently:
 4. **V3 issue (stretch)**: a documented review workflow linking V2 findings to
    `copilot-finops-automation` config changes, and an exploration of feeding real data into
    Cost Compass's existing simulator as an optional seed.
+
+## 9. MVP execution plan (V0 against the demo enterprise)
+
+This is the fastest concrete path to something real and demonstrable: extract live data from a
+**demo GitHub Enterprise environment** (Alex's demo account) and produce a cost-centre chargeback
+breakdown from it. Everything here is V0 scope — no Azure, no Fabric, no pipeline.
+
+### Why a "last few days" snapshot, deliberately
+
+The demo enterprise has been used for hands-on experimentation with cost centres, groupings, and
+budgets, so its historical shape does **not** cleanly resemble
+`enterprise -> org -> cost centre -> user`. Two consequences drive the MVP design:
+
+- **Use a short, recent window (roughly the last 3–7 days), not the 28-day report.** The recent days
+  are the most likely to reflect the current, intentional cost-centre setup; older days in the same
+  28-day rolling total were produced under different groupings and would misattribute. Note the
+  limit of this reasoning honestly: a shorter window *reduces* the chance that configuration
+  changed mid-window, it does not *establish* that it didn't. Step 1 below turns that into an
+  explicit check rather than an assumption.
+- **Pull daily reports, not the 28-day report.** `users-1-day` gives per-day rows we can filter to
+  exactly the days we trust; the 28-day report returns a single pre-aggregated window we cannot
+  slice. This also means the MVP already uses the same endpoint V1 will schedule — no throwaway.
+
+Record the chosen window explicitly in the output so no one reads the MVP as a full-period bill.
+
+### Step 1 — Access and preflight (blocking; do this first)
+
+Verify before writing any transformation code, because everything downstream depends on it:
+
+- Confirm which **enterprise slug** to use and that the demo account has the enterprise-level
+  permission required by the usage-metrics endpoints (§1).
+- Confirm a token/credential with the required scope, held outside the repo (environment variable
+  or local file ignored by git) — never committed, consistent with this repo's practices.
+- Make one throwaway call to `GET /enterprises/{enterprise}/copilot/metrics/reports/users-1-day`
+  for a recent date and confirm a report is returned, then immediately follow the signed download
+  link (§1 — these expire quickly). Do the same for `user-teams-1-day`, which Step 3's precedence
+  join needs and which is easy to discover missing only after the transformation is written.
+- Confirm at least one day in the window actually contains non-zero `ai_credits_used`. Demo
+  environments often have sparse usage; discovering an empty window after building the pipeline is
+  the single most likely way this MVP stalls.
+- Confirm cost-centre membership is retrievable for the same enterprise **for all three assignment
+  routes** used by the §3 precedence rule (direct user, enterprise team, organization), and that
+  the organization/user identifiers needed to join them are present in the usage rows.
+- Confirm at least one cost centre currently contains Alex and at least one other user — a
+  one-user cost centre cannot demonstrate a breakdown.
+- **Establish the window's attribution validity**: determine when the current cost-centre
+  configuration became effective, and pick the window to start after that point. If that date
+  cannot be established from the demo environment's history, say so and label the output's
+  cost-centre totals as *point-in-time attribution*, not exact — do not let a short window
+  silently imply historical correctness.
+
+**Exit gate**: raw NDJSON for at least one recent day, with non-zero credits, plus current
+cost-centre membership across all three assignment routes, plus either a confirmed
+configuration-effective date or an explicit decision to label attribution as point-in-time. Do not
+proceed without these; if usage or cost-centre assignments are missing, fix the demo environment
+(generate usage / assign cost centres) before writing code.
+
+### Step 2 — Extract and land raw files
+
+- A small, dependency-free Node script (consistent with this repo's architecture) that takes a date
+  range, calls `users-1-day` and `user-teams-1-day` per day, downloads the signed links, and writes
+  raw NDJSON to a local, git-ignored folder as `day=YYYY-MM-DD/<report>.ndjson`.
+- Keep raw files untouched and re-runnable: transformation reads from disk, never re-fetches. This
+  makes iteration fast and avoids burning signed links during development.
+- Same dated-path convention V1 will use in ADLS, so the V1 move is a destination change, not a
+  rewrite.
+
+### Step 3 — Transform to the chargeback table
+
+- Join each day's per-user rows to cost-centre membership (current snapshot is acceptable **only**
+  because the window is deliberately short — state this in the output).
+- Apply the precedence rule from §3 (direct user -> enterprise team -> organization) and route
+  unresolvable users to an explicit `unallocated` bucket.
+- Emit one tidy table: `day, user_login, cost_center, org, ai_credits_used, usage_usd`, where
+  `usage_usd = ai_credits_used * 0.01`.
+- Assert the invariant from §7 V1: allocated + unallocated must equal the source total per day.
+  Fail loudly rather than emitting a quietly-wrong number. Remember this is an allocation-conservation
+  check, not a completeness check (§5) — also assert that every expected day in the window produced
+  a file, so a failed download surfaces as a gap rather than a silent zero.
+- Emit a second, separately-labeled table for the estimated per-model split from
+  `totals_by_model_feature` (§2) — this is what answers "expensive model on a trivial task."
+
+### Step 4 — Chargeback figures for the demo
+
+The demo enterprise has **no real Azure invoice**, so the allocation model (§5) runs on an
+explicitly **synthetic** invoice. Do run it — the point is to prove the mechanics end to end so
+swapping in a real invoice later is a parameter change, not a redesign — but keep the assumed
+inputs internally consistent rather than three independently invented numbers:
+
+- Compute `usage_usd` directly (exact, needs nothing external).
+- Derive the synthetic invoice from the demo's own data so it cannot describe an impossible
+  scenario: take the actual seated users per tier, multiply by that tier's list price to get the
+  assumed seat charge, compute the implied included pool (seats × tier allowance), and set the
+  assumed metered charge to the observed consumption *above* that pool (zero if the pool covers
+  it). State every input on the report.
+- Compute `allocated chargeback` = seat component (by seat-days per tier) + metered component (by
+  credit share), per §5.
+- Label the result **"illustrative allocated chargeback (synthetic invoice)"** everywhere it
+  appears. It validates the formula and the visual; it is not a reconciled figure, and the MVP
+  should not claim otherwise.
+- Show both measures side by side so the seat-cost-versus-usage gap is visible — for a demo
+  audience this contrast is usually the most persuasive part.
+
+### Step 5 — Visualize and share
+
+Pick **one** deliverable and match the definition of done to it. Recommended for speed and
+reviewability:
+
+- **Primary**: the command writes tidy CSV/JSON tables plus a **self-contained static HTML report**
+  (no dependencies, consistent with this repo's architecture) rendering the cost centre → user →
+  feature → model flow. One command, one artifact, trivially shareable — no Power BI licence or
+  manual refresh needed for a demo.
+- **Optional follow-on**: point a Power BI Desktop file at the same emitted tables if a
+  Power BI-native artifact is wanted for the customer conversation. Treat this as a second,
+  manual step, not part of the one-command flow.
+- Keep the exactness boundary visible per §7 V2: the cost centre → user levels are exact
+  usage-valued figures; the user → feature → model levels are the labeled estimate, with an
+  "unattributed by model" node.
+- Annotate the window dates, the configuration-validity finding from Step 1, the demo-environment
+  caveat, and the synthetic invoice inputs directly on the report surface, not only in a separate
+  doc.
+
+### Definition of done for the MVP
+
+A reviewer can run one command against the demo enterprise and get a dated, self-contained report
+showing per-cost-centre usage-valued dollars, per-user drill-down, an illustrative allocated
+chargeback from the synthetic invoice, and a labeled model-mix estimate — with the window,
+allocation formula, and all assumptions visible on the report surface.
+
+What this validates: the extraction, the cost-centre join, the allocation mechanics, and the
+report shape. What it explicitly does **not** validate: reconciliation against a real invoice
+(there isn't one) or historically exact attribution (bounded by the Step 1 finding). Both are V1/V2
+work. Stating this boundary is part of being done, not a caveat to bury.
+
+### Sequencing note
+
+Steps 1 and 5 carry the risk; steps 2–4 are mechanical. Do Step 1 immediately and, once data is
+confirmed, sketch the Step 5 visual against a tiny hand-made sample **in parallel** with building
+Steps 2–4, so the report shape is agreed before the real data lands in it.
