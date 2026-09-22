@@ -13,8 +13,10 @@ on:
         default: madebyqent01
         type: string
       since:
-        description: First day to enrich (YYYY-MM-DD); the spine ends at GitHub's latest day
-        required: true
+        description: >-
+          First day to enrich (YYYY-MM-DD); the spine ends at GitHub's latest day.
+          Leave empty to use the same rolling 27-day window as scheduled runs.
+        required: false
         type: string
 
 # In a public repository, GitHub automatically disables scheduled workflows after 60 days

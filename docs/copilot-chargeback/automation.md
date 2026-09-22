@@ -9,8 +9,8 @@ dropped under load; in public repositories GitHub also auto-disables schedules a
 repository activity.
 
 Scheduled runs resolve `since` to a rolling 27-day trailing window in UTC when no dispatch input is
-present. Manual runs use the supplied `since`, allowing an operator to choose a deliberate replay
-window without changing the scheduled default.
+present. Manual runs may supply `since` to choose a deliberate replay window, or leave it empty to
+get the same rolling window as the schedule.
 
 ## Credential and permissions
 
