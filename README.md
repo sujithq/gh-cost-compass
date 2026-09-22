@@ -94,6 +94,9 @@ For an investigation into ingesting real GitHub Copilot usage-metrics API data (
 and model-choice analysis) alongside the simulator, see
 [Copilot usage-metrics API investigation](docs/copilot-usage-metrics-api-investigation.md).
 
+The end-to-end live chargeback process, API behaviour, FOCUS 1.4 mapping, outputs, and scheduled
+Actions workflow are documented in the [Copilot AI-credit chargeback guide](docs/copilot-chargeback/README.md).
+
 The V0 pipeline from that investigation is implemented in
 [`tools/copilot-usage`](tools/copilot-usage/README.md). It runs offline against bundled fixtures with
 `npm run usage-report -- --from-fixtures`, producing a self-contained cost-centre chargeback report.

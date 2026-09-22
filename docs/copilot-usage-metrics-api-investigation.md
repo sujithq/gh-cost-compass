@@ -470,6 +470,9 @@ one large issue, so each can be scoped, reviewed, and shipped independently:
 > credentials. Step 1 below (live preflight against the demo enterprise) is the only remaining
 > blocker, because it needs an enterprise slug and a token that this environment does not have.
 
+The maintained live-pipeline runbook, API matrix, FOCUS 1.4 mapping, output dictionary, and real
+scheduled Actions workflow are in the [Copilot AI-credit chargeback guide](copilot-chargeback/README.md).
+
 This is the fastest concrete path to something real and demonstrable: extract live data from a
 **demo GitHub Enterprise environment** (Alex's demo account) and produce a cost-centre chargeback
 breakdown from it. Everything here is V0 scope — no Azure, no Fabric, no pipeline.
