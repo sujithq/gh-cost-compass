@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url";
 
 import { REPORTS, eachDay, parseNdjson, roundUsd } from "./contract.mjs";
 import { createGitHubClient, extractRange, runPreflight } from "./extract.mjs";
+import { createLiveClient, extractLive } from "./live-extract.mjs";
+import { normalizeCostCenterPayload } from "./live-adapter.mjs";
+import { buildLiveReport, writeLiveOutputs } from "./live-report.mjs";
 import { buildChargebackTable, buildEnvironment, buildScenario, verifyChargebackInvariants, anonymize } from "./map-environment.mjs";
 import { allocate, deriveSyntheticInvoice, verifyConservation } from "./allocate.mjs";
 import { estimateModelSplit, sensitivity } from "./model-split.mjs";
@@ -29,9 +32,11 @@ const USAGE = `Copilot usage-metrics chargeback report (V0 MVP)
 Usage:
   node tools/copilot-usage/cli.mjs --from-fixtures [--out <dir>]
   node tools/copilot-usage/cli.mjs --enterprise <slug> --start <YYYY-MM-DD> --end <YYYY-MM-DD> [options]
+  node tools/copilot-usage/cli.mjs --live --enterprise <slug> --since <YYYY-MM-DD> [options]
 
 Options:
   --from-fixtures      Run offline against the bundled sample extraction (no credentials needed).
+  --live               Use the 28-day credit spine and daily live enrichment reports.
   --enterprise <slug>  Enterprise slug to extract.
   --start <date>       First day of the window (inclusive).
   --end <date>         Last day of the window (inclusive).
@@ -51,9 +56,11 @@ The token is read from the environment only; it is never accepted as an argument
 export function parseArgs(argv) {
   const options = {
     fromFixtures: false,
+    live: false,
     enterprise: null,
     start: null,
     end: null,
+    since: null,
     membership: null,
     seats: null,
     invoice: null,
@@ -66,6 +73,7 @@ export function parseArgs(argv) {
   };
   const flags = {
     "--from-fixtures": () => (options.fromFixtures = true),
+    "--live": () => (options.live = true),
     "--anonymize": () => (options.anonymize = true),
     "--skip-preflight": () => (options.skipPreflight = true),
     "--help": () => (options.help = true),
@@ -75,6 +83,7 @@ export function parseArgs(argv) {
     "--enterprise": "enterprise",
     "--start": "start",
     "--end": "end",
+    "--since": "since",
     "--membership": "membership",
     "--seats": "seats",
     "--invoice": "invoice",
@@ -97,11 +106,12 @@ export function parseArgs(argv) {
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
-  if (!options.help && !options.fromFixtures) {
+  if (!options.help && !options.fromFixtures && !options.live) {
     for (const required of ["enterprise", "start", "end"]) {
       if (!options[required]) throw new Error(`--${required} is required unless --from-fixtures is used.`);
     }
   }
+  if (!options.help && options.live && !options.enterprise) throw new Error("--enterprise is required for --live.");
   return options;
 }
 
@@ -175,6 +185,33 @@ export async function run(options, { env = process.env, log = console.log } = {}
   let days;
   let manifest;
   let rows;
+
+  if (options.live) {
+    const token = env[options.tokenEnv] ?? env.GH_TOKEN;
+    if (!token) throw new Error(`No token found in ${options.tokenEnv}. Export it before running; it is never passed as an argument.`);
+    const client = createLiveClient({ token });
+    const ccPayload = await client.fetchSnapshot(`/enterprises/${encodeURIComponent(enterprise)}/settings/billing/cost-centers`);
+    const orgs = (ccPayload.costCenters ?? ccPayload.cost_centers ?? [])
+      .flatMap((center) => (center.resources ?? []).filter((resource) => String(resource.type).toLowerCase() === "org").map((resource) => resource.name));
+    const extracted = await extractLive({ client, enterprise, since: options.since ?? options.start, outDir: rawRoot, orgs: [...new Set(orgs)].sort() });
+    const liveMembership = normalizeCostCenterPayload(extracted.snapshots.costCenters, { capturedAt: generatedAt });
+    writeOut(outDir, "membership-live.json", `${JSON.stringify(liveMembership, null, 2)}\n`);
+    const report = buildLiveReport({
+      spineRows: extracted.spineRows,
+      dailyRowsByDay: extracted.dailyRowsByDay,
+      costCenters: liveMembership,
+      orgMembersByOrg: extracted.orgMembersByOrg,
+      seats: extracted.snapshots.seats,
+      manifest: extracted.manifest,
+    });
+    await writeLiveOutputs(outDir, report);
+    log(`Live window        ${extracted.manifest.startDay} to ${extracted.manifest.endDay}`);
+    log(`Credits consumed   ${report.totals.credits} (= $${roundUsd(report.totals.usd).toFixed(2)} usage-valued)`);
+    log(`Enriched rows      ${report.totals.enrichedRows}`);
+    log(`Ambiguous rows     ${report.totals.ambiguousRows}`);
+    log(`Wrote              ${join(outDir, "chargeback.xlsx")}`);
+    return { outDir, manifest: extracted.manifest, report, failed: [] };
+  }
 
   if (options.fromFixtures) {
     const fixtureModule = await import("./fixtures/make-fixtures.mjs");

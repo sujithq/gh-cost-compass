@@ -67,6 +67,18 @@ test("downloadReportRows names top-level keys when no download link is resolvabl
   );
 });
 
+test("downloadReportRows treats an explicit empty download_links array as no data", async () => {
+  const client = createGitHubClient({
+    token: "token",
+    fetchImpl: async () => okJson({ report_day: "2026-09-21", download_links: [] }),
+  });
+
+  assert.deepEqual(
+    await client.downloadReportRows({ enterprise: ENTERPRISE_ID, report: REPORTS.users, day: "2026-09-21" }),
+    [],
+  );
+});
+
 test("extractRange writes one NDJSON file per day per report and a complete manifest", async () => {
   const writes = new Map();
   const reports = [REPORTS.users, REPORTS.userTeams];
@@ -119,6 +131,9 @@ test("extractRange records a failing day without aborting remaining extraction",
 
   assert.equal(manifest.complete, false);
   assert.deepEqual(manifest.missing, [{ day: "2026-09-17", report: REPORTS.users, error: "signed link expired" }]);
+  const successfulDay = manifest.days.find((entry) => entry.day === "2026-09-16");
+  assert.ok(successfulDay);
+  assert.equal(successfulDay.reports[REPORTS.users].noData, false);
   assert.equal(writes.has(`out/day=2026-09-18/${REPORTS.users}.ndjson`), true);
   assert.equal(writes.has(`out/day=2026-09-17/${REPORTS.users}.ndjson`), false);
 });
