@@ -6,6 +6,16 @@ ingestion effort that pulls real [Copilot usage metrics](https://docs.github.com
 data so cost-centre owners can see not just **how much** they spend but **how** they spend it (for
 example, an expensive model used for a task a cheaper model would have handled equally well).
 
+**Billing model scope.** GitHub Copilot for organizations and enterprises is on **usage-based
+billing (UBB)**: each Copilot Business/Enterprise seat carries a monthly allotment of **included
+AI credits** pooled at the billing-entity level (1,900/seat for Business, 3,900/seat for
+Enterprise), and once that shared pool is exhausted, further usage becomes **metered AI credits**
+billed at published per-token rates (subject to budgets/spending limits). This matches the model
+this repo's engine already simulates. The legacy **premium-request model-multiplier** table
+(`.../request-based-billing-legacy/model-multipliers-for-annual-plans`) applies only to pre-UBB
+**annual individual plans** retained for backward compatibility — it is **not** the pricing
+mechanism for UBB organizations/enterprises and must not be used for cost-centre chargeback.
+
 ## 1. Report families and how to fetch them
 
 Each endpoint returns a small JSON envelope of signed, time-limited `download_links` to NDJSON
@@ -48,23 +58,51 @@ Per-user (and aggregated) reports carry, in addition to `ai_credits_used`:
   vs. reviewed, median minutes to merge) and the per-repo report — useful to correlate cost against
   delivered outcomes, echoing the "Impact dashboard" cohort methodology.
 
-### Key limitation: no direct per-model dollar cost
+### Chargeback fact: `ai_credits_used` converts to dollars directly, exactly
 
-`ai_credits_used` is a **per-user/day total only** — GitHub's docs state explicitly it is "not
-broken down by feature, model, or surface" and is meant for consumption analysis, not invoicing.
-There is no field that gives "credits spent on model X". To estimate per-model spend we must:
+**Fact-checked against official GitHub docs** ([Usage-based billing for organizations and
+enterprises](https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing),
+[GitHub Copilot billing](https://docs.github.com/en/billing/concepts/product-billing/github-copilot-billing),
+[Models and pricing for GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing)):
+**1 AI credit = $0.01 USD**, and "additional usage budgets are set in US dollars … AI credits draw
+down the budget at a fixed rate." This is not an approximation layer we invent — it is GitHub's own
+conversion rate for both included and metered/paid AI-credit consumption. That means the per-user,
+per-day `ai_credits_used` field is **already a direct, exact dollar-chargeable figure**:
+
+```
+user_daily_cost_usd = ai_credits_used * 0.01
+```
+
+This is the number cost-centre owners should see for chargeback: sum `ai_credits_used * $0.01`
+per user, per cost centre, per period — no modeling or estimation required, and no legacy
+premium-request multiplier involved. This is the primary chargeback metric this data source should
+produce.
+
+### Remaining limitation: no *per-model* breakdown of that dollar total
+
+What `ai_credits_used` does **not** give is a *model-level* split of that already-exact dollar
+figure — GitHub's docs state it explicitly: the field is "not broken down by feature, model, or
+surface" and is meant for consumption analysis, not a line-item invoice. Answering "how" a
+cost centre spends (expensive frontier model on trivial tasks vs. lightweight model on the same
+work) therefore still requires estimation, but must use the **current UBB per-token pricing**
+tables, not the legacy multiplier:
 
 1. Take the per-user, per-model **interaction counts** from `totals_by_model_feature` /
-   `totals_by_language_model`.
-2. Weight them by GitHub's published [premium-request model multipliers](https://docs.github.com/en/copilot/reference/copilot-billing/request-based-billing-legacy/model-multipliers-for-annual-plans)
-   (e.g. lightweight models ≈0.25–0.33×, mid-tier ≈3–9×, frontier/expensive models ≈14–57×).
-3. Normalize the weighted mix against the user's actual `ai_credits_used` for that day/user so the
-   estimate is proportional, not an independent invoice figure — model multipliers can change over
-   time and must be version-tracked, not hard-coded once.
+   `totals_by_language_model` (these carry `model` and `feature`/`language` dimensions with
+   `*_count` and `loc_*_sum` metrics — no token counts at the per-model level).
+2. Weight each model's share using GitHub's published [per-model, per-token pricing tables](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing)
+   (USD per 1M input/cached-input/cache-write/output tokens, converted to AI credits at the same
+   1 credit = $0.01 rate), since heavier/frontier models are priced markedly higher per token than
+   lightweight models.
+3. Normalize the weighted mix so it sums to the user's **actual, exact** `ai_credits_used` for that
+   day — the per-token pricing table drives the *relative split*, while the *total* dollar amount
+   always comes from the real `ai_credits_used` figure, never from the model-pricing estimate
+   itself. GitHub updates per-model pricing over time, so this reference table must be versioned
+   and dated, not hard-coded once.
 
-This estimation approach (not a literal per-model cost readout) should be called out explicitly
-anywhere it surfaces in the UI, consistent with this repo's existing practice of labeling simulator
-assumptions separately from documented GitHub behavior.
+Any UI surfacing the model-level split must clearly distinguish the **exact, direct** total
+chargeback figure from the **estimated** per-model breakdown of it, consistent with this repo's
+existing practice of labeling simulator assumptions separately from documented GitHub behavior.
 
 ## 3. Cost-centre attribution
 
@@ -115,9 +153,11 @@ Azure spend for FinOps teams:
   can sit next to native Azure Cost Management exports in the same reporting/chargeback pipeline
   rather than requiring a separate dashboard.
 - Use **Azure Cost Management exports** (to storage) for the actual invoiced Azure-side Copilot
-  line item, and reconcile it against our own summed `ai_credits_used`-derived estimate as a
-  sanity check — the two will not match exactly (Azure sees the invoice total, we see modeled
-  per-user/model consumption), but large deltas signal a mapping problem worth investigating.
+  line item, and reconcile it against our own summed `ai_credits_used * $0.01` chargeback total —
+  the two should reconcile closely since both derive from the same GitHub-reported AI-credit
+  consumption at the documented $0.01/credit rate; a persistent mismatch signals a mapping problem
+  (for example, missing cost-centre coverage or an out-of-date included-credit reset) worth
+  investigating, not an inherent estimation gap.
 - Mirror Azure's tagging convention: assign our derived per-cost-centre rows a `cost_center` tag
   matching Azure's tag-based cost allocation model, so a FinOps toolkit-style chargeback report can
   key off the same tag whether the cost came from Azure resources or from this GitHub Copilot feed.
@@ -130,12 +170,15 @@ Azure spend for FinOps teams:
 
 1. Build a scheduled daily job that calls the `users-1-day` and `user-teams-1-day` endpoints per
    enterprise/org, downloads the NDJSON, and lands it immutably (raw) plus an idempotently-upserted,
-   cost-centre-joined summary table.
-2. Add a model-multiplier reference table (versioned, since GitHub updates multipliers) to turn
-   `totals_by_model_feature` interaction counts into an estimated spend split, clearly labeled as an
-   estimate.
-3. Shape the cost-centre/model summary as FOCUS-compatible rows for optional export alongside Azure
-   Cost Management data.
+   cost-centre-joined summary table that computes `ai_credits_used * $0.01` as the exact per-user
+   chargeback figure.
+2. Add a versioned, dated per-model per-token pricing reference table (from GitHub's
+   [Models and pricing](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing)
+   page) to turn `totals_by_model_feature` interaction counts into an *estimated* model-level split
+   of each user's exact `ai_credits_used` total, clearly labeled as an estimate distinct from the
+   exact chargeback total.
+3. Shape the cost-centre chargeback summary as FOCUS-compatible rows for optional export alongside
+   Azure Cost Management data.
 4. Extend Cost Compass's existing budget/cost-centre UI to optionally visualize *real* ingested data
    side-by-side with the simulator, reusing the existing cost-centre and budget domain model instead
    of introducing a parallel one.
