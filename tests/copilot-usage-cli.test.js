@@ -157,6 +157,78 @@ test("the final Sankey column label is anchored so it cannot overflow the viewBo
   });
 });
 
+test("an actual invoice may not be allocated over a mismatched period", async () => {
+  const { allocate, deriveSyntheticInvoice } = await import("../tools/copilot-usage/allocate.mjs");
+  const seats = [{ user_id: "user-a", tier: "business", start_day: "2026-09-01", end_day: "2026-09-30" }];
+  const chargebackRows = [{ day: "2026-09-16", user_id: "user-a", user_login: "a", cost_center_id: "cc-x", ai_credits_used: 10, usage_usd: 0.1 }];
+  const monthlyInvoice = {
+    billing_entity: "acme",
+    period_start: "2026-09-01",
+    period_end: "2026-09-30",
+    kind: "actual",
+    assumptions: [],
+    seatChargeUsdByTier: { business: 19 },
+    meteredChargeUsd: 0,
+  };
+  // A full month's charge spread over a three-day window still conserves, so it must be rejected here.
+  assert.throws(
+    () => allocate({ chargebackRows, seats, invoice: monthlyInvoice, periodStart: "2026-09-16", periodEnd: "2026-09-18" }),
+    /does not match the allocation period/,
+  );
+  // The matching partition is accepted.
+  const ok = allocate({ chargebackRows, seats, invoice: monthlyInvoice, periodStart: "2026-09-01", periodEnd: "2026-09-30" });
+  assert.equal(ok.rows.length, 1);
+  // A synthetic invoice is always built for the window it will be allocated over.
+  const synthetic = deriveSyntheticInvoice({ seats, totalCredits: 10, periodStart: "2026-09-16", periodEnd: "2026-09-18" });
+  assert.equal(synthetic.period_start, "2026-09-16");
+  assert.doesNotThrow(() => allocate({ chargebackRows, seats, invoice: synthetic, periodStart: "2026-09-16", periodEnd: "2026-09-18" }));
+});
+
+test("a failed extraction renders as an explicit coverage gap instead of crashing", async () => {
+  const { buildManifest } = await import("../tools/copilot-usage/extract.mjs");
+  const { buildReportModel, renderReport } = await import("../tools/copilot-usage/report.mjs");
+
+  const manifest = buildManifest({
+    enterprise: "ent-demo",
+    startDay: "2026-09-16",
+    endDay: "2026-09-17",
+    results: [
+      { day: "2026-09-16", report: "users-1-day", ok: true, rowCount: 2, path: "a" },
+      { day: "2026-09-16", report: "user-teams-1-day", ok: true, rowCount: 2, path: "b" },
+      { day: "2026-09-17", report: "users-1-day", ok: true, rowCount: 2, path: "c" },
+      // The teams report failed, which must not be hidden just because usage succeeded.
+      { day: "2026-09-17", report: "user-teams-1-day", ok: false, rowCount: 0, error: "429 rate limited" },
+    ],
+    generatedAt: "2026-09-20T00:00:00.000Z",
+  });
+  assert.equal(manifest.complete, false);
+
+  const allocation = {
+    invoice: { billing_entity: "x", period_start: "2026-09-16", period_end: "2026-09-17", kind: "synthetic", assumptions: [], seatChargeUsdByTier: {}, meteredChargeUsd: 0 },
+    rows: [],
+    checks: [],
+    totals: {},
+  };
+  const model = buildReportModel({ allocation, chargeback: { rows: [], invariants: [] }, manifest, period: {}, meta: { generatedAt: "now" } });
+
+  assert.equal(model.coverage.complete, false);
+  assert.equal(model.coverage.days.length, 2);
+  const gap = model.coverage.days.find((day) => day.day === "2026-09-17");
+  assert.equal(gap.ok, false, "a day whose teams report failed is not fully covered");
+  assert.match(gap.error, /user-teams-1-day/);
+  assert.equal(model.coverage.days.find((day) => day.day === "2026-09-16").ok, true);
+  assert.equal(model.coverage.gaps.length, 1);
+  assert.match(renderReport(model), /429 rate limited|user-teams-1-day/);
+});
+
+test("the report discloses that model coverage is assumed, not measured", async () => {
+  await withTempOut(async (dir) => {
+    const { html } = await runFixtures(dir);
+    assert.match(html, /Coverage assumption/);
+    assert.match(html, /cannot be measured/);
+  });
+});
+
 test("each model appears once in the flow so its total weight reads at a glance", async () => {
   await withTempOut(async (dir) => {
     const { reportModel } = await runFixtures(dir);

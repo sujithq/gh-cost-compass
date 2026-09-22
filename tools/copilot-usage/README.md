@@ -35,7 +35,7 @@ never written to any output file.
 | `--start` / `--end` | Inclusive day window (`YYYY-MM-DD`). |
 | `--membership <path>` | Cost-centre membership snapshot JSON. |
 | `--seats <path>` | Seat roster JSON. |
-| `--invoice <path>` | Real invoice JSON. Omit to derive an explicitly-labelled **synthetic** invoice. |
+| `--invoice <path>` | Real invoice JSON. Omit to derive an explicitly-labelled **synthetic** invoice. Its `period_start`/`period_end` must match the extracted window — see below. |
 | `--out <dir>` | Output directory (default `.copilot-usage-out`, git-ignored). |
 | `--raw <dir>` | Where raw NDJSON is landed or read from. |
 | `--token-env <VAR>` | Env var holding the token (default `GITHUB_TOKEN`). |
@@ -71,6 +71,14 @@ Business and Enterprise seat-days never share a denominator. Allocating *everyth
 would be wrong: it assigns **zero cost to an idle seat**, which is usually the most actionable finding
 in the whole report, and it is undefined when nobody used anything.
 
+### One invoice period at a time
+
+`allocate()` rejects an invoice whose period does not match the allocation window. This matters
+because the mismatch is invisible to every other check: allocating a full month's seat charge across a
+three-day usage window still conserves perfectly — the shares still sum to the invoice — while
+overstating those three days roughly tenfold. Extract the window that matches the invoice period, or
+split the invoice and allocate each `(billing_entity, invoice_period)` partition separately.
+
 ### Conservation is not completeness
 
 Because the denominator is computed from the rows actually ingested, allocated shares *always* sum to
@@ -95,6 +103,12 @@ This supports the question "which model was used for which feature". It does **n
 complexity, so "expensive model on a trivial task" remains a hypothesis to review, not a conclusion.
 The reported sensitivity varies assumed token volume only; the assumed relative price between models
 is the larger uncertainty and is not varied.
+
+**Coverage is assumed, not measured.** Where a user has any model interactions on a day, all of that
+day's credits are split across those models. GitHub does not publish how many credits fall outside
+model-attributed activity, so that residual cannot be measured and is not invented here; the report
+states this assumption. Only a user with no model interactions at all lands wholly in
+"unattributed by model".
 
 ## Output
 

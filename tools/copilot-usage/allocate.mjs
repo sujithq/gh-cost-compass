@@ -47,6 +47,7 @@ export function allocate({ chargebackRows, seats, invoice, periodStart, periodEn
   assertDay(periodStart, "periodStart");
   assertDay(periodEnd, "periodEnd");
   if (periodStart > periodEnd) throw new Error(`periodStart ${periodStart} is after periodEnd ${periodEnd}.`);
+  assertInvoicePeriodMatches(invoice, periodStart, periodEnd);
 
   const rowsByKey = new Map();
   const userDefaults = new Map();
@@ -134,6 +135,26 @@ export function allocate({ chargebackRows, seats, invoice, periodStart, periodEn
   const result = { invoice, rows, totals, checks: [] };
   result.checks = verifyConservation(result);
   return result;
+}
+
+/**
+ * Allocation is only meaningful inside one (billing_entity, invoice_period) partition. Allocating a
+ * whole month's charge across a three-day usage window would still conserve -- every conservation
+ * check would pass -- while overstating each of those three days by roughly tenfold. The period must
+ * therefore be checked explicitly, because no downstream check can detect this.
+ */
+function assertInvoicePeriodMatches(invoice, periodStart, periodEnd) {
+  if (!invoice) throw new Error("allocate requires an invoice.");
+  const invoiceStart = invoice.period_start;
+  const invoiceEnd = invoice.period_end;
+  if (!invoiceStart || !invoiceEnd) return;
+  if (invoiceStart !== periodStart || invoiceEnd !== periodEnd) {
+    throw new Error(
+      `Invoice period ${invoiceStart}..${invoiceEnd} does not match the allocation period ${periodStart}..${periodEnd}. `
+      + "Allocate one (billing entity, invoice period) partition at a time: extract the usage window that matches the "
+      + "invoice period, or split the invoice, and allocate each partition separately.",
+    );
+  }
 }
 
 export function verifyConservation(result) {

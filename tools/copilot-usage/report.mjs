@@ -67,24 +67,50 @@ function rowModel(row) {
   return textValue(row.model ?? row.model_name, "unknown model");
 }
 
+/**
+ * A day counts as covered only when every report landed for it. `manifest.missing` carries
+ * `{ day, report }` entries, and older callers may pass plain day strings, so both are normalized
+ * here; a day is a gap if any required report failed, not just the usage report.
+ */
+function missingDays(manifest) {
+  const entries = asArray(required(manifest, "missing", "manifest"), "manifest.missing");
+  const byDay = new Map();
+  for (const entry of entries) {
+    const day = typeof entry === "string" ? entry : entry?.day;
+    if (!day) continue;
+    const reason = typeof entry === "string"
+      ? "missing day"
+      : `${entry.report ?? "report"}: ${entry.error ?? "report did not succeed"}`;
+    byDay.set(day, byDay.has(day) ? `${byDay.get(day)}; ${reason}` : reason);
+  }
+  return byDay;
+}
+
 function buildCoverage(manifest) {
   const days = asArray(required(manifest, "days", "manifest"), "manifest.days");
-  const missing = new Set(asArray(required(manifest, "missing", "manifest"), "manifest.missing"));
+  const missing = missingDays(manifest);
   return days.map((dayRow, index) => {
     const day = required(dayRow, "day", `manifest.days[${index}]`);
-    const report = dayRow.reports?.["users-1-day"];
-    const ok = Boolean(report?.ok) && !missing.has(day);
+    const reports = dayRow.reports ?? {};
+    const reportEntries = Object.entries(reports);
+    const failed = reportEntries.filter(([, report]) => !report?.ok).map(([name]) => name);
+    const usage = reports["users-1-day"];
+    const ok = reportEntries.length > 0 && failed.length === 0 && !missing.has(day);
+    const error = ok
+      ? ""
+      : missing.get(day)
+        ?? (failed.length > 0 ? `${failed.join(", ")} did not succeed` : "report did not succeed");
     return {
       day,
       ok,
-      rowCount: report?.rowCount ?? 0,
-      error: ok ? "" : textValue(report?.error, missing.has(day) ? "missing day" : "report did not succeed"),
-      path: textValue(report?.path, ""),
+      rowCount: usage?.rowCount ?? 0,
+      error,
+      path: textValue(usage?.path, ""),
     };
-  }).concat([...missing]
+  }).concat([...missing.keys()]
     .filter((day) => !days.some((dayRow) => dayRow.day === day))
-    .map((day) => ({ day, ok: false, rowCount: 0, error: "missing day", path: "" })))
-    .sort((a, b) => a.day.localeCompare(b.day));
+    .map((day) => ({ day, ok: false, rowCount: 0, error: missing.get(day) ?? "missing day", path: "" })))
+    .sort((a, b) => String(a.day).localeCompare(String(b.day)));
 }
 
 function costCenterName(chargebackRows, costCenterId) {
@@ -451,7 +477,7 @@ function renderModelMix(model) {
       };
     })
     .sort((a, b) => b.usageUsd - a.usageUsd || a.feature.localeCompare(b.feature) || a.model.localeCompare(b.model));
-  return `<section class="panel estimate-panel"><div class="panel-head"><h2>Model mix estimate</h2><span class="pill estimate">estimated</span></div><p>This panel estimates the split of exact user credits by feature and model. It shows which model was used for which feature, but not how complex the task was; “expensive model on a trivial task” is a hypothesis to review, not a proven conclusion.</p>${model.modelMix.sensitivityNote ? `<p class="note">${escapeHtml(model.modelMix.sensitivityNote)}</p>` : ""}<table><thead><tr><th>Feature</th><th>Model</th><th>Estimated credits</th><th>Estimated usage_usd</th><th>Sensitivity range</th></tr></thead><tbody>${renderRows(totals, (row) => `<tr><td>${escapeHtml(row.feature)}</td><td>${escapeHtml(row.model)}</td><td>${escapeHtml(credits(row.credits))}</td><td>${escapeHtml(money(row.usageUsd))}</td><td>${escapeHtml(row.sensitivity ? `${money(row.sensitivity.low ?? row.sensitivity.min ?? 0)}–${money(row.sensitivity.high ?? row.sensitivity.max ?? 0)}` : "N/A")}</td></tr>`)}</tbody></table></section>`;
+  return `<section class="panel estimate-panel"><div class="panel-head"><h2>Model mix estimate</h2><span class="pill estimate">estimated</span></div><p>This panel estimates the split of exact user credits by feature and model. It shows which model was used for which feature, but not how complex the task was; “expensive model on a trivial task” is a hypothesis to review, not a proven conclusion.</p><p class="note">Coverage assumption: where a user has any model interactions on a day, all of that day's credits are split across those models. GitHub does not publish how many credits fall outside model-attributed activity, so that residual cannot be measured and is not shown separately; credits for a user with no model interactions at all are reported as “unattributed by model”.</p>${model.modelMix.sensitivityNote ? `<p class="note">${escapeHtml(model.modelMix.sensitivityNote)}</p>` : ""}<table><thead><tr><th>Feature</th><th>Model</th><th>Estimated credits</th><th>Estimated usage_usd</th><th>Sensitivity range</th></tr></thead><tbody>${renderRows(totals, (row) => `<tr><td>${escapeHtml(row.feature)}</td><td>${escapeHtml(row.model)}</td><td>${escapeHtml(credits(row.credits))}</td><td>${escapeHtml(money(row.usageUsd))}</td><td>${escapeHtml(row.sensitivity ? `${money(row.sensitivity.low ?? row.sensitivity.min ?? 0)}–${money(row.sensitivity.high ?? row.sensitivity.max ?? 0)}` : "N/A")}</td></tr>`)}</tbody></table></section>`;
 }
 
 function renderSankey(model) {
