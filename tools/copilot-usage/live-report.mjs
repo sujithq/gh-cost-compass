@@ -27,6 +27,12 @@ function add(map, key, value) {
   map.set(key, (map.get(key) ?? 0) + Number(value ?? 0));
 }
 
+function exclusiveNextDay(day) {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 function orgsByUser(orgMembersByOrg) {
   const result = new Map();
   for (const [org, members] of Object.entries(orgMembersByOrg ?? {})) {
@@ -162,9 +168,9 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
     cc.users.add(fact.user_login);
     byCostMap.set(fact.cost_center_id, cc);
   }
-  const byUser = [...byUserMap.values()].map((row) => ({ ...row, usd: row.credits * AI_CREDIT_USD })).sort((a, b) => a.user.localeCompare(b.user));
+  const byUser = [...byUserMap.values()].map((row) => ({ ...row, usd: roundUsd(row.credits * AI_CREDIT_USD) })).sort((a, b) => a.user.localeCompare(b.user));
   const totalCredits = sum(facts, "ai_credits_used");
-  const byCostCenter = [...byCostMap.values()].map((row) => ({ ...row, users: row.users.size, usd: row.credits * AI_CREDIT_USD, share: totalCredits ? row.credits / totalCredits : 0 })).sort((a, b) => a.cost_center.localeCompare(b.cost_center) || a.cost_center_id.localeCompare(b.cost_center_id));
+  const byCostCenter = [...byCostMap.values()].map((row) => ({ ...row, users: row.users.size, usd: roundUsd(row.credits * AI_CREDIT_USD), share: totalCredits ? row.credits / totalCredits : 0 })).sort((a, b) => a.cost_center.localeCompare(b.cost_center) || a.cost_center_id.localeCompare(b.cost_center_id));
   const detailRows = enriched;
   const ambiguity = facts.filter((row) => row.cost_center_id === AMBIGUOUS_COST_CENTER_ID);
   const caveats = [
@@ -173,6 +179,7 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
     ["Harness coverage", `${enriched.length} enriched daily rows from ${Object.keys(daily).length} days; the 28-day spine is used for exact credits.`],
     ["Ambiguous attribution", `${ambiguity.length} user-day rows are in the explicit ambiguous bucket; candidates are retained in the facts.`],
     ["Seats", `One seat per user; enterprise wins over business. Collisions: ${dedupedSeats.collisions.length}.`],
+    ["Workbook USD display", "By user and By cost centre display USD rounded to cents for readability; Daily facts and focus.csv retain full precision."],
     ["Empty dimensions", "The live tenant returned no IDE, MCP, slash-command, or plugin rows and used neither chat nor agent."],
     ["Missing days", `${(manifest?.missing ?? []).length} report gaps are preserved in the manifest; empty download_links means no data, not an API error.`],
   ];
@@ -194,9 +201,9 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
   const focusRows = facts.map((row) => ({
     BillingAccountId: manifest?.enterprise ?? "",
     BillingPeriodStart: manifest?.startDay ?? "",
-    BillingPeriodEnd: manifest?.endDay ?? "",
+    BillingPeriodEnd: manifest?.endDay ? exclusiveNextDay(manifest.endDay) : "",
     ChargePeriodStart: row.day,
-    ChargePeriodEnd: row.day,
+    ChargePeriodEnd: exclusiveNextDay(row.day),
     BilledCost: row.usage_usd,
     EffectiveCost: row.usage_usd,
     ListCost: row.usage_usd,
@@ -212,7 +219,7 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
     InvoiceIssuerName: "GitHub",
     ChargeDescription: "GitHub Copilot AI credits",
     PricingQuantity: row.ai_credits_used,
-    PricingUnit: "Credit",
+    PricingUnit: "Credits",
     ConsumedQuantity: row.ai_credits_used,
     ConsumedUnit: "Credits",
     x_CostCenterName: row.cost_center_name,

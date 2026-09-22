@@ -30,6 +30,10 @@ test("live report conserves credits into cost-centre buckets and emits numeric w
   assert.equal(report.totals.ambiguousRows, 1);
   assert.equal(report.byCostCenter.reduce((sum, row) => sum + row.credits, 0), 20);
   assert.match(toCsv(report.focusRows, ["ConsumedQuantity", "ConsumedUnit", "x_CostCenterName", "BilledCost"]), /ConsumedQuantity,ConsumedUnit,x_CostCenterName,BilledCost/);
+  assert.equal(report.focusRows[0].ChargePeriodEnd, "2026-09-19");
+  assert.equal(report.focusRows[0].BillingPeriodEnd, "2026-09-19");
+  assert.equal(report.focusRows[0].PricingUnit, "Credits");
+  assert.equal(report.focusRows[0].ConsumedUnit, "Credits");
   assert.match(report.workbookSheets.find((sheet) => sheet.name === "Summary").rows[5][0], /Credits/);
   assert.match(report.workbookSheets.find((sheet) => sheet.name === "Summary").rows[5][1].toString(), /^20$/);
 });
