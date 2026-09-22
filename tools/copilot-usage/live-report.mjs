@@ -181,7 +181,7 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
     ["Seats", `One seat per user; enterprise wins over business. Collisions: ${dedupedSeats.collisions.length}.`],
     ["Workbook USD display", "By user and By cost centre display USD rounded to cents for readability; Daily facts and focus.csv retain full precision."],
     ["Empty dimensions", "The live tenant returned no IDE, MCP, slash-command, or plugin rows and used neither chat nor agent."],
-    ["Missing days", `${(manifest?.missing ?? []).length} report gaps are preserved in the manifest; empty download_links means no data, not an API error.`],
+    ["Missing days", `${(manifest?.noDataDays ?? []).length} report gaps are preserved in the manifest; empty download_links means no data, not an API error.`],
   ];
   const model = modelRows(detailRows);
   const language = languageRows(detailRows);
