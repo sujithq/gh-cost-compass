@@ -30,7 +30,6 @@ jobs:
       cancel-in-progress: false
     env:
       ENTERPRISE: ${{ inputs.enterprise || 'madebyqent01' }}
-      SINCE: ${{ inputs.since || '2026-09-01' }}
       # GITHUB_TOKEN cannot call the enterprise Copilot metrics endpoints. A PAT or GitHub
       # App token with manage_billing:copilot or read:enterprise is required. There is no
       # OIDC federation into GitHub, so this protected secret is unavoidable.
@@ -43,6 +42,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Resolve extraction window
+        shell: bash
+        run: |
+          SINCE="${{ inputs.since }}"
+          if [ -z "$SINCE" ]; then
+            # The 28-day spine bounds useful enrichment; keep scheduled runs rolling.
+            SINCE="$(date -u -d '27 days ago' +%Y-%m-%d)"
+          fi
+          echo "SINCE=$SINCE" >> "$GITHUB_ENV"
 
       - name: Extract, normalize, attribute, and report
         run: >

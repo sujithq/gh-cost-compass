@@ -8,6 +8,10 @@ the worst schedule contention. Scheduled workflows run from the default branch a
 dropped under load; in public repositories GitHub also auto-disables schedules after 60 days without
 repository activity.
 
+Scheduled runs resolve `since` to a rolling 27-day trailing window in UTC when no dispatch input is
+present. Manual runs use the supplied `since`, allowing an operator to choose a deliberate replay
+window without changing the scheduled default.
+
 ## Credential and permissions
 
 `secrets.COPILOT_METRICS_TOKEN` is passed only through `GITHUB_TOKEN` in the process environment.
