@@ -168,9 +168,9 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
     cc.users.add(fact.user_login);
     byCostMap.set(fact.cost_center_id, cc);
   }
-  const byUser = [...byUserMap.values()].map((row) => ({ ...row, usd: roundUsd(row.credits * AI_CREDIT_USD) })).sort((a, b) => a.user.localeCompare(b.user));
+  const byUser = [...byUserMap.values()].map((row) => ({ ...row, usd: row.credits * AI_CREDIT_USD })).sort((a, b) => a.user.localeCompare(b.user));
   const totalCredits = sum(facts, "ai_credits_used");
-  const byCostCenter = [...byCostMap.values()].map((row) => ({ ...row, users: row.users.size, usd: roundUsd(row.credits * AI_CREDIT_USD), share: totalCredits ? row.credits / totalCredits : 0 })).sort((a, b) => a.cost_center.localeCompare(b.cost_center) || a.cost_center_id.localeCompare(b.cost_center_id));
+  const byCostCenter = [...byCostMap.values()].map((row) => ({ ...row, users: row.users.size, usd: row.credits * AI_CREDIT_USD, share: totalCredits ? row.credits / totalCredits : 0 })).sort((a, b) => a.cost_center.localeCompare(b.cost_center) || a.cost_center_id.localeCompare(b.cost_center_id));
   const detailRows = enriched;
   const ambiguity = facts.filter((row) => row.cost_center_id === AMBIGUOUS_COST_CENTER_ID);
   const caveats = [
@@ -189,8 +189,8 @@ export function buildLiveReport({ spineRows, dailyRowsByDay, costCenters, orgMem
   const cli = cliRows(detailRows);
   const sheets = [
     { name: "Summary", rows: [["Metric", "Value"], ["Enterprise", manifest?.enterprise ?? ""], ["Window start", manifest?.startDay ?? ""], ["Window end", manifest?.endDay ?? ""], ["Rows", facts.length], ["Credits", totalCredits], ["USD", totalCredits * AI_CREDIT_USD], ["Enriched rows", enriched.length], ["Coverage", manifest?.complete ? "complete" : "gaps"] ] },
-    { name: "By cost centre", rows: [["Cost centre", "Cost centre ID", "Credits", "USD", "Users", "Share"], ...byCostCenter.map((r) => [r.cost_center, r.cost_center_id, r.credits, r.usd, r.users, r.share])] },
-    { name: "By user", rows: [["User", "User ID", "Cost centre", "Attribution route", "Credits", "USD", "Active days"], ...byUser.map((r) => [r.user, r.user_id, r.cost_center, r.attribution_route, r.credits, r.usd, r.active_days])] },
+    { name: "By cost centre", rows: [["Cost centre", "Cost centre ID", "Credits", "USD", "Users", "Share"], ...byCostCenter.map((r) => [r.cost_center, r.cost_center_id, r.credits, roundUsd(r.usd), r.users, r.share])] },
+    { name: "By user", rows: [["User", "User ID", "Cost centre", "Attribution route", "Credits", "USD", "Active days"], ...byUser.map((r) => [r.user, r.user_id, r.cost_center, r.attribution_route, r.credits, roundUsd(r.usd), r.active_days])] },
     { name: "Daily facts", rows: [["Day", "User", "User ID", "Cost centre", "Attribution route", "Credits", "USD", "Enriched", "Interactions", "Code generation", "Code acceptance", "Org candidates"], ...facts.map((r) => [r.day, r.user_login, r.user_id, r.cost_center_name, r.attribution_route, r.ai_credits_used, r.usage_usd, r.enriched, r.interactions, r.code_generation, r.code_acceptance, r.org_candidates])] },
     { name: "Model mix", rows: [["Model", "Feature", "Interactions", "Code generation", "Code acceptance"], ...model.map((r) => [r.model, r.feature, r.interactions, r.code_generation, r.code_acceptance])] },
     { name: "Language mix", rows: [["Language", "Feature", "Interactions", "Code generation", "Code acceptance"], ...language.map((r) => [r.language, r.feature, r.interactions, r.code_generation, r.code_acceptance])] },
