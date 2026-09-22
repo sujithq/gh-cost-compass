@@ -465,6 +465,11 @@ one large issue, so each can be scoped, reviewed, and shipped independently:
 
 ## 9. MVP execution plan (V0 against the demo enterprise)
 
+> **Status: implemented.** This plan is built in [`tools/copilot-usage`](../tools/copilot-usage/README.md).
+> Run `npm run usage-report -- --from-fixtures` to produce the full report offline today, with no
+> credentials. Step 1 below (live preflight against the demo enterprise) is the only remaining
+> blocker, because it needs an enterprise slug and a token that this environment does not have.
+
 This is the fastest concrete path to something real and demonstrable: extract live data from a
 **demo GitHub Enterprise environment** (Alex's demo account) and produce a cost-centre chargeback
 breakdown from it. Everything here is V0 scope — no Azure, no Fabric, no pipeline.

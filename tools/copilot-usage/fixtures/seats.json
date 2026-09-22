@@ -1,0 +1,42 @@
+[
+  {
+    "user_id": "user-alice",
+    "user_login": "alice",
+    "tier": "enterprise",
+    "starts_at": "2026-09-01",
+    "ends_at": null,
+    "organization_id": "org-product"
+  },
+  {
+    "user_id": "user-bob",
+    "user_login": "bob",
+    "tier": "business",
+    "starts_at": "2026-09-01",
+    "ends_at": null,
+    "organization_id": "org-platform"
+  },
+  {
+    "user_id": "user-carol",
+    "user_login": "carol",
+    "tier": "business",
+    "starts_at": "2026-09-17",
+    "ends_at": null,
+    "organization_id": "org-platform"
+  },
+  {
+    "user_id": "user-dave",
+    "user_login": "dave",
+    "tier": "business",
+    "starts_at": "2026-09-01",
+    "ends_at": "2026-09-16",
+    "organization_id": "org-product"
+  },
+  {
+    "user_id": "user-erin",
+    "user_login": "erin",
+    "tier": "business",
+    "starts_at": "2026-09-01",
+    "ends_at": null,
+    "organization_id": "org-platform"
+  }
+]

@@ -6,7 +6,8 @@
   "description": "A local visual sandbox for GitHub Enterprise and Copilot budget simulations.",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "usage-report": "node tools/copilot-usage/cli.mjs"
   },
   "engines": { "node": ">=20" }
 }

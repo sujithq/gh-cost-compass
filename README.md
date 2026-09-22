@@ -94,6 +94,10 @@ For an investigation into ingesting real GitHub Copilot usage-metrics API data (
 and model-choice analysis) alongside the simulator, see
 [Copilot usage-metrics API investigation](docs/copilot-usage-metrics-api-investigation.md).
 
+The V0 pipeline from that investigation is implemented in
+[`tools/copilot-usage`](tools/copilot-usage/README.md). It runs offline against bundled fixtures with
+`npm run usage-report -- --from-fixtures`, producing a self-contained cost-centre chargeback report.
+
 - One AI credit is valued at $0.01 USD.
 - Included credits are pooled across the enterprise and reset at 00:00 UTC on the first calendar day of each month.
 - A cost center can enable its own AI credit pool, calculated from the Copilot Business and Enterprise licenses attributed to that cost center. When enabled, the simulator partitions those included credits from the general enterprise pool.
