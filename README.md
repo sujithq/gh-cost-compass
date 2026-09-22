@@ -90,6 +90,10 @@ Contributor reference: [AI-credit control model](docs/ai-credit-control-model.md
 walkthrough, see [AI-credit control flow](docs/presentation/ai-credit-control-flow.html). The
 Markdown control model is authoritative for engine behavior and scenario expectations.
 
+For an investigation into ingesting real GitHub Copilot usage-metrics API data (cost-centre spend
+and model-choice analysis) alongside the simulator, see
+[Copilot usage-metrics API investigation](docs/copilot-usage-metrics-api-investigation.md).
+
 - One AI credit is valued at $0.01 USD.
 - Included credits are pooled across the enterprise and reset at 00:00 UTC on the first calendar day of each month.
 - A cost center can enable its own AI credit pool, calculated from the Copilot Business and Enterprise licenses attributed to that cost center. When enabled, the simulator partitions those included credits from the general enterprise pool.
