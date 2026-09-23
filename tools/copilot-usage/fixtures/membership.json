@@ -1,0 +1,26 @@
+{
+  "captured_at": "2026-09-19T08:00:00Z",
+  "effective_from": "2026-09-15",
+  "cost_centers": [
+    {
+      "id": "cc-ai",
+      "name": "AI Innovation",
+      "user_ids": [
+        "user-alice"
+      ],
+      "team_ids": [],
+      "organization_ids": []
+    },
+    {
+      "id": "cc-core",
+      "name": "Core Platform",
+      "user_ids": [],
+      "team_ids": [
+        "team-core"
+      ],
+      "organization_ids": [
+        "org-platform"
+      ]
+    }
+  ]
+}
