@@ -1,0 +1,99 @@
+name: Copilot usage export
+
+on:
+  # Avoid :00: GitHub warns that scheduled workflows can be delayed or dropped under load,
+  # with the worst contention at the start of the hour.
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      enterprise:
+        description: Enterprise slug
+        required: true
+        default: madebyqent01
+        type: string
+      since:
+        description: >-
+          First day to enrich (YYYY-MM-DD); the spine ends at GitHub's latest day.
+          Leave empty to use the same rolling 27-day window as scheduled runs.
+        required: false
+        type: string
+
+# In a public repository, GitHub automatically disables scheduled workflows after 60 days
+# without repository activity.
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: copilot-usage-export-${{ inputs.enterprise || 'madebyqent01' }}
+      cancel-in-progress: false
+    env:
+      ENTERPRISE: ${{ inputs.enterprise || 'madebyqent01' }}
+      # GITHUB_TOKEN cannot call the enterprise Copilot metrics endpoints. A PAT or GitHub
+      # App token with manage_billing:copilot or read:enterprise is required. There is no
+      # OIDC federation into GitHub, so this protected secret is unavoidable.
+      GITHUB_TOKEN: ${{ secrets.COPILOT_METRICS_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve extraction window
+        shell: bash
+        run: |
+          SINCE="${{ inputs.since }}"
+          if [ -z "$SINCE" ]; then
+            # The 28-day spine bounds useful enrichment; keep scheduled runs rolling.
+            SINCE="$(date -u -d '27 days ago' +%Y-%m-%d)"
+          fi
+          echo "SINCE=$SINCE" >> "$GITHUB_ENV"
+
+      - name: Extract, normalize, attribute, and report
+        run: >
+          node tools/copilot-usage/cli.mjs
+          --live
+          --enterprise "$ENTERPRISE"
+          --since "$SINCE"
+          --out ".copilot-usage-out"
+
+      # Actions artifacts are intentionally not the delivery mechanism: their retention and
+      # size guarantees are not part of this pipeline's data contract. They are suitable only
+      # for transient debugging when explicitly enabled.
+      # - name: Upload transient debug artifact
+      #   if: failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: copilot-usage-debug
+      #     path: .copilot-usage-out
+
+      # OPTIONAL / OPT-IN: configure these placeholders and the landing path before enabling.
+      # This is not active because this repository has no Azure target configured yet.
+      # To use OIDC, uncomment the permission below and these steps; do not add a client secret.
+      #
+      # permissions:
+      #   id-token: write
+      #
+      # - name: Azure login (optional FinOps hub landing)
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id: ${{ vars.AZURE_CLIENT_ID }}
+      #     tenant-id: "<YOUR_ENTRA_TENANT_ID>"
+      #     subscription-id: "<YOUR_AZURE_SUBSCRIPTION_ID>"
+      #
+      # - name: Upload Parquet and trigger FinOps hub ingestion (optional)
+      #   shell: bash
+      #   run: |
+      #     azcopy copy ".copilot-usage-out/*.parquet" \
+      #       "https://<YOUR_STORAGE_ACCOUNT>.dfs.core.windows.net/<YOUR_CONTAINER>/ingestion/<YOUR_DATASET>/$(date -u +%Y/%m)/<YOUR_SCOPE_PATH>/" \
+      #       --recursive=false
+      #     # Write an empty manifest.json only after all dataset files are complete.
+      #     printf '{}' > manifest.json
+      #     azcopy copy manifest.json \
+      #       "https://<YOUR_STORAGE_ACCOUNT>.dfs.core.windows.net/<YOUR_CONTAINER>/ingestion/<YOUR_DATASET>/$(date -u +%Y/%m)/<YOUR_SCOPE_PATH>/manifest.json"
