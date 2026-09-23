@@ -23,6 +23,19 @@ export GITHUB_TOKEN=<token with enterprise billing read access>
 npm run usage-report -- --enterprise <slug> --start 2026-09-16 --end 2026-09-18
 ```
 
+For the live enterprise chargeback extract, use the 28-day report as the exact credit spine and
+daily reports for harness/token enrichment:
+
+```bash
+export GITHUB_TOKEN=<read-only token>
+npm run usage-report -- --live --enterprise madebyqent01 --since 2026-08-25
+```
+
+The live path writes `chargeback.xlsx` (Excel-ready multi-sheet report), `focus.csv`, `daily-facts.csv`,
+`live-report.json`, and `live-manifest.json`. Empty `download_links` are recorded as no-data days;
+they are not treated as HTTP failures. The workbook keeps exact credits/USD separate from
+interaction-count and CLI-token analysis.
+
 The token is read from the environment only. It is never accepted as a command-line argument and is
 never written to any output file.
 

@@ -2,7 +2,7 @@ import { mkdir, writeFile as fsWriteFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { assertDay, eachDay, parseNdjson, REPORTS, toNdjson } from "./contract.mjs";
 
-const GITHUB_API_VERSION = "2022-11-28";
+const GITHUB_API_VERSION = "2026-03-10";
 
 async function writeFileCreatingParents(path, content) {
   await mkdir(dirname(path), { recursive: true });
@@ -30,6 +30,7 @@ async function readErrorBody(response) {
 
 function resolveDownloadLinks(envelope, { report, day }) {
   const value = envelope?.download_links;
+  if (Array.isArray(value) && value.length === 0) return [];
   const candidates = Array.isArray(value) ? value : [value];
   const links = candidates
     .map((entry) => {
@@ -107,6 +108,7 @@ export function createGitHubClient({ token, baseUrl = "https://api.github.com", 
     async downloadReportRows({ enterprise, report, day }) {
       const envelope = await this.fetchReportEnvelope({ enterprise, report, day });
       const links = resolveDownloadLinks(envelope, { report, day });
+      if (links.length === 0) return [];
       const files = await Promise.all(
         links.map((link, index) => fetchText(fetchImpl, link, `Downloading ${report} link ${index + 1} for ${day}`)),
       );
@@ -129,6 +131,7 @@ export function buildManifest({ enterprise, startDay, endDay, reports = Object.v
       const entry = {
         ok: Boolean(result?.ok),
         rowCount: Number(result?.rowCount ?? 0),
+        noData: Boolean(result?.noData),
         error: result?.error ?? null,
         path: result?.path ?? null,
       };
@@ -166,7 +169,7 @@ export async function extractRange({ client, enterprise, reports = Object.values
       try {
         const rows = await client.downloadReportRows({ enterprise, report, day });
         await writeFile(path, toNdjson(rows));
-        results.push({ day, report, ok: true, rowCount: rows.length, error: null, path });
+        results.push({ day, report, ok: true, rowCount: rows.length, noData: rows.length === 0, error: null, path });
       } catch (error) {
         results.push({ day, report, ok: false, rowCount: 0, error: error.message, path });
       }

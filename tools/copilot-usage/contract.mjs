@@ -36,6 +36,13 @@ export const REPORTS = Object.freeze({
   userTeams: "user-teams-1-day",
 });
 
+/** Live extraction uses the 28-day report as the exact credit spine, then enriches daily rows. */
+export const LIVE_REPORTS = Object.freeze({
+  usersSpine: "users-28-day/latest",
+  usersDaily: "users-1-day",
+  userTeams: "user-teams-1-day",
+});
+
 /**
  * Canonical product id for AI credits in this repo's engine/environment model. Keep in sync with
  * `scenarios/environments/*.json`; the engine treats `ai-credits` specially (hard-stop budgets).
