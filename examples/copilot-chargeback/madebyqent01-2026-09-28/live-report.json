@@ -1,0 +1,106 @@
+{
+  "totals": {
+    "credits": 80396.83999490002,
+    "usd": 803.9683999490002,
+    "enrichedRows": 16,
+    "ambiguousRows": 1
+  },
+  "byUser": [
+    {
+      "user": "user-04",
+      "user_id": "user-04",
+      "cost_center": "Ambiguous attribution",
+      "attribution_route": "ambiguous",
+      "credits": 98.806285,
+      "active_days": 1,
+      "usd": 0.98806285
+    },
+    {
+      "user": "user-01",
+      "user_id": "user-01",
+      "cost_center": "CC-Engineering",
+      "attribution_route": "user",
+      "credits": 78293.69402600001,
+      "active_days": 9,
+      "usd": 782.9369402600001
+    },
+    {
+      "user": "user-03",
+      "user_id": "user-03",
+      "cost_center": "CC-Project-7",
+      "attribution_route": "user",
+      "credits": 162.09994999999998,
+      "active_days": 1,
+      "usd": 1.6209995
+    },
+    {
+      "user": "user-02",
+      "user_id": "user-02",
+      "cost_center": "CC-Engineering",
+      "attribution_route": "user",
+      "credits": 1842.2397338999997,
+      "active_days": 5,
+      "usd": 18.422397338999996
+    }
+  ],
+  "byCostCenter": [
+    {
+      "cost_center": "Ambiguous attribution",
+      "cost_center_id": "ambiguous-attribution",
+      "credits": 98.806285,
+      "users": 1,
+      "usd": 0.98806285,
+      "share": 0.0012289821963931392
+    },
+    {
+      "cost_center": "CC-Project-7",
+      "cost_center_id": "cost-center-06",
+      "credits": 162.09994999999998,
+      "users": 1,
+      "usd": 1.6209995,
+      "share": 0.002016247778025639
+    },
+    {
+      "cost_center": "CC-Engineering",
+      "cost_center_id": "cost-center-01",
+      "credits": 80135.93375990001,
+      "users": 2,
+      "usd": 801.3593375990001,
+      "share": 0.9967547700255812
+    }
+  ],
+  "caveats": [
+    [
+      "Credits",
+      "ai_credits_used is exact and valued at $0.01 per credit; GitHub does not publish a model/feature credit split."
+    ],
+    [
+      "Model/language/surface",
+      "These sheets contain observed interaction counts, never credit amounts."
+    ],
+    [
+      "Harness coverage",
+      "16 enriched daily rows from 26 days; the 28-day spine is used for exact credits."
+    ],
+    [
+      "Ambiguous attribution",
+      "1 user-day rows are in the explicit ambiguous bucket; candidates are retained in the facts."
+    ],
+    [
+      "Seats",
+      "One seat per user; enterprise wins over business. Collisions: 1."
+    ],
+    [
+      "Workbook USD display",
+      "By user and By cost centre display USD rounded to cents for readability; Daily facts and focus.csv retain full precision."
+    ],
+    [
+      "Empty dimensions",
+      "The sample returned no IDE, MCP, slash-command, or plugin rows and used neither chat nor agent."
+    ],
+    [
+      "Daily coverage",
+      "15 of 26 daily enrichment calls had incomplete response bodies; these dates cannot be classified as no-data."
+    ]
+  ]
+}

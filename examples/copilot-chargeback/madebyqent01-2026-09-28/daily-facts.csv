@@ -1,0 +1,17 @@
+day,user_login,user_id,cost_center_name,attribution_route,ai_credits_used,usage_usd,enriched,interactions,code_generation,code_acceptance,org_candidates
+2026-09-08,user-01,user-01,CC-Engineering,user,8049.488829000002,80.49488829000002,true,12,9,0,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-05,user-02,user-02,CC-Engineering,user,542.7830999999999,5.4278309999999985,true,13,2,1,demo-org-01;demo-org-02
+2026-09-07,user-02,user-02,CC-Engineering,user,446.12911900000006,4.461291190000001,true,1,0,0,demo-org-01;demo-org-02
+2026-09-10,user-01,user-01,CC-Engineering,user,27455.66900000001,274.5566900000001,true,0,0,0,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-07,user-01,user-01,CC-Engineering,user,281.01417700000013,2.8101417700000013,true,3,1,1,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-14,user-01,user-01,CC-Engineering,user,12387.119299999998,123.87119299999999,true,6,78,55,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-16,user-01,user-01,CC-Engineering,user,3287.712470999999,32.87712470999999,true,8,16,12,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-16,user-04,user-04,Ambiguous attribution,ambiguous,98.806285,0.98806285,true,0,0,0,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-18,user-01,user-01,CC-Engineering,user,8063.19102,80.63191020000001,true,17,10,10,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-04,user-02,user-02,CC-Engineering,user,616.7592524999999,6.167592524999999,true,9,2,0,demo-org-01;demo-org-02
+2026-09-17,user-01,user-01,CC-Engineering,user,649.096509,6.4909650899999995,true,4,0,0,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-18,user-02,user-02,CC-Engineering,user,213.20038739999998,2.132003874,true,4,0,0,demo-org-01;demo-org-02
+2026-09-08,user-02,user-02,CC-Engineering,user,23.367874999999998,0.23367875,true,1,0,0,demo-org-01;demo-org-02
+2026-09-09,user-01,user-01,CC-Engineering,user,14171.935720000005,141.71935720000005,true,0,0,0,demo-org-01;demo-org-02;demo-org-03;demo-org-04
+2026-09-18,user-03,user-03,CC-Project-7,user,162.09994999999998,1.6209995,true,2,0,0,demo-org-02;demo-org-03
+2026-09-15,user-01,user-01,CC-Engineering,user,3948.467,39.48467,true,4,9,5,demo-org-01;demo-org-02;demo-org-03;demo-org-04

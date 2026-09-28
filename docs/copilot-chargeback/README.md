@@ -46,7 +46,15 @@ flowchart LR
 - [Automation and operations](automation.md)
 - [FOCUS 1.4 and FinOps hub mapping](focus-mapping.md)
 - [Outputs and workbook dictionary](outputs.md)
+- [Token Lens integration boundary](token-lens-integration.md)
 
 The existing [pipeline recommendation](../copilot-usage-pipeline-recommendation.md) remains the
 design rationale for the Actions boundary, Fabric alternative, and operational controls. This
 folder is the implementation and output reference; it does not repeat that recommendation.
+
+Token Lens is a separate, local, per-developer signal. See the
+[integration boundary](token-lens-integration.md) before considering any import; it is not a
+fleet-wide usage or billing source.
+
+For a sanitized sample report with synthetic entity and user aliases, see the
+[2026-09-28 demo chargeback bundle](../../examples/copilot-chargeback/madebyqent01-2026-09-28/README.md).
