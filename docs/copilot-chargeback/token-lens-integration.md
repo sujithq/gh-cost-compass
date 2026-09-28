@@ -4,6 +4,8 @@ Token Lens is a local, per-developer usage analysis tool—not an enterprise fle
 bill. Combining reports does not authenticate the developer identity or establish complete
 organization coverage. Keep GitHub's Copilot usage-metrics API as the authoritative source for
 exact user/day AI credits and cost-centre chargeback.
+For the developer-side manual workflow using Alex as a demo persona, see the
+[`/chronicle-report` operator setup](chronicle-user-setup.md).
 
 ## Current collection and sharing model
 
