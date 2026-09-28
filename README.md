@@ -21,6 +21,7 @@ A local visual sandbox for explaining and testing GitHub Enterprise and Copilot 
 - Extensible declarative scenario definitions loaded from `scenarios/catalog.json`, with JSON Schema support and browser-local import/export
 - Dataset-aware guided scenarios that follow the Configuration-selected default set and expose only explicitly compatible definitions
 - A documented scenario catalog for budget health progression and the next-step 100% saturation case
+- Browser-only usage-insights import for GitHub enterprise usage-metrics NDJSON and opt-in finalized, redacted Chronicle schema-v3 reports
 
 ## Default enterprise dataset
 
@@ -35,6 +36,24 @@ modes when explicitly requested. The checked-in `synthetic-compact` environment 
 guided scenarios as a small deterministic authoring example.
 
 The generated data keeps stable IDs such as `user-alice`, `user-bob`, `org-product`, `repo-portal`, `cc-ai`, and `cc-core` so guided scenarios and tests remain reviewable. A small group of enterprise users intentionally has no direct cost-center assignment, so budget attribution can demonstrate the enterprise and organization fallback behavior. Runtime imports are validated for duplicate IDs and broken references before replacing the active scenario.
+
+## Usage insights
+
+The **Usage insights** page combines two complementary evidence sources without uploading or
+persisting either file:
+
+- GitHub enterprise usage-metrics NDJSON supplies exact user/day AI-credit totals and
+  IDE/CLI/agent/model/language activity counters.
+- A developer-approved Chronicle report supplies local CLI token, repository, surface, and
+  evidence-backed workflow context. The importer accepts only redacted, finalized schema-v3 JSON
+  and rejects the working `evidence` block, raw prompt/reply fields, session identifiers, and
+  absolute user paths.
+
+The page deliberately keeps credit totals separate from model and feature counters. Those counters
+cannot allocate dollars to a model; authoritative model-level billing still requires GitHub's
+separate billing usage report. See
+[`docs/copilot-chargeback/token-lens-integration.md`](docs/copilot-chargeback/token-lens-integration.md)
+for the privacy and integration boundary.
 
 ## Run and test
 

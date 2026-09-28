@@ -4,6 +4,7 @@ import { loadScenarioCatalog } from "./scenario-catalog.js";
 import { trimToastStack } from "./toast-stack.js";
 import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend } from "./assistant.js";
 import { includedPoolHistoryResults } from "./history.js";
+import { compareInsightCoverage, parseEnterpriseUsageNdjson, parseFinalizedChronicleReport, summarizeChronicleReport, summarizeEnterpriseUsage } from "./tokenomics-insights.js";
 
 const STORAGE_KEY = "copilot-budget-lab-scenario-v2";
 const DEFAULT_SET_STORAGE_KEY = "copilot-budget-lab-default-set-v1";
@@ -20,6 +21,8 @@ let walkthroughTrigger = null;
 let seenAlertIds = null;
 let lastBlockedToastId = null;
 let optimizedScope = { type: "enterprise", id: "" };
+let enterpriseUsageInsights = null;
+let chronicleInsights = null;
 const assistantBackend = resolveAssistantBackend(window.location.search);
 const assistantProvider = assistantBackend === ASSISTANT_BACKENDS.copilot ? createCopilotAssistantProvider() : createAssistantProvider();
 const assistantSettings = { model: "current", optimizedFor: "balance" };
@@ -670,9 +673,92 @@ function render() {
   renderConfiguration();
   renderImpactPreviews();
   renderTimeline(replay, currency);
+  renderTokenomicsInsights();
   renderAssistantPanel();
   if (latestEventId) renderResult(replay, currency);
   announceSimulationFeedback(replay);
+}
+
+function insightNumber(value) {
+  return value == null ? "Not reported" : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function insightPercent(value) {
+  return value == null ? "Not reported" : `${(value * 100).toFixed(1)}%`;
+}
+
+function insightTable(headers, rows) {
+  if (!rows.length) return `<div class="empty">No matching data was reported.</div>`;
+  return `<div class="insight-table-wrap"><table class="insight-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderTokenomicsInsights() {
+  const available = Boolean(enterpriseUsageInsights || chronicleInsights);
+  $("#tokenomics-empty").hidden = available;
+  $("#tokenomics-content").hidden = !available;
+  if (!available) return;
+
+  const cards = [];
+  if (enterpriseUsageInsights) {
+    cards.push(
+      ["AI credits", insightNumber(enterpriseUsageInsights.credits), `${money(enterpriseUsageInsights.usageValueUsd, "USD")} usage value; not necessarily invoice overage`],
+      ["Users", insightNumber(enterpriseUsageInsights.userCount), `${enterpriseUsageInsights.rowCount} user/day rows · ${enterpriseUsageInsights.reportStart} to ${enterpriseUsageInsights.reportEnd}`],
+      ["Interactions", insightNumber(enterpriseUsageInsights.interactions), `${insightNumber(enterpriseUsageInsights.generations)} generation activities`],
+      ["Generation acceptance", insightPercent(enterpriseUsageInsights.acceptanceRate), `${insightNumber(enterpriseUsageInsights.acceptances)} accepted activities`],
+    );
+  }
+  if (chronicleInsights) {
+    cards.push(
+      ["Local Chronicle sessions", insightNumber(chronicleInsights.sessions), `${insightNumber(chronicleInsights.calls)} measured model calls`],
+      ["Local input tokens", insightNumber(chronicleInsights.inputTokens), chronicleInsights.reconciliationOk ? "Slice reconciliation passed" : "Reconciliation was not confirmed"],
+    );
+  }
+  $("#tokenomics-summary").innerHTML = cards.map(([label, value, note]) => `<article class="summary-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`).join("");
+
+  const coverage = compareInsightCoverage(enterpriseUsageInsights, chronicleInsights);
+  $("#tokenomics-coverage").innerHTML = insightTable(
+    ["Dimension", "Enterprise export", "Chronicle"],
+    coverage.map((item) => [escapeHtml(item.dimension), escapeHtml(item.enterprise), escapeHtml(item.chronicle)]),
+  );
+
+  $("#tokenomics-users").innerHTML = enterpriseUsageInsights
+    ? insightTable(
+      ["User", "AI credits", "Usage value", "Interactions", "Acceptance", "Surfaces"],
+      enterpriseUsageInsights.users.map((user) => [
+        `<strong>${escapeHtml(user.login)}</strong>`,
+        insightNumber(user.credits),
+        money(user.usageValueUsd, "USD"),
+        insightNumber(user.interactions),
+        insightPercent(user.acceptanceRate),
+        escapeHtml(user.surfaces.join(", ") || "No surfaced activity"),
+      ]),
+    )
+    : `<div class="empty">Import enterprise usage NDJSON to see exact user/day credit totals.</div>`;
+
+  $("#tokenomics-models").innerHTML = enterpriseUsageInsights
+    ? `${insightTable(
+      ["Model", "Feature", "Interactions", "Generations", "Acceptances"],
+      enterpriseUsageInsights.modelFeatures.map((item) => [
+        `<strong>${escapeHtml(item.model)}</strong>`,
+        escapeHtml(item.feature),
+        insightNumber(item.interactions),
+        insightNumber(item.generations),
+        insightNumber(item.acceptances),
+      ]),
+    )}<p class="insight-caveat">Model and feature counters describe activity. GitHub's usage-metrics rows do not allocate <code>ai_credits_used</code> to these counters, so this table must not be used to assign dollars by model.</p>`
+    : `<div class="empty">Import enterprise usage NDJSON to compare model and feature activity.</div>`;
+
+  $("#chronicle-status").textContent = chronicleInsights ? `${chronicleInsights.reportStart} to ${chronicleInsights.reportEnd}` : "Not imported";
+  if (!chronicleInsights) {
+    $("#chronicle-findings").innerHTML = `<div class="empty">Add an opt-in finalized Chronicle report for local workflow evidence.</div>`;
+    return;
+  }
+  const findings = [
+    ...(chronicleInsights.findings.recurringTopics || []).map((item) => ({ title: item.title, detail: item.detail })),
+    ...(chronicleInsights.findings.workflowTips || []).map((item) => ({ title: item.title, detail: item.action })),
+    ...(chronicleInsights.findings.costTips || []).map((item) => ({ title: item.title, detail: item.action })),
+  ];
+  $("#chronicle-findings").innerHTML = `${findings.length ? findings.map((item) => `<div class="insight-finding"><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.detail)}</p></div>`).join("") : `<div class="empty compact-empty">No evidence-backed recommendation was reported.</div>`}${chronicleInsights.topRecommendedAction ? `<div class="insight-recommendation"><strong>Top recommended action</strong><p>${escapeHtml(chronicleInsights.topRecommendedAction)}</p></div>` : ""}<details class="setting-help"><summary>Data quality and limitations</summary><div><p>${escapeHtml(chronicleInsights.dataQuality || "Not reported.")}</p><p>${escapeHtml(chronicleInsights.limitations || "Not reported.")}</p></div></details>`;
 }
 
 function renderSummary(replay, currency) {
@@ -1855,8 +1941,8 @@ function navigate(view) {
   currentView = view;
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === view));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
-  $("#global-timeline-bar").classList.toggle("hidden", view === "configuration");
-  $("#page-title").textContent = ({ dashboard: "Dashboard", optimized: "Budget controls review", simulate: "Run a guided scenario", "custom-event": "Run custom event", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
+  $("#global-timeline-bar").classList.toggle("hidden", view === "configuration" || view === "insights");
+  $("#page-title").textContent = ({ dashboard: "Dashboard", insights: "Usage insights", optimized: "Budget controls review", simulate: "Run a guided scenario", "custom-event": "Run custom event", configuration: "Configuration", timeline: "Timeline & alerts" })[view];
   renderAssistantPanel();
 }
 
@@ -1873,6 +1959,34 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
+$("#import-enterprise-usage").addEventListener("change", async (event) => {
+  try {
+    enterpriseUsageInsights = summarizeEnterpriseUsage(parseEnterpriseUsageNdjson(await event.target.files[0].text()));
+    renderTokenomicsInsights();
+    showToast("Enterprise usage insights imported", { detail: `${enterpriseUsageInsights.userCount} users · ${enterpriseUsageInsights.credits.toLocaleString(undefined, { maximumFractionDigits: 2 })} AI credits` });
+  } catch (error) {
+    showToast("Enterprise usage import failed", { tone: "danger", detail: error.message });
+  } finally {
+    event.target.value = "";
+  }
+});
+$("#import-chronicle-report").addEventListener("change", async (event) => {
+  try {
+    chronicleInsights = summarizeChronicleReport(parseFinalizedChronicleReport(await event.target.files[0].text()));
+    renderTokenomicsInsights();
+    showToast("Chronicle insights imported", { detail: `${chronicleInsights.sessions} sessions · ${chronicleInsights.calls} model calls` });
+  } catch (error) {
+    showToast("Chronicle import failed", { tone: "danger", detail: error.message });
+  } finally {
+    event.target.value = "";
+  }
+});
+$("#clear-tokenomics-imports").addEventListener("click", () => {
+  enterpriseUsageInsights = null;
+  chronicleInsights = null;
+  renderTokenomicsInsights();
+  showToast("Imported usage insights cleared");
+});
 const appShell = () => document.querySelector(".app-shell");
 function toggleSidebar(force) {
   const collapsed = typeof force === "boolean" ? force : !appShell().classList.contains("sidebar-collapsed");
