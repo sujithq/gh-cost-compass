@@ -97,6 +97,9 @@ and model-choice analysis) alongside the simulator, see
 The end-to-end live chargeback process, API behaviour, FOCUS 1.4 mapping, outputs, and scheduled
 Actions workflow are documented in the [Copilot AI-credit chargeback guide](docs/copilot-chargeback/README.md).
 
+For a sanitized, synthetic-identity example output bundle, see the
+[2026-09-28 Copilot chargeback demo](examples/copilot-chargeback/madebyqent01-2026-09-28/README.md).
+
 The V0 pipeline from that investigation is implemented in
 [`tools/copilot-usage`](tools/copilot-usage/README.md). It runs offline against bundled fixtures with
 `npm run usage-report -- --from-fixtures`, producing a self-contained cost-centre chargeback report.

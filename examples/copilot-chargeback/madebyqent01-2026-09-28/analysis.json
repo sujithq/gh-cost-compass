@@ -1,0 +1,701 @@
+{
+  "requestedWindow": {
+    "start": "2026-09-02",
+    "end": "2026-09-28",
+    "days": 27
+  },
+  "availableWindow": {
+    "start": "2026-09-02",
+    "end": "2026-09-27",
+    "reportStart": "2026-08-31",
+    "reportEnd": "2026-09-27"
+  },
+  "exact": {
+    "credits": 80396.83999490002,
+    "equivalentUsd": 803.9683999490002,
+    "userDayRows": 16,
+    "users": 4,
+    "byUser": [
+      {
+        "user": "user-01",
+        "credits": 78293.69402600001,
+        "equivalentUsd": 782.9369402600001,
+        "activeDays": 9
+      },
+      {
+        "user": "user-02",
+        "credits": 1842.2397338999997,
+        "equivalentUsd": 18.422397338999996,
+        "activeDays": 5
+      },
+      {
+        "user": "user-03",
+        "credits": 162.09994999999998,
+        "equivalentUsd": 1.6209995,
+        "activeDays": 1
+      },
+      {
+        "user": "user-04",
+        "credits": 98.806285,
+        "equivalentUsd": 0.98806285,
+        "activeDays": 1
+      }
+    ],
+    "byCostCenter": [
+      {
+        "cost_center": "CC-Engineering",
+        "cost_center_id": "cost-center-01",
+        "credits": 80135.93375990001,
+        "users": 2,
+        "usd": 801.3593375990001,
+        "share": 0.9967547700255812
+      },
+      {
+        "cost_center": "CC-Project-7",
+        "cost_center_id": "cost-center-06",
+        "credits": 162.09994999999998,
+        "users": 1,
+        "usd": 1.6209995,
+        "share": 0.002016247778025639
+      },
+      {
+        "cost_center": "Ambiguous attribution",
+        "cost_center_id": "ambiguous-attribution",
+        "credits": 98.806285,
+        "users": 1,
+        "usd": 0.98806285,
+        "share": 0.0012289821963931392
+      }
+    ],
+    "byDay": [
+      {
+        "day": "2026-09-04",
+        "credits": 616.7592524999999,
+        "equivalentUsd": 6.167592524999999,
+        "users": 1
+      },
+      {
+        "day": "2026-09-05",
+        "credits": 542.7830999999999,
+        "equivalentUsd": 5.4278309999999985,
+        "users": 1
+      },
+      {
+        "day": "2026-09-07",
+        "credits": 727.1432960000002,
+        "equivalentUsd": 7.271432960000002,
+        "users": 2
+      },
+      {
+        "day": "2026-09-08",
+        "credits": 8072.856704000002,
+        "equivalentUsd": 80.72856704000002,
+        "users": 2
+      },
+      {
+        "day": "2026-09-09",
+        "credits": 14171.935720000005,
+        "equivalentUsd": 141.71935720000005,
+        "users": 1
+      },
+      {
+        "day": "2026-09-10",
+        "credits": 27455.66900000001,
+        "equivalentUsd": 274.5566900000001,
+        "users": 1
+      },
+      {
+        "day": "2026-09-14",
+        "credits": 12387.119299999998,
+        "equivalentUsd": 123.87119299999999,
+        "users": 1
+      },
+      {
+        "day": "2026-09-15",
+        "credits": 3948.467,
+        "equivalentUsd": 39.48467,
+        "users": 1
+      },
+      {
+        "day": "2026-09-16",
+        "credits": 3386.518755999999,
+        "equivalentUsd": 33.86518755999999,
+        "users": 2
+      },
+      {
+        "day": "2026-09-17",
+        "credits": 649.096509,
+        "equivalentUsd": 6.4909650899999995,
+        "users": 1
+      },
+      {
+        "day": "2026-09-18",
+        "credits": 8438.4913574,
+        "equivalentUsd": 84.38491357400001,
+        "users": 3
+      }
+    ]
+  },
+  "interactionTelemetry": {
+    "activity": {
+      "interactions": 84,
+      "codeGeneration": 127,
+      "codeAcceptance": 84,
+      "locSuggestedAdd": 5299,
+      "locAdded": 5279
+    },
+    "modelFeature": [
+      {
+        "key": "gpt-6-astra | copilot_cli",
+        "interactions": 37,
+        "codeGeneration": 109,
+        "codeAcceptance": 78,
+        "locSuggestedAdd": 5200,
+        "locAdded": 5200
+      },
+      {
+        "key": "gpt-5.6-luna | chat_panel_agent_mode",
+        "interactions": 12,
+        "codeGeneration": 9,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 14,
+        "locAdded": 0
+      },
+      {
+        "key": "claude-fable-5-1 | chat_panel_custom_mode",
+        "interactions": 10,
+        "codeGeneration": 2,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 16,
+        "locAdded": 8
+      },
+      {
+        "key": "gpt-5.3-codex | chat_panel_agent_mode",
+        "interactions": 7,
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "claude-fable-5-1 | chat_panel_agent_mode",
+        "interactions": 6,
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "claude-opus-5 | copilot_cli",
+        "interactions": 4,
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 38,
+        "locAdded": 38
+      },
+      {
+        "key": "claude-sonnet-5 | chat_panel_agent_mode",
+        "interactions": 3,
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 1,
+        "locAdded": 0
+      },
+      {
+        "key": "claude-4.5-haiku | copilot_cli",
+        "interactions": 2,
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "mai-code-1.1-flash | copilot_cli",
+        "interactions": 1,
+        "codeGeneration": 3,
+        "codeAcceptance": 3,
+        "locSuggestedAdd": 30,
+        "locAdded": 30
+      },
+      {
+        "key": "gpt-5.6-luna | copilot_cli",
+        "interactions": 1,
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "gpt-5.5 | chat_panel_agent_mode",
+        "interactions": 1,
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "claude-fable-5-1 | agent_edit",
+        "interactions": 0,
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 2
+      },
+      {
+        "key": "gpt-5.3-codex | agent_edit",
+        "interactions": 0,
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 1
+      }
+    ],
+    "languageFeature": [
+      {
+        "key": "markdown | copilot_cli",
+        "codeGeneration": 36,
+        "codeAcceptance": 32,
+        "locSuggestedAdd": 1429,
+        "locAdded": 1429
+      },
+      {
+        "key": "c# | copilot_cli",
+        "codeGeneration": 20,
+        "codeAcceptance": 20,
+        "locSuggestedAdd": 1602,
+        "locAdded": 1602
+      },
+      {
+        "key": "others | others",
+        "codeGeneration": 18,
+        "codeAcceptance": 9,
+        "locSuggestedAdd": 418,
+        "locAdded": 418
+      },
+      {
+        "key": "python | copilot_cli",
+        "codeGeneration": 12,
+        "codeAcceptance": 3,
+        "locSuggestedAdd": 510,
+        "locAdded": 510
+      },
+      {
+        "key": "yaml | copilot_cli",
+        "codeGeneration": 9,
+        "codeAcceptance": 5,
+        "locSuggestedAdd": 195,
+        "locAdded": 195
+      },
+      {
+        "key": "javascript | copilot_cli",
+        "codeGeneration": 8,
+        "codeAcceptance": 4,
+        "locSuggestedAdd": 570,
+        "locAdded": 570
+      },
+      {
+        "key": "json | copilot_cli",
+        "codeGeneration": 5,
+        "codeAcceptance": 5,
+        "locSuggestedAdd": 89,
+        "locAdded": 89
+      },
+      {
+        "key": "powershell | chat_panel_agent_mode",
+        "codeGeneration": 5,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 10,
+        "locAdded": 0
+      },
+      {
+        "key": "html | copilot_cli",
+        "codeGeneration": 4,
+        "codeAcceptance": 4,
+        "locSuggestedAdd": 454,
+        "locAdded": 454
+      },
+      {
+        "key": "text | chat_panel_agent_mode",
+        "codeGeneration": 4,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 4,
+        "locAdded": 0
+      },
+      {
+        "key": "powershell | chat_panel_custom_mode",
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 8,
+        "locAdded": 8
+      },
+      {
+        "key": "html | agent_edit",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 2
+      },
+      {
+        "key": "css | copilot_cli",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 1,
+        "locAdded": 1
+      },
+      {
+        "key": "github-actions-workflow | agent_edit",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 1
+      },
+      {
+        "key": "unknown | chat_panel_agent_mode",
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 1,
+        "locAdded": 0
+      },
+      {
+        "key": "jsonc | chat_panel_custom_mode",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 8,
+        "locAdded": 0
+      },
+      {
+        "key": "json | chat_panel_agent_mode",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "unknown | chat_panel_custom_mode",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "csv | chat_panel_agent_mode",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "markdown | chat_panel_agent_mode",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      }
+    ],
+    "languageModel": [
+      {
+        "key": "markdown | gpt-6-astra",
+        "codeGeneration": 32,
+        "codeAcceptance": 28,
+        "locSuggestedAdd": 1361,
+        "locAdded": 1361
+      },
+      {
+        "key": "c# | gpt-6-astra",
+        "codeGeneration": 20,
+        "codeAcceptance": 20,
+        "locSuggestedAdd": 1602,
+        "locAdded": 1602
+      },
+      {
+        "key": "others | others",
+        "codeGeneration": 18,
+        "codeAcceptance": 9,
+        "locSuggestedAdd": 418,
+        "locAdded": 418
+      },
+      {
+        "key": "python | gpt-6-astra",
+        "codeGeneration": 12,
+        "codeAcceptance": 3,
+        "locSuggestedAdd": 510,
+        "locAdded": 510
+      },
+      {
+        "key": "yaml | gpt-6-astra",
+        "codeGeneration": 9,
+        "codeAcceptance": 5,
+        "locSuggestedAdd": 195,
+        "locAdded": 195
+      },
+      {
+        "key": "javascript | gpt-6-astra",
+        "codeGeneration": 8,
+        "codeAcceptance": 4,
+        "locSuggestedAdd": 570,
+        "locAdded": 570
+      },
+      {
+        "key": "json | gpt-6-astra",
+        "codeGeneration": 5,
+        "codeAcceptance": 5,
+        "locSuggestedAdd": 89,
+        "locAdded": 89
+      },
+      {
+        "key": "powershell | gpt-5.6-luna",
+        "codeGeneration": 5,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 10,
+        "locAdded": 0
+      },
+      {
+        "key": "html | gpt-6-astra",
+        "codeGeneration": 4,
+        "codeAcceptance": 4,
+        "locSuggestedAdd": 454,
+        "locAdded": 454
+      },
+      {
+        "key": "text | gpt-5.6-luna",
+        "codeGeneration": 4,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 4,
+        "locAdded": 0
+      },
+      {
+        "key": "markdown | mai-code-1.1-flash",
+        "codeGeneration": 3,
+        "codeAcceptance": 3,
+        "locSuggestedAdd": 30,
+        "locAdded": 30
+      },
+      {
+        "key": "markdown | claude-opus-5",
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 38,
+        "locAdded": 38
+      },
+      {
+        "key": "powershell | claude-fable-5-1",
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 8,
+        "locAdded": 8
+      },
+      {
+        "key": "html | claude-fable-5-1",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 2
+      },
+      {
+        "key": "css | gpt-6-astra",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 1,
+        "locAdded": 1
+      },
+      {
+        "key": "github-actions-workflow | gpt-5.3-codex",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 1
+      },
+      {
+        "key": "jsonc | claude-fable-5-1",
+        "codeGeneration": 1,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 8,
+        "locAdded": 0
+      },
+      {
+        "key": "unknown | claude-sonnet-5",
+        "codeGeneration": 1,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 1,
+        "locAdded": 0
+      },
+      {
+        "key": "unknown | gpt-5.6-luna",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "json | claude-fable-5-1",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "unknown | claude-fable-5-1",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "csv | gpt-5.3-codex",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "json | gpt-5.3-codex",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "unknown | gpt-5.3-codex",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      },
+      {
+        "key": "markdown | gpt-5.5",
+        "codeGeneration": 0,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 0
+      }
+    ],
+    "surfaces": [
+      {
+        "key": "copilot_cli",
+        "interactions": 45,
+        "codeGeneration": 113,
+        "codeAcceptance": 82,
+        "locSuggestedAdd": 5268,
+        "locAdded": 5268
+      },
+      {
+        "key": "chat_panel_agent_mode",
+        "interactions": 29,
+        "codeGeneration": 10,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 15,
+        "locAdded": 0
+      },
+      {
+        "key": "chat_panel_custom_mode",
+        "interactions": 10,
+        "codeGeneration": 2,
+        "codeAcceptance": 1,
+        "locSuggestedAdd": 16,
+        "locAdded": 8
+      },
+      {
+        "key": "agent_edit",
+        "interactions": 0,
+        "codeGeneration": 2,
+        "codeAcceptance": 0,
+        "locSuggestedAdd": 0,
+        "locAdded": 3
+      }
+    ]
+  },
+  "seats": [
+    {
+      "user": "user-01",
+      "tier": "enterprise",
+      "credits": 78293.69402600001,
+      "activeDays": 9,
+      "usageObserved": true
+    },
+    {
+      "user": "user-04",
+      "tier": "enterprise",
+      "credits": 98.806285,
+      "activeDays": 1,
+      "usageObserved": true
+    },
+    {
+      "user": "user-02",
+      "tier": "business",
+      "credits": 1842.2397338999997,
+      "activeDays": 5,
+      "usageObserved": true
+    },
+    {
+      "user": "user-05",
+      "tier": "business",
+      "credits": 0,
+      "activeDays": 0,
+      "usageObserved": false
+    },
+    {
+      "user": "user-03",
+      "tier": "business",
+      "credits": 162.09994999999998,
+      "activeDays": 1,
+      "usageObserved": true
+    }
+  ],
+  "coverage": {
+    "extractorComplete": false,
+    "requestedEndMissing": true,
+    "dailyAttemptDays": 26,
+    "enrichedDays": 11,
+    "dailyErrorDays": 15,
+    "spineRowsMatchedToDaily": 16,
+    "spineRowsUnmatchedToDaily": 0,
+    "dailyRows": 16,
+    "errors": [
+      {
+        "day": "2026-09-02"
+      },
+      {
+        "day": "2026-09-03"
+      },
+      {
+        "day": "2026-09-06"
+      },
+      {
+        "day": "2026-09-11"
+      },
+      {
+        "day": "2026-09-12"
+      },
+      {
+        "day": "2026-09-13"
+      },
+      {
+        "day": "2026-09-19"
+      },
+      {
+        "day": "2026-09-20"
+      },
+      {
+        "day": "2026-09-21"
+      },
+      {
+        "day": "2026-09-22"
+      },
+      {
+        "day": "2026-09-23"
+      },
+      {
+        "day": "2026-09-24"
+      },
+      {
+        "day": "2026-09-25"
+      },
+      {
+        "day": "2026-09-26"
+      },
+      {
+        "day": "2026-09-27"
+      }
+    ]
+  }
+}

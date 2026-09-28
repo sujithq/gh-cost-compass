@@ -1,0 +1,361 @@
+{
+  "snapshot_date": "2026-09-28",
+  "effective_from": null,
+  "synthetic_demo_aliases": true,
+  "cost_centers": [
+    {
+      "id": "cost-center-01",
+      "name": "CC-Engineering",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [
+        "user-01",
+        "user-06",
+        "user-07",
+        "user-02"
+      ],
+      "team_ids": [],
+      "organization_ids": [],
+      "resources": [
+        {
+          "type": "user",
+          "id": "user-07",
+          "name": "user-07",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-06",
+          "name": "user-06",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-02",
+          "name": "user-02",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-01",
+          "name": "user-01",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-02",
+      "name": "CC-Product",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [
+        "user-10",
+        "user-09",
+        "user-08"
+      ],
+      "team_ids": [
+        "demo-team-01"
+      ],
+      "organization_ids": [
+        "demo-org-01"
+      ],
+      "resources": [
+        {
+          "type": "user",
+          "id": "user-08",
+          "name": "user-08",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "org",
+          "id": "demo-org-01",
+          "name": "demo-org-01",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "team",
+          "id": "demo-team-01",
+          "name": "demo-team-01",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-09",
+          "name": "user-09",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-10",
+          "name": "user-10",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-03",
+      "name": "CC-Platform",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [
+        "user-11",
+        "user-12",
+        "user-05",
+        "user-13"
+      ],
+      "team_ids": [
+        "demo-team-02",
+        "demo-team-03"
+      ],
+      "organization_ids": [
+        "demo-org-02"
+      ],
+      "resources": [
+        {
+          "type": "org",
+          "id": "demo-org-02",
+          "name": "demo-org-02",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "team",
+          "id": "demo-team-02",
+          "name": "demo-team-02",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "team",
+          "id": "demo-team-03",
+          "name": "demo-team-03",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-11",
+          "name": "user-11",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-12",
+          "name": "user-12",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-13",
+          "name": "user-13",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-05",
+          "name": "user-05",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-04",
+      "name": "CC-Shared",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [
+        "user-14"
+      ],
+      "team_ids": [
+        "demo-team-06",
+        "demo-team-04",
+        "demo-team-05"
+      ],
+      "organization_ids": [
+        "demo-org-03"
+      ],
+      "resources": [
+        {
+          "type": "team",
+          "id": "demo-team-04",
+          "name": "demo-team-04",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "team",
+          "id": "demo-team-05",
+          "name": "demo-team-05",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-14",
+          "name": "user-14",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "org",
+          "id": "demo-org-03",
+          "name": "demo-org-03",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "team",
+          "id": "demo-team-06",
+          "name": "demo-team-06",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-05",
+      "name": "CC-Web",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [
+        "user-16",
+        "user-15"
+      ],
+      "team_ids": [
+        "demo-team-07"
+      ],
+      "organization_ids": [
+        "demo-org-04"
+      ],
+      "resources": [
+        {
+          "type": "user",
+          "id": "user-15",
+          "name": "user-15",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-16",
+          "name": "user-16",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "org",
+          "id": "demo-org-04",
+          "name": "demo-org-04",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "team",
+          "id": "demo-team-07",
+          "name": "demo-team-07",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-06",
+      "name": "CC-Project-7",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [
+        "user-03"
+      ],
+      "team_ids": [],
+      "organization_ids": [],
+      "resources": [
+        {
+          "type": "user",
+          "id": "user-03",
+          "name": "user-03",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-07",
+      "name": "CC-Dev",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [],
+      "team_ids": [
+        "demo-team-08"
+      ],
+      "organization_ids": [],
+      "resources": [
+        {
+          "type": "team",
+          "id": "demo-team-08",
+          "name": "demo-team-08",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-08",
+      "name": "CC-Deleted-Example",
+      "state": "deleted",
+      "deleted": true,
+      "user_ids": [
+        "user-04",
+        "user-01",
+        "user-17"
+      ],
+      "team_ids": [],
+      "organization_ids": [],
+      "resources": [
+        {
+          "type": "user",
+          "id": "user-04",
+          "name": "user-04",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-01",
+          "name": "user-01",
+          "deleted": false,
+          "state": "active"
+        },
+        {
+          "type": "user",
+          "id": "user-17",
+          "name": "user-17",
+          "deleted": false,
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "id": "cost-center-09",
+      "name": "CC-Example",
+      "state": "active",
+      "deleted": false,
+      "user_ids": [],
+      "team_ids": [],
+      "organization_ids": [],
+      "resources": []
+    }
+  ]
+}
