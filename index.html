@@ -18,6 +18,7 @@
       </button>
       <nav id="navigation">
         <button class="nav-item active" data-view="dashboard">▦ Dashboard</button>
+        <button class="nav-item" data-view="insights">◫ Usage insights</button>
         <details class="nav-detail" open>
           <summary>▶ Simulate</summary>
           <button class="nav-item nav-subitem" data-view="optimized"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon nav-icon" aria-hidden="true"><rect x="4" y="3" width="6" height="5" rx="1.2"/><rect x="14" y="3" width="6" height="5" rx="1.2"/><rect x="9" y="16" width="6" height="5" rx="1.2"/><path d="M7 8v3a2 2 0 0 0 2 2h1"/><path d="M17 8v3a2 2 0 0 0-2 2h-1"/></svg> Budget controls review</button>
@@ -52,6 +53,31 @@
         <div class="two-column">
           <article class="panel"><div class="panel-title"><h3>Enterprise structure</h3><span>Live configuration</span></div><div id="hierarchy"></div></article>
           <article class="panel"><div class="panel-title"><h3>Recent activity</h3><button class="text-button" data-go="timeline">View all</button></div><div id="recent-activity"></div></article>
+        </div>
+      </section>
+
+      <section id="insights" class="view">
+        <div class="section-heading"><div><p class="eyebrow">TOKENOMICS ADAPTER</p><h2>Usage, spend context & workflow evidence</h2><p class="muted">Combine enterprise usage telemetry with an optional finalized Chronicle report. Imported files stay in this browser tab and are not persisted.</p></div><span class="pill">Local import only</span></div>
+        <div class="insight-import-grid">
+          <article class="panel insight-import-card">
+            <div><p class="eyebrow">ENTERPRISE COVERAGE</p><h3>GitHub usage-metrics NDJSON</h3><p>Authoritative user/day AI-credit totals plus IDE, CLI, agent, model, language, and acceptance activity counters.</p></div>
+            <label class="button-like">Import NDJSON<input id="import-enterprise-usage" type="file" accept=".ndjson,application/x-ndjson,application/json"></label>
+          </article>
+          <article class="panel insight-import-card">
+            <div><p class="eyebrow">OPT-IN LOCAL CONTEXT</p><h3>Finalized Chronicle JSON</h3><p>Repository, surface, token, cache, and evidence-backed workflow findings. Only redacted schema-v3 reports without working evidence are accepted.</p></div>
+            <label class="button-like">Import Chronicle<input id="import-chronicle-report" type="file" accept="application/json"></label>
+          </article>
+        </div>
+        <div id="tokenomics-empty" class="panel tokenomics-empty"><span>◎</span><h3>Import a usage export to begin</h3><p>Start with the GitHub enterprise NDJSON for fleet coverage. Add a developer-approved Chronicle report for local workflow context.</p></div>
+        <div id="tokenomics-content" hidden>
+          <div id="tokenomics-summary" class="summary-grid"></div>
+          <div class="two-column insight-columns">
+            <article class="panel"><div class="panel-title"><h3>Coverage boundary</h3><span>Do not blend unlike evidence</span></div><div id="tokenomics-coverage"></div></article>
+            <article class="panel"><div class="panel-title"><h3>Chronicle findings</h3><span id="chronicle-status">Not imported</span></div><div id="chronicle-findings"></div></article>
+          </div>
+          <article class="panel"><div class="panel-title"><h3>User chargeback context</h3><span>Credits remain user/day totals</span></div><div id="tokenomics-users"></div></article>
+          <article class="panel"><div class="panel-title"><h3>Model and feature activity</h3><span>Activity counters, not dollar allocation</span></div><div id="tokenomics-models"></div></article>
+          <div class="tokenomics-actions"><button id="clear-tokenomics-imports" type="button" class="danger-ghost">Clear imported insights</button></div>
         </div>
       </section>
 

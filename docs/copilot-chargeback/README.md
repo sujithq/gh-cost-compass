@@ -47,6 +47,7 @@ flowchart LR
 - [FOCUS 1.4 and FinOps hub mapping](focus-mapping.md)
 - [Outputs and workbook dictionary](outputs.md)
 - [Token Lens integration boundary](token-lens-integration.md)
+- [Tokenomics workspace comparison and integration architecture](tokenomics-comparison.md)
 
 The existing [pipeline recommendation](../copilot-usage-pipeline-recommendation.md) remains the
 design rationale for the Actions boundary, Fabric alternative, and operational controls. This

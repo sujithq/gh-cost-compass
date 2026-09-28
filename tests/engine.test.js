@@ -8,6 +8,7 @@ import { registerEnvironment, validateMaterializedScenario, validateEnvironment 
 import { trimToastStack } from "../src/toast-stack.js";
 import { ASSISTANT_BACKENDS, buildAssistantContext, createAssistantProvider, createCopilotAssistantProvider, renderAssistantMarkdown, resolveAssistantBackend, validateAssistantDraft } from "../src/assistant.js";
 import { includedPoolHistoryResults } from "../src/history.js";
+import { compareInsightCoverage, parseEnterpriseUsageNdjson, parseFinalizedChronicleReport, summarizeChronicleReport, summarizeEnterpriseUsage } from "../src/tokenomics-insights.js";
 import { askInIsolatedSession } from "../.github/extensions/budget-lab/copilot-request.mjs";
 
 async function fileFetch(url) {
@@ -34,6 +35,127 @@ function poolTotalFor(scenario, date = "2026-09-15") {
 function quantityWithOverage(scenario, overage = 200, date = "2026-09-15") {
   return poolTotalFor(scenario, date) + overage;
 }
+
+test("enterprise usage insights preserve exact credits while separating activity dimensions", () => {
+  const rows = parseEnterpriseUsageNdjson([
+    JSON.stringify({
+      report_start_day: "2026-09-01",
+      report_end_day: "2026-09-28",
+      day: "2026-09-14",
+      user_login: "alex",
+      ai_credits_used: 12387.1193,
+      user_initiated_interaction_count: 6,
+      code_generation_activity_count: 78,
+      code_acceptance_activity_count: 55,
+      used_cli: true,
+      totals_by_cli: {
+        session_count: 3,
+        request_count: 306,
+        prompt_count: 6,
+        token_usage: { prompt_tokens_sum: 70714127, output_tokens_sum: 131291 },
+      },
+      totals_by_model_feature: [{
+        model: "gpt-6-astra",
+        feature: "copilot_cli",
+        user_initiated_interaction_count: 5,
+        code_generation_activity_count: 78,
+        code_acceptance_activity_count: 55,
+      }],
+    }),
+    JSON.stringify({
+      report_start_day: "2026-09-01",
+      report_end_day: "2026-09-28",
+      day: "2026-09-15",
+      user_login: "alex",
+      ai_credits_used: 3948.467,
+      user_initiated_interaction_count: 4,
+      code_generation_activity_count: 9,
+      code_acceptance_activity_count: 5,
+      used_cli: true,
+      totals_by_model_feature: [{
+        model: "gpt-6-astra",
+        feature: "copilot_cli",
+        user_initiated_interaction_count: 4,
+        code_generation_activity_count: 9,
+        code_acceptance_activity_count: 5,
+      }],
+    }),
+  ].join("\n"));
+  const summary = summarizeEnterpriseUsage(rows);
+
+  assert.equal(summary.userCount, 1);
+  assert.equal(summary.credits, 16335.5863);
+  assert.equal(summary.usageValueUsd, 163.355863);
+  assert.equal(summary.interactions, 10);
+  assert.equal(summary.generations, 87);
+  assert.equal(summary.acceptances, 60);
+  assert.equal(summary.users[0].cliRequests, 306);
+  assert.deepEqual(summary.users[0].surfaces, ["Copilot CLI"]);
+  assert.deepEqual(summary.modelFeatures[0], {
+    model: "gpt-6-astra",
+    feature: "copilot_cli",
+    interactions: 9,
+    generations: 87,
+    acceptances: 60,
+  });
+});
+
+test("enterprise usage import reports malformed rows precisely", () => {
+  assert.throws(() => parseEnterpriseUsageNdjson("{}"), /Line 1 is missing user_login or day/);
+  assert.throws(() => parseEnterpriseUsageNdjson('{"user_login":"alex"}\nnot-json'), /Line 1 is missing user_login or day/);
+  assert.throws(() => parseEnterpriseUsageNdjson(""), /empty/);
+});
+
+test("Chronicle insights accept only finalized redacted schema-v3 reports", () => {
+  const report = {
+    schemaVersion: 3,
+    metadata: { analysisWindow: "2026-09-01 to 2026-09-28", redacted: true },
+    metrics: {
+      totals: {
+        sessions: 4,
+        repositories: 1,
+        surfaces: 1,
+        surfaceNames: ["GitHub Copilot CLI"],
+        calls: 3,
+        models: 1,
+        inputTokens: 68362,
+        outputTokens: 263,
+        cacheReadTokens: 36352,
+        cacheWriteTokens: 32004,
+        reasoningTokens: 77,
+        topCostDriver: "r_123",
+        topRecommendedAction: "Collect representative sessions.",
+      },
+      slices: [],
+      reconciliation: { ok: true },
+    },
+    findings: { workflowTips: [], costTips: [], dataQuality: "Schema warning.", limitations: "Local only." },
+  };
+  const parsed = parseFinalizedChronicleReport(JSON.stringify(report));
+  const summary = summarizeChronicleReport(parsed);
+
+  assert.equal(summary.sessions, 4);
+  assert.equal(summary.inputTokens, 68362);
+  assert.equal(summary.reconciliationOk, true);
+  assert.equal(summary.topRecommendedAction, "Collect representative sessions.");
+  assert.equal(compareInsightCoverage(null, summary)[2].chronicle, "Opt-in local evidence and findings");
+
+  assert.throws(() => parseFinalizedChronicleReport(JSON.stringify({ ...report, evidence: {} })), /private working data/);
+  assert.throws(() => parseFinalizedChronicleReport(JSON.stringify({ ...report, metadata: { ...report.metadata, redacted: false } })), /redaction enabled/);
+  assert.throws(() => parseFinalizedChronicleReport(JSON.stringify({ ...report, findings: { ...report.findings, path: "C:\\Users\\alex\\store.db" } })), /absolute user path/);
+});
+
+test("usage insights UI keeps enterprise and Chronicle evidence explicitly separate", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+  assert.match(html, /data-view="insights"/);
+  assert.match(html, /id="import-enterprise-usage"/);
+  assert.match(html, /id="import-chronicle-report"/);
+  assert.match(html, /Imported files stay in this browser tab and are not persisted/);
+  assert.match(html, /Activity counters, not dollar allocation/);
+  assert.match(app, /usage-metrics rows do not allocate/);
+});
 
 test("assistant context summarizes the live budget health for the current simulation state", () => {
   const scenario = createDefaultScenario("compact");
