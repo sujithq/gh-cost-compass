@@ -20,6 +20,16 @@ install or run this plugin, and native `/chronicle` does not produce its stable
 JSON report. Native Chronicle queries can send relevant prompts, context, and responses to
 an AI model; do not confuse that behavior with the local Token Lens collector.
 
+> [!CAUTION]
+> `COPILOT_HOME` isolates Copilot CLI configuration and sessions, but the pinned
+> Chronicle plugin's collection scripts do **not** use it when choosing their
+> default database. `preflight.ps1` defaults to `$HOME/.copilot/session-store.db`
+> and `collect.mjs` defaults to `os.homedir()/.copilot/session-store.db`. The
+> `/chronicle-report` slash workflow is therefore safe only in a dedicated Alex
+> OS profile. In a shared Windows profile, do not invoke the slash command:
+> use the manual pipeline in section 5 and pass Alex's isolated database path
+> explicitly to both preflight and collection.
+
 ## 1. Prepare Alex's CLI and isolate the local store
 
 1. Prefer a **separate Windows user profile for Alex**, with a Copilot
@@ -40,8 +50,10 @@ an AI model; do not confuse that behavior with the local Token Lens collector.
    ```
 
    [Copilot CLI stores configuration and session history](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)
-   under `~/.copilot` by default; `COPILOT_HOME` isolates them. Never point
-   this demo at Johan's existing `~/.copilot` or another person's store.
+   under `~/.copilot` by default; `COPILOT_HOME` isolates the CLI's configuration
+   and sessions. It does **not** change the pinned plugin scripts' default
+   database lookup. Never point this demo at Johan's existing `~/.copilot` or
+   another person's store.
    Restrict filesystem access to Alex; do not place this directory in the
    checkout or a synced/shared folder.
 3. Authenticate with `copilot login` (or `/login` inside the interactive CLI)
@@ -62,7 +74,9 @@ an AI model; do not confuse that behavior with the local Token Lens collector.
    `b3efd0ad35d9eaf3823372ab605d97edcf914225`, or its authorized
    distributor. The pinned Git blob ID is
    `e5da13ade57ccd11ea9d46b8092e4d720b1b1055` and the ZIP size is
-   **32,530 bytes**; a blob ID is **not** a SHA-256 digest. Access requires
+   **32,530 bytes**. Its verified SHA-256 is
+   `E89424DDFFBB07E0B1E64D3668CE0BA6AFE35D7F2D0E98F447EBD909A6766834`;
+   the blob ID and SHA-256 are different digest formats. Access requires
    the relevant Microsoft EMU permissions. The upstream
    provenance/redistribution question is unresolved: keep the bundle,
    binaries, and collector code **outside this repository**. Do not use a
@@ -92,10 +106,12 @@ an AI model; do not confuse that behavior with the local Token Lens collector.
    copilot
    ```
 
-   Confirm that `/chronicle-report` appears in the **new** interactive
-   session. This is a manual install, not an auto-update or a dependency of
-   Budget Lab. If installation changes `COPILOT_HOME`, stop and correct it
-   before opening the session.
+   The pinned bundle was installed into an isolated `COPILOT_HOME`, and
+   `copilot plugin list` reported `chronicle-report` version **0.5.1**.
+   Confirm that version and that `/chronicle-report` appears in the **new**
+   interactive session. This is a manual install, not an auto-update or a
+   dependency of Budget Lab. If installation changes `COPILOT_HOME`, stop
+   and correct it before opening the session.
 2. When the CLI requests `/sandbox` permissions, grant only what the verified
    skill needs: **read-only** access to the plugin files and Alex's compatible
    local CLI session store (including SQLite sidecars where needed), and
@@ -126,11 +142,15 @@ an AI model; do not confuse that behavior with the local Token Lens collector.
 
 ## 5. Preflight, invoke, and finalize
 
-1. In the verified, extracted plugin directory, run preflight from the same
-   isolated PowerShell environment:
+1. Resolve the isolated database explicitly. In the verified, extracted plugin
+   directory, run preflight from the same isolated PowerShell environment:
 
    ```powershell
-   pwsh -NoProfile -File .\scripts\preflight.ps1
+   $alexDb = Join-Path $env:COPILOT_HOME 'session-store.db'
+   pwsh -NoProfile -File .\scripts\preflight.ps1 `
+     -DbPath $alexDb `
+     -From '2026-09-01' `
+     -To '2026-09-30'
    ```
 
    Use the script's scoped `-Month`, `-From`/`-To`, or `-Repo` parameters
@@ -138,8 +158,28 @@ an AI model; do not confuse that behavior with the local Token Lens collector.
    inspect missing/partial coverage before deciding, and **blocked** as stop
    and fix the cause. Do not treat a degraded/blocked result as a complete
    report or expand sandbox grants merely to bypass a warning.
-2. Start or return to Alex's interactive `copilot` session and invoke
-   `/chronicle-report` with the intended date/repository scope. The pinned
+2. Choose the workflow based on OS-profile isolation:
+
+   - **Dedicated Alex OS profile:** start or return to Alex's interactive
+     `copilot` session and invoke `/chronicle-report` with the intended
+     date/repository scope.
+   - **Shared Windows profile:** do **not** invoke `/chronicle-report`.
+     Run the collector manually and pass the same explicit database path:
+
+     ```powershell
+     node .\scripts\collect.mjs `
+       --db $alexDb `
+       --from 2026-09-01 `
+       --to 2026-09-30 `
+       --redact
+     ```
+
+     Keep collection output and all subsequent validation, rendering, and
+     finalization local. Follow the pinned bundle's approved commands for
+     those stages; do not omit `--db` on collection or substitute the
+     script's home-directory default.
+
+   The pinned
    skill accepts `month:YYYY-MM`, `from:YYYY-MM-DD` with `to:YYYY-MM-DD`,
    `since:`, `repo:owner/name`, `repo:.`, and `search:`. For example:
 
@@ -165,6 +205,20 @@ an AI model; do not confuse that behavior with the local Token Lens collector.
    finalization as shareable. Redaction hashes repository/file names in
    supported paths; it does not guarantee that every identity-adjacent field
    (such as a checkpoint title or summary) is anonymous.
+
+### Observed Alex preflight, 2026-09-01 through 2026-09-30
+
+The preflight run against the **explicit isolated Alex database path** returned
+`degraded`, with **0 failures and 2 warnings**. The database was readable and
+queries succeeded, but it contained only **1 active metadata-only session**,
+**0 usage events**, and no measured token fields. The store schema was version
+8; Chronicle plugin 0.5.1 currently validates only schema 7, so it warned about
+the newer schema even though its queries completed.
+
+Alex's first Copilot request failed because the monthly quota was exhausted.
+Consequently, this run produced no meaningful real usage report. Treat it as
+an installation and safety-path validation only, not evidence of zero usage
+or a usable baseline.
 
 ## 6. Review and hand off only an approved report
 
