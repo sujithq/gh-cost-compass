@@ -19,7 +19,8 @@ private repository. The relevant immutable sources are the
 [chat collector](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/collectors/chat-collect.mjs),
 [preflight script](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/collectors/preflight.ps1),
 [finalizer](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/collectors/finalize.ps1),
-and [report schema](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/schema/token-lens-report.schema.json).
+the [report schema](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/schema/token-lens-report.schema.json),
+and [provenance note](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/PROVENANCE.md).
 
 - It is not a background collector. The [README](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/README.md)
   documents manual npm-tarball distribution (`npm pack`), developer installation, and the
@@ -28,6 +29,11 @@ and [report schema](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3ef
   exposes `/chronicle-report`; its
   [skill frontmatter](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/plugin/skills/chronicle-report/SKILL.md)
   is user-invocable and disables model invocation, so it cannot trigger itself.
+- The plugin is installed separately and manually with `copilot plugin install <path>`, requires
+  explicit, narrow sandbox grants, and has no auto-update. Its
+  [installation guide](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/internal-workbench/docs/tokenlens-distribution/INSTALL.md)
+  recommends read-only access to the plugin directory and read/write access only to the report
+  output directory, not the developer's whole home folder.
 - Collection is local and makes no network call. The CLI reads the local Copilot CLI SQLite
   session store and WAL sidecars plus editor chat session files
   ([session collector](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/collectors/session-collect.mjs),
@@ -39,12 +45,35 @@ and [report schema](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3ef
   There is no shared central location, uploader, or background service in the current source; the
   [README](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/README.md)
   instructs the developer to send the generated report file.
-- The finalized session-export contains aggregate token counts, resolved model, and tool-call round
+- The separate plain session-store exporter contains aggregate token counts, resolved model, and tool-call round
   count without a developer identifier or conversation prose
   ([session exporter](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/collectors/session-export.mjs)).
-  The evidence collector is more sensitive: it reads repository names, file paths, checkpoint
-  titles, and summaries. `--redact` hashes repository and file names
+  That privacy property does not carry over to the richer plugin/Chronicle report: it is one
+  developer's history and can be identity-adjacent through repository names, file paths,
+  checkpoint titles, and session summaries. The evidence collector reads some of those fields;
+  `--redact` hashes repository and file names in supported paths
   ([session collector](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/collectors/session-collect.mjs)).
+
+### Companion Workbench
+
+The companion `internal-workbench` is a client-side SPA, not an ingestion service. It has no
+report-upload API or database, and imported files are analyzed in the browser. Multiple reports are
+combined only through explicit manual multi-file import; every report reaches the page because a
+person selected or dropped it there. The app may make separate, user-initiated GitHub API reads, but
+it does not transmit imported reports to an analysis service. See the upstream
+[Chronicle integration design](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/internal-workbench/docs/CHRONICLE-INTEGRATION.md)
+and [trust and compliance note](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/internal-workbench/docs/TRUST-AND-COMPLIANCE.md).
+
+The Workbench's **Redact names** control is presentation-only: masking the rendered view does not
+change the loaded report file. Any future central adapter must sanitize and validate the data before
+accepting it; it must not rely on UI redaction.
+
+There is no retention TTL. Generated local reports remain until a developer deletes them, and
+uninstalling the plugin does not remove existing report files
+([installation guide](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/internal-workbench/docs/tokenlens-distribution/INSTALL.md)).
+CI is unsuitable for collection because each session database resides on its developer's machine.
+The upstream design leaves any future scheduling to a local, explicit opt-in by that developer
+([Chronicle integration design](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/internal-workbench/docs/CHRONICLE-INTEGRATION.md)).
 
 ## Privacy boundary
 
@@ -62,7 +91,9 @@ strips the temporary `evidence` block from the shared report. Validate imports a
 Only a finalized report may be considered for import. Reject any payload containing an `evidence`
 block, prompts or replies, absolute paths, session identifiers, or unredacted repository/file names.
 Never upload the raw database, scratch copy, chat-session files, or a pre-finalized report. Token
-Lens does not make monetary claims in its Chronicle evidence reports.
+Lens's Chronicle evidence report makes no monetary claim. The separate plain exporter may include
+USD derived from local per-request rate-card fields; that is not an invoice or authoritative
+enterprise chargeback.
 
 GitHub's [session-data documentation](https://docs.github.com/en/copilot/concepts/security-governance-and-network-settings/session-data)
 describes local session storage, Chronicle-compatible session data, and the privacy of local and
@@ -77,12 +108,20 @@ also notes that Chronicle queries may send relevant prompts, context, and respon
    with a preview and user consent before upload. Do not add a background collector.
 3. Validate schema and provenance. Reject `evidence`, raw prompts/replies, absolute paths, session
    IDs, and unredacted repository/file names. Retain only aggregates and apply short retention.
-4. Token Lens intentionally has no developer identifier. Do not silently join its report to GitHub
-   usage. Any join requires a separate consent envelope with an explicit pseudonymous subject key.
-   Prefer cost-centre/cohort insights and suppress groups below five participants. Never use
-   private session detail for individual chargeback or performance evaluation.
+4. The plain session-store exporter has no developer identifier, while the plugin/Chronicle report
+   is identity-adjacent. Neither establishes complete fleet coverage or reliable identity linkage.
+   Do not silently join either report to GitHub usage. Any join requires a separate consent
+   envelope with an explicit pseudonymous subject key. Prefer cost-centre/cohort insights and
+   suppress groups below five participants. Never use private session detail for individual
+   chargeback or performance evaluation.
 5. Use Token Lens only for coaching and efficiency hypotheses or before/after experiments. Do not
    allocate credits or dollars to models or features from Token Lens or interaction telemetry.
+6. Do not copy the upstream collector or plugin code into this repository while redistribution
+   rights remain unresolved. The upstream
+   [provenance note](https://github.com/mcaps-microsoft/ghcp-tokenomics/blob/b3efd0ad35d9eaf3823372ab605d97edcf914225/token-lens/PROVENANCE.md)
+   identifies derivation from an internal Microsoft EMU project and an open licensing/attribution
+   blocker. If the integration proceeds, implement an independent adapter against an agreed report
+   contract unless and until reuse rights are cleared.
 
 ## Staged roadmap
 
