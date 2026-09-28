@@ -47,12 +47,14 @@ flowchart LR
 - [FOCUS 1.4 and FinOps hub mapping](focus-mapping.md)
 - [Outputs and workbook dictionary](outputs.md)
 - [Token Lens integration boundary](token-lens-integration.md)
+- [Token Lens `/chronicle-report` operator setup](chronicle-user-setup.md)
 
 The existing [pipeline recommendation](../copilot-usage-pipeline-recommendation.md) remains the
 design rationale for the Actions boundary, Fabric alternative, and operational controls. This
 folder is the implementation and output reference; it does not repeat that recommendation.
 
 Token Lens is a separate, local, per-developer signal. See the
+[operator setup](chronicle-user-setup.md) for a manual report and the
 [integration boundary](token-lens-integration.md) before considering any import; it is not a
 fleet-wide usage or billing source.
 
