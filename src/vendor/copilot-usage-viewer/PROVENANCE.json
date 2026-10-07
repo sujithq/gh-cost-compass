@@ -7,7 +7,7 @@
   "copyright": "Copyright (c) 2025 asizikov-demos",
   "licenseFile": "LICENSE",
   "generatedBy": "tools/vendor-copilot-usage-viewer.mjs",
-  "generatorSha256": "ae927c069065c196adcfce5824ddf2529302789686dc32fd31c3e7b6a2e2ef74",
+  "generatorSha256": "6310fbf63e013a175c1c4e0d9d3160d470c103740e529255ca58eb7858727553",
   "build": {
     "recipe": [
       "git fetch --depth 1 https://github.com/asizikov-demos/copilot-user-level-statistics-viewer c2b2324d8b5179280bb1a3b2634200885d68cfbc && git checkout --force c2b2324d8b5179280bb1a3b2634200885d68cfbc",
@@ -172,7 +172,7 @@
   },
   "files": {
     "index.html": "ce51fad01b1010372b044d5faabc2c04b48c6b5ee916a429a08bc96907377672",
-    "LICENSE": "c7e28ed7363d18026e83897bd39400e109dd341fe03991a6e89d5107ab78a758",
+    "LICENSE": "6a3ee021955983311573ada67d31f4f62693df9b23a4a36d1dc4f6e557616a09",
     "THIRD-PARTY-NOTICES.md": "4493c27fdf3e8a09bd79cc627d9d953f55a398ffa3f77b426f0ccb1466706c91"
   }
 }

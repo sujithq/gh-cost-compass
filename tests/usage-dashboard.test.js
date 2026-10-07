@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/pr
 import { runInNewContext } from "node:vm";
 import { parseEnterpriseUsageNdjson, summarizeEnterpriseUsage } from "../src/tokenomics-insights.js";
 import { createHash } from "node:crypto";
-import { claimWorkdir, CSP, UPSTREAM } from "../tools/vendor-copilot-usage-viewer.mjs";
+import { claimWorkdir, CSP, normalizeText, UPSTREAM } from "../tools/vendor-copilot-usage-viewer.mjs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -175,6 +175,7 @@ test("vendored dashboard provenance pins MIT source and verifies shipped files",
   assert.equal(provenance.license, "MIT");
   for (const [file, hash] of Object.entries(provenance.files)) {
     const content = await readFile(new URL(file, directory));
+    assert.ok(!content.includes(13), `${file} must be emitted with canonical LF line endings`);
     assert.equal(createHash("sha256").update(content).digest("hex"), hash, file);
   }
   const generator = await readFile(new URL("tools/vendor-copilot-usage-viewer.mjs", root), "utf8");
@@ -182,6 +183,13 @@ test("vendored dashboard provenance pins MIT source and verifies shipped files",
   const license = await readFile(new URL("LICENSE", directory), "utf8");
   assert.match(license, /Copyright \(c\) 2025 asizikov-demos/);
   assert.match(license, /Permission is hereby granted/);
+});
+
+test("vendor text normalization emits identical bytes from LF and Windows CRLF source", () => {
+  const unix = "MIT License\n\nCopyright\n";
+  assert.equal(normalizeText(unix.replace(/\n/g, "\r\n")), unix);
+  assert.equal(normalizeText(unix.replace(/\n/g, "\r")), unix);
+  assert.equal(normalizeText(unix), unix);
 });
 
 test("vendored dashboard blocks network and persistence without disabling the parsing worker", async () => {

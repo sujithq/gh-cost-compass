@@ -60,6 +60,7 @@ function run(cmd, args, cwd) {
 }
 
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
+export const normalizeText = (text) => text.replace(/\r\n?/g, '\n');
 
 const OWNER_MARKER = '.vendor-copilot-usage-viewer-owner.json';
 const ownerMarker = () => ({ tool: 'tools/vendor-copilot-usage-viewer.mjs', repository: UPSTREAM.repository, commit: UPSTREAM.commit });
@@ -497,7 +498,7 @@ function thirdPartyNotices(src, metafiles, extraPackages) {
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
     const licenseFile = readdirSync(dir).find((name) => /^(licen[cs]e|copying)(\.|$)/i.test(name));
     if (!licenseFile) throw new Error(`No license file found for bundled package ${pkg.name}`);
-    return { name: pkg.name, version: pkg.version, license: pkg.license, licenseText: readFileSync(join(dir, licenseFile), 'utf8').trim() };
+    return { name: pkg.name, version: pkg.version, license: pkg.license, licenseText: normalizeText(readFileSync(join(dir, licenseFile), 'utf8')).trim() };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const text = [
     '# Third-party notices',
@@ -629,7 +630,7 @@ async function main() {
   const src = join(claimWorkdir(args.workdir), 'src');
   checkout(src);
 
-  const license = readFileSync(join(src, 'LICENSE'), 'utf8');
+  const license = normalizeText(readFileSync(join(src, 'LICENSE'), 'utf8'));
   if (!license.startsWith('MIT License') || !license.includes(UPSTREAM.copyright)) {
     throw new Error('Upstream LICENSE is not the expected MIT license; refusing to vendor.');
   }
@@ -637,6 +638,8 @@ async function main() {
   if (!args.skipInstall) run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], src);
   applyPatches(src);
   const result = await build(src);
+  result.html = normalizeText(result.html);
+  result.notices.text = normalizeText(result.notices.text);
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'index.html'), result.html);
@@ -653,7 +656,7 @@ async function main() {
     copyright: UPSTREAM.copyright,
     licenseFile: 'LICENSE',
     generatedBy: 'tools/vendor-copilot-usage-viewer.mjs',
-    generatorSha256: sha256(readFileSync(toolPath, 'utf8').replace(/\r\n/g, '\n')),
+    generatorSha256: sha256(normalizeText(readFileSync(toolPath, 'utf8'))),
     build: {
       recipe: [
         `git fetch --depth 1 ${UPSTREAM.repository} ${UPSTREAM.commit} && git checkout --force ${UPSTREAM.commit}`,
