@@ -1,0 +1,178 @@
+{
+  "name": "copilot-user-level-statistics-viewer",
+  "sourceUrl": "https://github.com/asizikov-demos/copilot-user-level-statistics-viewer",
+  "sourceCommit": "c2b2324d8b5179280bb1a3b2634200885d68cfbc",
+  "sourceArchive": "https://github.com/asizikov-demos/copilot-user-level-statistics-viewer/archive/c2b2324d8b5179280bb1a3b2634200885d68cfbc.tar.gz",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2025 asizikov-demos",
+  "licenseFile": "LICENSE",
+  "generatedBy": "tools/vendor-copilot-usage-viewer.mjs",
+  "generatorSha256": "ae927c069065c196adcfce5824ddf2529302789686dc32fd31c3e7b6a2e2ef74",
+  "build": {
+    "recipe": [
+      "git fetch --depth 1 https://github.com/asizikov-demos/copilot-user-level-statistics-viewer c2b2324d8b5179280bb1a3b2634200885d68cfbc && git checkout --force c2b2324d8b5179280bb1a3b2634200885d68cfbc",
+      "npm ci --ignore-scripts --no-audit --no-fund   # upstream package-lock.json, in a throwaway work directory",
+      "apply the integration patches listed below (exact-anchor string replacements)",
+      "esbuild: src/workers/metricsWorker.ts -> minified IIFE string",
+      "esbuild: React entry (Providers + app/page) -> minified IIFE, next/link shimmed, Next.js runtime not used",
+      "postcss + @tailwindcss/postcss: src/app/globals.css -> minified CSS",
+      "inline CSS, app JS, worker source, plugin-version JSON and gzip+base64 sample report into index.html"
+    ],
+    "command": "node tools/vendor-copilot-usage-viewer.mjs --workdir <throwaway-dir>",
+    "nodeVersion": "v26.3.0",
+    "toolVersions": {
+      "esbuild": "0.28.2",
+      "tailwindcss": "4.3.3",
+      "@tailwindcss/postcss": "4.3.3",
+      "postcss": "8.5.28",
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "chart.js": "4.5.1",
+      "react-chartjs-2": "5.3.1"
+    },
+    "upstreamInputsSha256": {
+      "public/data/jetbrains.json": "0d82a1fff982a9ac546728e3cfc1691a836f905f737618b1e0d901c9201d7c20",
+      "public/data/vscode.json": "4ec7771797f7b622ba902e3d4ecb1dd9a3822061f0774107d87ebac103b65a2f",
+      "public/data/sample-report.ndjson": "88500eaf45a69ada40c94938e354839c55b19dc967ae62f9acc98e47652ebd90",
+      "package-lock.json": "a0631685288c9b75f2e59ed5b9aba8dd41cedcdd87b7d3aed1ac42a48eee3226"
+    }
+  },
+  "integrationChanges": [
+    {
+      "file": "src/utils/basePath.ts",
+      "reason": "Single-file build has no GitHub Pages base path."
+    },
+    {
+      "file": "src/workers/metricsWorkerClient.ts",
+      "reason": "Opaque-origin iframe cannot load a same-origin worker script; start the pre-bundled worker from an inline Blob URL."
+    },
+    {
+      "file": "src/workers/metricsWorkerClient.ts",
+      "reason": "Declare the build-time worker source constant."
+    },
+    {
+      "file": "src/hooks/usePluginVersions.ts",
+      "reason": "Use the pinned plugin-version JSON embedded at build time instead of fetch()."
+    },
+    {
+      "file": "src/hooks/usePluginVersions.ts",
+      "reason": "Declare the embedded plugin-version constants."
+    },
+    {
+      "file": "src/hooks/useFileUpload.ts",
+      "reason": "Load the sample report from a gzip+base64 block embedded in the HTML instead of fetch()."
+    },
+    {
+      "file": "src/hooks/useFileUpload.ts",
+      "reason": "getBasePath is no longer used here."
+    },
+    {
+      "file": "src/state/NavigationContext.tsx",
+      "reason": "Mirror the in-memory view state in location.hash (#/view, #/userDetails/<id>/<login>) so every page is hash-addressable and Back/Forward work."
+    },
+    {
+      "file": "src/state/NavigationContext.tsx",
+      "reason": "Import useEffect for hash synchronisation."
+    },
+    {
+      "file": "src/components/ExecutiveSummaryView.tsx",
+      "reason": "window.print() is blocked without allow-modals: keep Print visibly disabled and add a standalone HTML download (summary DOM, inline styles, charts as data: images, no scripts) with a data-handling warning."
+    },
+    {
+      "file": "src/components/ExecutiveSummaryView.tsx",
+      "reason": "Import the vendored executive summary export helper."
+    },
+    {
+      "file": "(build)",
+      "reason": "Next.js static export replaced by a direct esbuild bundle of the same client components; next/link aliased to a plain <a>."
+    },
+    {
+      "file": "src/vendored/exportExecutiveSummary.ts",
+      "reason": "Added: standalone executive summary HTML export (Blob download)."
+    },
+    {
+      "file": "(build)",
+      "reason": "Inline error overlay surfaces uncaught errors, unhandled rejections, CSP violations and invalid hash routes visibly."
+    },
+    {
+      "file": "(build)",
+      "reason": "External (non-#) link clicks are cancelled with a visible notice because the sandbox grants no popups or top navigation."
+    },
+    {
+      "file": "(build)",
+      "reason": "Build fails if the bundle needs eval/new Function ('unsafe-eval' is never granted)."
+    },
+    {
+      "file": "(build)",
+      "reason": "Workdir must be outside this repository and new/empty or marked with .vendor-copilot-usage-viewer-owner.json for this commit before any forced checkout/clean."
+    },
+    {
+      "file": "(build)",
+      "reason": "Content-Security-Policy meta: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; worker-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    }
+  ],
+  "runtime": {
+    "networkAccess": "none (connect-src none; no fetch, no external scripts, styles, fonts or images)",
+    "requiresEval": false,
+    "storage": "upstream uses no localStorage/sessionStorage/IndexedDB/cookies",
+    "iframeSandbox": "allow-scripts allow-downloads (no allow-same-origin)",
+    "navigation": "hash routes #/<view> and #/userDetails/<id>/<login>; unknown or malformed routes show the error banner and fall back",
+    "disabledFeatures": [
+      "Print / Save PDF (window.print needs allow-modals; replaced by standalone HTML download)",
+      "external links (need allow-popups / top navigation; cancelled with a visible notice)"
+    ],
+    "executiveSummaryExport": {
+      "format": "standalone HTML via Blob download (allow-downloads)",
+      "contentSecurityPolicy": "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'",
+      "contents": "rendered Executive Summary DOM, inline CSS, charts as PNG data: URLs; no scripts, no source records"
+    }
+  },
+  "bundledPackages": [
+    {
+      "name": "@kurkle/color",
+      "version": "0.3.4",
+      "license": "MIT"
+    },
+    {
+      "name": "chart.js",
+      "version": "4.5.1",
+      "license": "MIT"
+    },
+    {
+      "name": "react",
+      "version": "19.3.0",
+      "license": "MIT"
+    },
+    {
+      "name": "react-chartjs-2",
+      "version": "5.3.1",
+      "license": "MIT"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.3.0",
+      "license": "MIT"
+    },
+    {
+      "name": "scheduler",
+      "version": "0.28.0",
+      "license": "MIT"
+    },
+    {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "license": "MIT"
+    }
+  ],
+  "sizes": {
+    "appJs": 832517,
+    "workerJs": 62876,
+    "css": 65050,
+    "sampleGzipBase64": 1365652
+  },
+  "files": {
+    "index.html": "ce51fad01b1010372b044d5faabc2c04b48c6b5ee916a429a08bc96907377672",
+    "LICENSE": "c7e28ed7363d18026e83897bd39400e109dd341fe03991a6e89d5107ab78a758",
+    "THIRD-PARTY-NOTICES.md": "4493c27fdf3e8a09bd79cc627d9d953f55a398ffa3f77b426f0ccb1466706c91"
+  }
+}
