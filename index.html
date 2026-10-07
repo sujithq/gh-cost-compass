@@ -68,6 +68,19 @@
             <label class="button-like">Import Chronicle<input id="import-chronicle-report" type="file" accept="application/json"></label>
           </article>
         </div>
+        <article class="panel usage-dashboard-panel" aria-labelledby="usage-dashboard-heading">
+          <div class="panel-title usage-dashboard-heading">
+            <div><p class="eyebrow">OPTIONAL LOCAL DASHBOARD</p><h3 id="usage-dashboard-heading">Copilot usage dashboard</h3></div>
+            <div class="usage-dashboard-actions">
+              <button id="open-usage-dashboard" type="button" aria-expanded="false" aria-controls="usage-dashboard-frame">Open usage dashboard</button>
+              <button id="close-usage-dashboard" type="button" class="danger-ghost" hidden>Close &amp; reset dashboard</button>
+            </div>
+          </div>
+          <p class="muted">Explore the standalone dashboard's visuals, insights, and executive summary here. Import files separately inside it; imports are not shared with Budget Lab. Processing is browser-only, imports are not persisted, and closing discards the dashboard's memory.</p>
+          <p class="insight-caveat">Dashboard downloads may include user data. Cohort comparisons and lines of code (LOC) are not productivity measures. AI-credit cost estimates are not an invoice.</p>
+          <p id="usage-dashboard-status" class="muted" role="status">Closed. The local dashboard loads only when you open it.</p>
+          <div id="usage-dashboard-frame" class="usage-dashboard-frame" hidden aria-busy="false"></div>
+        </article>
         <div id="tokenomics-empty" class="panel tokenomics-empty"><span>◎</span><h3>Import a usage export to begin</h3><p>Start with the GitHub enterprise NDJSON for fleet coverage. Add a developer-approved Chronicle report for local workflow context.</p></div>
         <div id="tokenomics-content" hidden>
           <div id="tokenomics-summary" class="summary-grid"></div>
