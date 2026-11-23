@@ -1959,6 +1959,74 @@ function addMonth(value) {
 }
 
 $("#navigation").addEventListener("click", (event) => { const button = event.target.closest("[data-view]"); if (button) navigate(button.dataset.view); });
+let usageDashboardRequest = null;
+let usageDashboardLoadTimer = null;
+function closeUsageDashboard(restoreFocus = true) {
+  usageDashboardRequest?.abort();
+  usageDashboardRequest = null;
+  clearTimeout(usageDashboardLoadTimer);
+  usageDashboardLoadTimer = null;
+  const container = $("#usage-dashboard-frame");
+  container.replaceChildren();
+  container.hidden = true;
+  container.setAttribute("aria-busy", "false");
+  const openButton = $("#open-usage-dashboard");
+  openButton.disabled = false;
+  openButton.textContent = "Open usage dashboard";
+  openButton.setAttribute("aria-expanded", "false");
+  $("#close-usage-dashboard").hidden = true;
+  $("#usage-dashboard-status").textContent = "Closed. Dashboard imports and in-memory analysis have been discarded.";
+  if (restoreFocus) openButton.focus();
+}
+async function openUsageDashboard() {
+  const container = $("#usage-dashboard-frame");
+  if (usageDashboardRequest || container.childElementCount) return;
+  const request = new AbortController();
+  usageDashboardRequest = request;
+  const fail = (message) => {
+    if (usageDashboardRequest !== request) return;
+    closeUsageDashboard(false);
+    $("#usage-dashboard-status").textContent = `Dashboard error: ${message}`;
+    showToast("Local usage dashboard failed to load", { tone: "danger", detail: message });
+    $("#open-usage-dashboard").focus();
+  };
+  container.hidden = false;
+  container.setAttribute("aria-busy", "true");
+  $("#usage-dashboard-status").textContent = "Loading the local dashboard…";
+  const openButton = $("#open-usage-dashboard");
+  openButton.disabled = true;
+  openButton.textContent = "Dashboard open";
+  openButton.setAttribute("aria-expanded", "true");
+  $("#close-usage-dashboard").hidden = false;
+  $("#close-usage-dashboard").focus();
+  usageDashboardLoadTimer = setTimeout(() => fail("Loading timed out. Close and reopen the dashboard to retry."), 30000);
+  try {
+    const url = "src/vendor/copilot-usage-viewer/index.html";
+    const response = await fetch(url, { signal: request.signal, cache: "no-store", credentials: "omit" });
+    if (!response.ok) throw new Error(`The local dashboard file could not be loaded (HTTP ${response.status}).`);
+    if (!response.headers.get("content-type")?.includes("text/html")) throw new Error("The local dashboard did not return an HTML document.");
+    if (usageDashboardRequest !== request) return;
+    const frame = document.createElement("iframe");
+    frame.title = "Local Copilot usage dashboard — visuals, insights, and executive summary";
+    frame.setAttribute("sandbox", "allow-scripts allow-downloads");
+    frame.referrerPolicy = "no-referrer";
+    frame.addEventListener("error", () => fail("The local dashboard frame could not be loaded."), { once: true });
+    frame.addEventListener("load", () => {
+      if (frame.parentElement !== container || usageDashboardRequest !== request) return;
+      clearTimeout(usageDashboardLoadTimer);
+      usageDashboardLoadTimer = null;
+      container.setAttribute("aria-busy", "false");
+      // An opaque frame's load event cannot verify its contents or runtime readiness.
+      $("#usage-dashboard-status").textContent = "Frame navigation finished. Import files inside the dashboard if it is visible; if it shows an error, close and reopen to retry.";
+    }, { once: true });
+    frame.src = url;
+    container.append(frame);
+  } catch (error) {
+    if (error.name !== "AbortError") fail(error.message);
+  }
+}
+$("#open-usage-dashboard").addEventListener("click", openUsageDashboard);
+$("#close-usage-dashboard").addEventListener("click", () => closeUsageDashboard());
 $("#import-enterprise-usage").addEventListener("change", async (event) => {
   try {
     enterpriseUsageInsights = summarizeEnterpriseUsage(parseEnterpriseUsageNdjson(await event.target.files[0].text()));
@@ -1984,6 +2052,7 @@ $("#import-chronicle-report").addEventListener("change", async (event) => {
 $("#clear-tokenomics-imports").addEventListener("click", () => {
   enterpriseUsageInsights = null;
   chronicleInsights = null;
+  closeUsageDashboard(false);
   renderTokenomicsInsights();
   showToast("Imported usage insights cleared");
 });

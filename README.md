@@ -55,6 +55,46 @@ separate billing usage report. See
 [`docs/copilot-chargeback/token-lens-integration.md`](docs/copilot-chargeback/token-lens-integration.md)
 for the privacy and integration boundary.
 
+The optional **Open usage dashboard** button loads a locally vendored copy of the
+[Copilot User-Level Statistics Viewer](https://github.com/asizikov-demos/copilot-user-level-statistics-viewer)
+inside Usage insights, preserving its standalone visuals, insights, and executive summary.
+It loads only after an explicit click, from `src/vendor/copilot-usage-viewer/index.html`,
+not from an external dashboard URL. Existing Budget Lab insights remain available.
+The vendored upstream revision is `c2b2324d8b5179280bb1a3b2634200885d68cfbc`,
+copyright (c) 2025 asizikov-demos, licensed under MIT.
+
+Import files separately inside the dashboard: Budget Lab does not transfer its imports into it.
+Analysis is browser-only and imports are not persisted. **Close & reset dashboard** unloads
+the frame and discards its in-memory data; **Clear imported insights** also closes it.
+The frame permits scripts and downloads but has an opaque sandbox origin, without
+`allow-same-origin`, so it cannot access the host tab's data. Dashboard downloads may include
+user data; review them before sharing.
+
+Use official GitHub report metadata for reporting-period and enterprise scope, and the export's
+`day` values for usage dates, rather than inferring coverage from a filename. Consult GitHub's
+[usage-metrics API](https://docs.github.com/en/rest/copilot/copilot-usage-metrics) and
+[example schema](https://docs.github.com/en/copilot/reference/copilot-usage-metrics/example-schema)
+for authoritative report structure. Cohort comparisons and lines of code (LOC) are not
+productivity measures, and dashboard AI-credit cost estimates are not a billing invoice.
+
+The dashboard is a pinned, self-contained artifact with inline styles, scripts, parsing worker,
+sample data, and plugin-version snapshots. Its Content Security Policy blocks network connections;
+it cannot call the Budget Lab assistant or read the parent tab's storage. Plugin-version snapshots
+reflect the pinned upstream revision, not a live version feed. Source and dependency licenses,
+integration changes, and file hashes are recorded in
+[`src/vendor/copilot-usage-viewer/PROVENANCE.json`](src/vendor/copilot-usage-viewer/PROVENANCE.json).
+
+No installation or build is needed to run the dashboard. Maintainers can rebuild the artifact with
+`node tools/vendor-copilot-usage-viewer.mjs --workdir <dedicated-directory-outside-this-repository>`.
+This optional maintenance command downloads the pinned upstream source and installs its locked
+build dependencies only in that separate directory; it does not add dependencies to Budget Lab.
+External dashboard links cannot open popups from the isolated frame. Use the upstream and official
+documentation links above from the host app instead.
+The executive summary offers **Download executive summary (HTML)**: a standalone, script-free
+copy of the displayed brief, with styles and charts embedded, rather than the source records.
+Review its data-handling warning before sharing. In-frame **Print / Save PDF** is disabled to
+preserve isolation; open the downloaded brief locally to print it or save it as PDF.
+
 ## Run and test
 
 Requires Node.js 20 or newer.
